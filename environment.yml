@@ -2,16 +2,14 @@ name: py-eth
 
 channels:
   - defaults
-  - conda-forge
 
 dependencies:
    - python=3.9
-   - numpy
-   - pyarrow
-   - pandas
-   - dask
+   - pip
    - fsspec
    - ipython
-   - pip
+   - numpy
+   - pandas
+   - pyarrow
    - pip:
       - duckdb

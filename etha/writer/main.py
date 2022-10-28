@@ -1,6 +1,6 @@
 import sys
 
-from writer import Writer
+from .writer import Writer
 
 
 def main():

@@ -1,6 +1,6 @@
 import pyarrow
 
-from column import Column
+from .column import Column
 
 
 def bignum():

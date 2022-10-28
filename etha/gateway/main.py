@@ -1,5 +1,5 @@
-from engine import Engine
-from query import Query
+from .engine import Engine
+from .query import Query
 
 
 def main():

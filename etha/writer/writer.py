@@ -4,7 +4,7 @@ import os
 import pyarrow
 import pyarrow.parquet as pa
 
-from tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder
+from .tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder
 
 
 class Writer:

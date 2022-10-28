@@ -8,8 +8,8 @@ from typing import Iterable, Optional
 import duckdb
 import pyarrow
 
-from query import Query
-from sql import And, Bin, Or, SqlBuilder, SqlQuery
+from .query import Query
+from .sql import And, Bin, Or, SqlBuilder, SqlQuery
 
 Range = tuple[int, int]
 
