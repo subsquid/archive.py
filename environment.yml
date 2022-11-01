@@ -11,5 +11,6 @@ dependencies:
    - numpy
    - pandas
    - pyarrow
+   - s3fs
    - pip:
       - duckdb
