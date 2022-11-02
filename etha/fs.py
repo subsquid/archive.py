@@ -1,5 +1,5 @@
-import os.path
 import datetime
+import os
 from contextlib import AbstractContextManager, contextmanager
 
 import pyarrow.filesystem
@@ -25,11 +25,14 @@ class LocalFs(Fs):
         self._root = root
 
     def abs(self, *segments: str) -> str:
-        return os.path.join(self._root, *segments)
+        return os.path.abspath(os.path.join(self._root, *segments))
 
     def ls(self, *segments: str) -> list[str]:
         path = self.abs(*segments)
-        return os.listdir(path)
+        try:
+            return os.listdir(path)
+        except FileNotFoundError:
+            return []
 
     @contextmanager
     def transact(self, dest_dir: str) -> AbstractContextManager['LocalFs']:
@@ -43,4 +46,7 @@ class LocalFs(Fs):
             os.rename(temp_dir, path)
 
     def write_parquet(self, file: str, table, **kwargs):
-        pyarrow.parquet.write_table(table, self.abs(file), **kwargs)
+        path = self.abs(file)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        pyarrow.parquet.write_table(table, path, **kwargs)
+

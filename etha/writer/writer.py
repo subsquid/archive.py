@@ -1,15 +1,14 @@
 import json
-import os
 
 import pyarrow
-import pyarrow.parquet as pa
 
 from .tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder
+from ..layout import ChunkWriter
 
 
 class Writer:
-    def __init__(self, target_dir):
-        self.target_dir = target_dir
+    def __init__(self, chunk_writer: ChunkWriter):
+        self.chunk_writer = chunk_writer
         self._init()
 
     def _init(self):
@@ -35,30 +34,19 @@ class Writer:
 
     def flush(self):
         if self.size > 0:
-            self._write_pkg()
+            self._write()
             self._init()
 
-    def _write_pkg(self):
+    def _write(self):
         blocks = self.block_table.to_table()
         transactions = self.tx_table.to_table()
         logs = self.log_table.to_table()
 
         block_numbers: pyarrow.ChunkedArray = blocks.column('number')
         first_block = block_numbers[0].as_py()
-        last_block = block_numbers[len(block_numbers) - 1].as_py()
-        folder_name = f"{first_block:010d}-{last_block:010d}"
-        temp_folder = self._item(f"temp_{folder_name}")
+        last_block = block_numbers[-1].as_py()
 
-        os.makedirs(temp_folder)
-
-        def save_table(name, table):
-            pa.write_table(table, os.path.join(temp_folder, f"{name}.parquet"), compression='gzip')
-
-        save_table('blocks', blocks)
-        save_table('transactions', transactions)
-        save_table('logs', logs)
-
-        os.rename(temp_folder, self._item(folder_name))
-
-    def _item(self, *names):
-        return os.path.join(self.target_dir, *names)
+        with self.chunk_writer.write(first_block, last_block) as loc:
+            loc.write_parquet('blocks.parquet', blocks, compression='gzip')
+            loc.write_parquet('transactions.parquet', transactions, compression='gzip')
+            loc.write_parquet('logs.parquet', logs, compression='gzip')

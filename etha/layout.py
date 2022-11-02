@@ -8,7 +8,7 @@ from .fs import Fs
 
 
 def _format_block(block_number: int):
-    return f'{block_number:d010}'
+    return f'{block_number:010}'
 
 
 def _parse_range(dirname: str) -> Optional[tuple[int, int]]:
@@ -30,7 +30,7 @@ class DataChunk(NamedTuple):
 
 def get_tops(fs: Fs) -> list[int]:
     top_dirs = fs.ls()
-    tops = [int(d) for d in top_dirs if re.match(d, r'^\d{10}$')]
+    tops = [int(d) for d in top_dirs if re.match(r'^\d{10}$', d)]
     tops.sort()
     return tops
 
@@ -98,6 +98,10 @@ def get_chunks(fs: Fs, first_block: int = 0, last_block: int = math.inf) -> Iter
             yield DataChunk(beg, end, top)
 
 
+class LayoutConflictException(Exception):
+    pass
+
+
 class ChunkWriter:
     def __init__(self, fs: Fs, first_block: int = 0, last_block: int = math.inf):
         assert last_block >= first_block
@@ -122,7 +126,7 @@ class ChunkWriter:
 
         if self._ranges and self._ranges[-1][1] > last_block:
             overlap = DataChunk(self._ranges[-1][0], self._ranges[-1][1], self._top)
-            raise Exception(f'chunk {overlap.path()} already contains block {last_block}. Perhaps part of {first_block}-{last_block} range is controlled by another writer.')
+            raise LayoutConflictException(f'chunk {overlap.path()} already exceeds {last_block}. Perhaps part of {first_block}-{last_block} range is controlled by another writer.')
 
         self._fs = fs
         self.first_block = first_block
