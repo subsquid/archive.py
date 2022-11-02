@@ -47,6 +47,6 @@ class Writer:
         last_block = block_numbers[-1].as_py()
 
         with self.chunk_writer.write(first_block, last_block) as loc:
-            loc.write_parquet('blocks.parquet', blocks, compression='gzip')
-            loc.write_parquet('transactions.parquet', transactions, compression='gzip')
             loc.write_parquet('logs.parquet', logs, compression='gzip')
+            loc.write_parquet('transactions.parquet', transactions, compression='gzip')
+            loc.write_parquet('blocks.parquet', blocks, compression='gzip')

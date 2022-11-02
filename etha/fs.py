@@ -21,6 +21,9 @@ class Fs:
     def write_parquet(self, name: str, table, **kwargs):
         raise NotImplementedError()
 
+    def delete(self, loc: str):
+        raise NotImplementedError()
+
 
 class LocalFs(Fs):
     def __init__(self, root: str):
@@ -52,6 +55,13 @@ class LocalFs(Fs):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         pyarrow.parquet.write_table(table, path, **kwargs)
 
+    def delete(self, loc: str):
+        path = self.abs(loc)
+        if os.path.isdir(path):
+            os.removedirs(path)
+        else:
+            os.remove(path)
+
 
 class S3Fs(Fs):
     def __init__(self, s3: pyarrow.fs.S3FileSystem, bucket: str):
@@ -60,7 +70,7 @@ class S3Fs(Fs):
         self._s3 = s3
 
     def abs(self, *segments) -> str:
-        return self._abs_path(*segments)
+        return 's3://' + self._abs_path(*segments)
 
     def _abs_path(self, *segments) -> str:
         path = self._bucket
@@ -87,6 +97,15 @@ class S3Fs(Fs):
     def write_parquet(self, file: str, table, **kwargs):
         path = self._abs_path(file)
         pyarrow.parquet.write_table(table, path, filesystem=self._s3, **kwargs)
+
+    def delete(self, loc: str):
+        path = self._abs_path(loc)
+        item = self._s3.get_file_info(path)
+        if item.is_file:
+            self._s3.delete_file(path)
+        elif item.type == pyarrow.fs.FileType.Directory:
+            self._s3.delete_dir(path)
+
 
 
 def create_fs(url: str, s3_endpoint: Optional[str] = None) -> Fs:

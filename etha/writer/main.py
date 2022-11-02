@@ -50,6 +50,7 @@ def main():
     fs = create_fs(args.dest or '.', s3_endpoint=args.s3_endpoint)
 
     chunk_writer = ChunkWriter(fs, first_block=args.first_block, last_block=args.last_block)
+    chunk_writer.verify_last_chunk('blocks.parquet')
 
     if args.get_next_block:
         print(chunk_writer.next_block)
