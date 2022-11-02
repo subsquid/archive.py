@@ -3,7 +3,7 @@ import math
 import sys
 
 from .writer import Writer
-from ..fs import LocalFs
+from ..fs import create_fs
 from ..layout import ChunkWriter
 
 
@@ -40,9 +40,14 @@ def main():
         help='check the stored data, print the next block to write and exit'
     )
 
+    program.add_argument(
+        '--s3-endpoint',
+        help='s3 api endpoint for s3:// destinations'
+    )
+
     args = program.parse_args()
 
-    fs = LocalFs(args.dest or '.')
+    fs = create_fs(args.dest or '.', s3_endpoint=args.s3_endpoint)
 
     chunk_writer = ChunkWriter(fs, first_block=args.first_block, last_block=args.last_block)
 

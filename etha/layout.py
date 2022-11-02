@@ -128,6 +128,13 @@ class ChunkWriter:
             overlap = DataChunk(self._ranges[-1][0], self._ranges[-1][1], self._top)
             raise LayoutConflictException(f'chunk {overlap.path()} already exceeds {last_block}. Perhaps part of {first_block}-{last_block} range is controlled by another writer.')
 
+        # if self._ranges:
+        #     # S3 fs doesn't support atomic range writes
+        #     # Hence we check that the last chunk was fully written
+        #     #
+        #     last_chunk = DataChunk(self._ranges[-1][0], self._ranges[-1][1], self._top)
+        #     last_items = fs.ls(last_chunk.path())
+
         self._fs = fs
         self.first_block = first_block
         self.last_block = last_block
