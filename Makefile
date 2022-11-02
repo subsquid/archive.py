@@ -13,4 +13,13 @@ query:
 	@$(PY) -m etha.gateway.main
 
 
-.PHONY: init query
+write:
+	@rm -rf data/parquet
+	@cat data/blocks.jsonl | $(PY) -m etha.writer.main --dest data/parquet
+
+
+ingest:
+	@$(PY) -m etha.writer.main --dest data/mainnet --src-node ${ETH_NODE}
+
+
+.PHONY: init query write

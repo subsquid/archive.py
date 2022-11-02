@@ -103,7 +103,8 @@ class LayoutConflictException(Exception):
 
 
 class ChunkWriter:
-    def __init__(self, fs: Fs, first_block: int = 0, last_block: int = math.inf):
+    def __init__(self, fs: Fs, first_block: int = 0, last_block: Optional[int] = None):
+        last_block = math.inf if last_block is None else last_block
         assert last_block >= first_block
 
         tops = get_tops(fs)

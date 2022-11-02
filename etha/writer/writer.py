@@ -1,4 +1,5 @@
 import json
+from typing import Iterable
 
 import pyarrow
 
@@ -16,6 +17,11 @@ class Writer:
         self.block_table = BlockTableBuilder()
         self.tx_table = TxTableBuilder()
         self.log_table = LogTableBuilder()
+
+    def write(self, json_lines: Iterable[str]):
+        for line in json_lines:
+            if line:
+                self.append(line)
 
     def append(self, json_line: str):
         block = json.loads(json_line)
@@ -45,6 +51,9 @@ class Writer:
         block_numbers: pyarrow.ChunkedArray = blocks.column('number')
         first_block = block_numbers[0].as_py()
         last_block = block_numbers[-1].as_py()
+
+        # transactions = transactions.sort_by([('sighash', 'ascending'), ('to', 'ascending')])
+        # logs = logs.sort_by([('topic0', 'ascending'), ('address', 'ascending')])
 
         with self.chunk_writer.write(first_block, last_block) as loc:
             loc.write_parquet('logs.parquet', logs, compression='gzip')
