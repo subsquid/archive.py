@@ -6,6 +6,7 @@ from typing import Optional
 
 import pyarrow.fs
 import pyarrow.parquet
+import s3fs
 
 
 class Fs:
@@ -64,7 +65,7 @@ class LocalFs(Fs):
 
 
 class S3Fs(Fs):
-    def __init__(self, s3: pyarrow.fs.S3FileSystem, bucket: str):
+    def __init__(self, s3: s3fs.S3FileSystem, bucket: str):
         assert bucket and bucket[0] != '/' and bucket[-1] != '/'
         self._bucket = bucket
         self._s3 = s3
@@ -81,12 +82,11 @@ class S3Fs(Fs):
             else:
                 path += '/' + seg
 
-        return self._s3.normalize_path(path)
+        return path
 
     def ls(self, *segments: str) -> list[str]:
         path = self._abs_path(*segments)
-        selector = pyarrow.fs.FileSelector(path + '/')
-        return [i.base_name for i in self._s3.get_file_info(selector)]
+        return [os.path.basename(i) for i in self._s3.ls(path, detail=False)]
 
     @contextmanager
     def transact(self, dest_dir: str) -> AbstractContextManager['Fs']:
@@ -100,18 +100,16 @@ class S3Fs(Fs):
 
     def delete(self, loc: str):
         path = self._abs_path(loc)
-        item = self._s3.get_file_info(path)
-        if item.is_file:
-            self._s3.delete_file(path)
-        elif item.type == pyarrow.fs.FileType.Directory:
-            self._s3.delete_dir(path)
-
+        self._s3.delete(path, recursive=True)
 
 
 def create_fs(url: str, s3_endpoint: Optional[str] = None) -> Fs:
     u = urllib.parse.urlparse(url)
     if u.scheme == 's3':
-        s3 = pyarrow.fs.S3FileSystem(endpoint_override=s3_endpoint)
+        client_kwargs = {}
+        if s3_endpoint:
+            client_kwargs['endpoint_url'] = s3_endpoint
+        s3 = s3fs.S3FileSystem(client_kwargs=client_kwargs)
         bucket = u.netloc + u.path
         return S3Fs(s3, bucket)
     elif not u.scheme:
