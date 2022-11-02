@@ -1,7 +1,5 @@
-import bisect
 import math
-import os
-import re
+import os.path
 from functools import cached_property
 from typing import Iterable, Optional
 
@@ -10,8 +8,8 @@ import pyarrow
 
 from .query import Query
 from .sql import And, Bin, Or, SqlBuilder, SqlQuery
-
-Range = tuple[int, int]
+from ..fs import LocalFs
+from ..layout import DataChunk, get_chunks
 
 
 class Engine:
@@ -19,33 +17,15 @@ class Engine:
         self._data_dir = data_dir
         self._con = duckdb.connect(':memory:')
 
-    @cached_property
-    def _ranges(self) -> list[Range]:
-        ranges = []
-        for item in os.listdir(self._data_dir):
-            m = re.match(r'^(\d+)-(\d+)$', item)
-            if m:
-                beg = int(m[1])
-                end = int(m[2])
-                ranges.append((beg, end))
-        ranges.sort()
-        return ranges
-
     def run_query(self, q: Query):
         runner = _QueryRunner(self._con, self._data_dir, q)
-        for r in self._get_ranges(q):
+        for r in self._get_chunks(q):
             yield runner.run(r)
 
-    def _get_ranges(self, q: Query) -> Iterable[Range]:
-        from_block = q.get('fromBlock')
-        to_block = q.get('toBlock', math.inf)
-        loc = bisect.bisect_left(self._ranges, (from_block, from_block))
-        for i in range(loc, len(self._ranges)):
-            r = self._ranges[i]
-            if to_block < r[0]:
-                return
-            else:
-                yield r
+    def _get_chunks(self, q: Query) -> Iterable[DataChunk]:
+        first_block = q.get('fromBlock')
+        last_block = q.get('toBlock', math.inf)
+        return get_chunks(LocalFs(self._data_dir), first_block=first_block, last_block=last_block)
 
 
 class _QueryRunner:
@@ -54,17 +34,17 @@ class _QueryRunner:
         self.data_dir = data_dir
         self.q = q
 
-    def run(self, r: Range):
+    def run(self, chunk: DataChunk):
         blocks = None
         logs = None  # !!! A name of a pyarrow table
         transactions = None  # !!! A name of a pyarrow table
 
         if self.logs_query:
-            self.logs_query.set_file(self.file(r, 'logs.parquet'))
+            self.logs_query.set_file(self.file(chunk, 'logs.parquet'))
             logs = self.execute(self.logs_query)
 
         if self.tx_query:
-            self.tx_query.set_file(self.file(r, 'transactions.parquet'))
+            self.tx_query.set_file(self.file(chunk, 'transactions.parquet'))
             # !!! A name of a pyarrow table
             log_txs = None
             if self.log_txs_needed:
@@ -75,13 +55,13 @@ class _QueryRunner:
             transactions = self.execute(self.tx_query)
 
         if self.blocks_query:
-            self.blocks_query.set_file(self.file(r, 'blocks.parquet'))
+            self.blocks_query.set_file(self.file(chunk, 'blocks.parquet'))
             blocks = self.execute(self.blocks_query)
 
         return blocks, transactions, logs
 
-    def file(self, r: Range, name: str):
-        return os.path.join(self.data_dir, f"{r[0]:010d}-{r[1]:010d}", name)
+    def file(self, chunk: DataChunk, name: str):
+        return os.path.join(self.data_dir, chunk.path(), name)
 
     @cached_property
     def logs_query(self):
