@@ -6,7 +6,7 @@ from typing import Iterable, Optional
 import duckdb
 import pyarrow
 
-from .query import Query
+from .model import Query
 from .sql import And, Bin, Or, SqlBuilder, SqlQuery
 from ..fs import LocalFs
 from ..layout import DataChunk, get_chunks

@@ -1,7 +1,7 @@
 import re
 from typing import Any, NamedTuple, Union
 
-from .query import FieldMap
+from .model import FieldMap
 
 
 class And(NamedTuple):

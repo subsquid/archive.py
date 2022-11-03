@@ -9,6 +9,10 @@ init:
 	fi
 
 
+docker:
+	docker buildx build --platform linux/amd64 . --load
+
+
 query:
 	@$(PY) -m etha.gateway.main
 
@@ -22,4 +26,4 @@ ingest:
 	@$(PY) -m etha.writer.main --dest data/mainnet --src-node ${ETH_NODE}
 
 
-.PHONY: init query write
+.PHONY: init docker query write
