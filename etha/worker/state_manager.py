@@ -29,13 +29,14 @@ class DataState:
 
         new_ranges = list(difference(desired_ranges, present_ranges))
 
-        new_deleted_ranges = list(difference(union(self._available, self._downloading), desired_ranges))
+        new_to_delete = list(difference(union(self._available, self._downloading), desired_ranges))
+
+        self._to_delete.append((datetime.datetime.now(), new_to_delete))
 
         self._downloading = list(difference(desired_ranges, self._available))
 
-        self._available = list(difference(present_ranges, new_deleted_ranges))
+        self._available = list(difference(present_ranges, new_to_delete))
 
-        self._to_delete.append((datetime.datetime.now(), new_deleted_ranges))
         deleted_ranges = self._check_deleted_ranges(desired_ranges)
 
         return DataStateUpdate(new_ranges=new_ranges, deleted_ranges=deleted_ranges)
@@ -57,5 +58,6 @@ class DataState:
         return list(union(*sets))
 
     def add_downloaded_range(self, r: Range):
+        waiting = difference([r], difference([r], self._downloading))
+        self._available = list(union(self._available, waiting))
         self._downloading = list(difference(self._downloading, [r]))
-        self._available = list(union(self._available, [r]))
