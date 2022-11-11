@@ -1,53 +1,61 @@
-import json
-import os.path
-from typing import Optional
+import datetime
+from typing import NamedTuple
 
-from ..fs import LocalFs
-from ..layout import DataChunk, get_chunks
+from .intervals import difference, Range, union
 
 
-class StateManager:
-    dataset: Optional[str]
-    datachunks: list[DataChunk]
+class DataStateUpdate(NamedTuple):
+    new_ranges: list[Range]
+    deleted_ranges: list[Range]
 
-    def __init__(self, state_dir: str, worker_id: str, worker_url: str):
-        self.state_dir = state_dir
-        self.worker_id = worker_id
-        self.worker_url = worker_url
-        self._init_state()
 
-    def _init_state(self):
-        self.dataset = None
-        self.datachunks = []
+class DataState:
+    def __init__(self, available_ranges: list[Range], delete_timeout_secs=30):
+        self._available = available_ranges
+        self._downloading = []
+        self._to_delete = []
+        self._delete_timeout = datetime.timedelta(seconds=delete_timeout_secs)
 
-        state_file = self.path('state.json')
-        if not os.path.exists(state_file):
-            return
+    def get_available_ranges(self) -> list[Range]:
+        return self._available
 
-        with open(state_file) as f:
-            state = json.load(f)
-            self.dataset = state.get('dataset')
+    def _get_present(self):
+        sets = [rs for ts, rs in self._to_delete]
+        sets.append(self._available)
+        return list(union(*sets))
 
-        if self.dataset:
-            self.datachunks = list(get_chunks(LocalFs(self.path('datasets', self.dataset))))
+    def ping(self, desired_ranges: list[Range]) -> DataStateUpdate:
+        present_ranges = self._get_present()
 
-    def get_status(self):
-        ranges = []
+        new_ranges = list(difference(desired_ranges, present_ranges))
 
-        for chunk in self.datachunks:
-            if ranges and ranges[-1]['to'] + 1 == chunk.first_block:
-                ranges[-1]['to'] = chunk.last_block
-            else:
-                ranges.append({'from': chunk.first_block, 'to': chunk.last_block})
+        new_deleted_ranges = list(difference(union(self._available, self._downloading), desired_ranges))
 
-        return {
-            'worker_id': self.worker_id,
-            'worker_url': self.worker_url,
-            'state': {
-                'dataset': self.dataset,
-                'ranges': ranges
-            }
-        }
+        self._downloading = list(difference(desired_ranges, self._available))
 
-    def path(self, *segments: str):
-        return os.path.join(self.state_dir, *segments)
+        self._available = list(difference(present_ranges, new_deleted_ranges))
+
+        self._to_delete.append((datetime.datetime.now(), new_deleted_ranges))
+        deleted_ranges = self._check_deleted_ranges(desired_ranges)
+
+        return DataStateUpdate(new_ranges=new_ranges, deleted_ranges=deleted_ranges)
+
+    def _check_deleted_ranges(self, desired_ranges: list[Range]):
+        now = datetime.datetime.now()
+        sets = []
+        to_delete = []
+
+        for ts, rs in self._to_delete:
+            rs = list(difference(rs, desired_ranges))
+            if rs:
+                if now - ts > self._delete_timeout:
+                    sets.append(rs)
+                else:
+                    to_delete.append((ts, rs))
+
+        self._to_delete = to_delete
+        return list(union(*sets))
+
+    def add_downloaded_range(self, r: Range):
+        self._downloading = list(difference(self._downloading, [r]))
+        self._available = list(union(self._available, [r]))
