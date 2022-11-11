@@ -27,21 +27,23 @@ class DataState:
     def ping(self, desired_ranges: list[Range]) -> DataStateUpdate:
         present_ranges = self._get_present()
 
-        new_ranges = list(difference(desired_ranges, present_ranges))
+        new_ranges = list(difference(desired_ranges, union(present_ranges, self._downloading)))
 
-        new_to_delete = list(difference(union(self._available, self._downloading), desired_ranges))
+        available_to_delete = list(difference(self._available, desired_ranges))
+        downloading_to_delete = list(difference(self._downloading, desired_ranges))
 
-        self._to_delete.append((datetime.datetime.now(), new_to_delete))
+        self._to_delete.append((datetime.datetime.now(), available_to_delete))
 
-        self._downloading = list(difference(desired_ranges, self._available))
+        self._downloading = list(difference(desired_ranges, present_ranges))
 
-        self._available = list(difference(present_ranges, new_to_delete))
+        self._available = list(difference(desired_ranges, self._downloading))
 
-        deleted_ranges = self._check_deleted_ranges(desired_ranges)
+        deleted_ranges = self._update_to_delete(desired_ranges)
+        deleted_ranges = list(union(deleted_ranges, downloading_to_delete))
 
         return DataStateUpdate(new_ranges=new_ranges, deleted_ranges=deleted_ranges)
 
-    def _check_deleted_ranges(self, desired_ranges: list[Range]):
+    def _update_to_delete(self, desired_ranges: list[Range]):
         now = datetime.datetime.now()
         sets = []
         to_delete = []
