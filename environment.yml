@@ -4,14 +4,17 @@ channels:
   - conda-forge
 
 dependencies:
-   - fsspec
-   - ipython
-   - numpy
-   - pandas
-   - pip
-   - pyarrow
-   - pydantic
-   - python=3.9
-   - s3fs>=2021.8.0
-   - pip:
+  - falcon
+  - fsspec
+  - httpx
+  - ipython
+  - numpy
+  - pandas
+  - pip
+  - pyarrow
+  - pydantic
+  - python=3.9
+  - s3fs>=2021.8.0
+  - uvicorn
+  - pip:
       - duckdb

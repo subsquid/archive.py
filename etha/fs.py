@@ -25,6 +25,9 @@ class Fs:
     def delete(self, loc: str):
         raise NotImplementedError()
 
+    def download(self, src_loc: str, local_dest: str):
+        raise NotImplementedError()
+
 
 class LocalFs(Fs):
     def __init__(self, root: str):
@@ -62,6 +65,9 @@ class LocalFs(Fs):
             os.removedirs(path)
         else:
             os.remove(path)
+
+    def cd(self, *segments) -> 'LocalFs':
+        return LocalFs(self.abs(*segments))
 
 
 class S3Fs(Fs):
