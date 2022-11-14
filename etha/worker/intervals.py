@@ -12,7 +12,7 @@ def difference(a: Iterable[Range], b: Iterable[Range]):
         while br and br[1] < ar[0]:
             br = next(bit, None)
 
-        while br and (i := _intersection(ar, br)):
+        while br and (i := range_intersection(ar, br)):
             if ar[0] < i[0]:
                 yield ar[0], i[0] - 1
 
@@ -27,7 +27,7 @@ def difference(a: Iterable[Range], b: Iterable[Range]):
             yield ar
 
 
-def _intersection(a: Range, b: Range) -> Optional[Range]:
+def range_intersection(a: Range, b: Range) -> Optional[Range]:
     beg = max(a[0], b[0])
     end = min(a[1], b[1])
     if beg <= end:
@@ -75,14 +75,12 @@ def _order(a: Iterable[Range], b: Iterable[Range]) -> Iterable[Range]:
         if ar is None:
             if br:
                 yield br
-                for br in bit:
-                    yield br
+                yield from bit
             return
 
         if br is None:
             yield ar
-            for ar in ait:
-                yield ar
+            yield from ait
             return
 
         if ar < br:

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import multiprocessing as mp
 import os.path
 from queue import Empty
@@ -10,6 +11,8 @@ import httpx
 from .intervals import difference, Range, remove_intersections, union
 from ..fs import create_fs, LocalFs
 from ..layout import DataChunk, get_chunks
+
+LOG = logging.getLogger(__name__)
 
 
 class DataStateUpdate(NamedTuple):
@@ -23,10 +26,13 @@ class DataState:
         self._downloading = []
 
     def get_available_ranges(self) -> list[Range]:
-        return list(self._available)
+        return self._available
 
     def get_downloading_ranges(self) -> list[Range]:
-        return list(self._downloading)
+        return self._downloading
+
+    def get_range(self, first_block: int) -> Optional[Range]:
+        pass
 
     def ping(self, desired_ranges: list[Range]) -> DataStateUpdate:
         new_ranges = list(difference(desired_ranges, union(self._available, self._downloading)))
@@ -42,7 +48,7 @@ class DataState:
     def add_downloaded_ranges(self, ranges: list[Range]):
         waiting = difference(ranges, difference(ranges, self._downloading))
         self._available = list(union(self._available, waiting))
-        self._downloading = list(difference(self._downloading, [r]))
+        self._downloading = list(difference(self._downloading, ranges))
 
 
 def _get_dataset(data_dir: str) -> Optional[str]:
@@ -71,12 +77,16 @@ def _update_state(
     def rm(item: str):
         nonlocal pause_deletion
         if pause_deletion:
-            sleep(10)  # pause in case some pending request still uses the data
+            # pause in case some pending request still uses the data
+            # FIXME: this measure merely reduces the probability of data inconsistency, but doesn't guarantee it
+            sleep(10)
             pause_deletion = False
+        LOG.info(f'deleting {lfs.abs(item)}')
         lfs.delete(item)
 
     if _get_dataset(data_dir) != dataset:
         # delete old dataset
+        LOG.info('switching to a new dataset %s', dataset)
         rm('dataset.txt')
         rm('dataset')
         _save_dataset(data_dir, dataset)
@@ -92,20 +102,24 @@ def _update_state(
         for chunk in get_chunks(dfs, first_block=new_range[0], last_block=new_range[1]):
             dest = lfs.abs(f'dataset/{chunk.path()}')
             temp = lfs.abs(f'dataset/temp-{chunk.path()}')
+            LOG.info(f'downloading {chunk.path()}')
             dfs.download(chunk.path(), temp)
             os.rename(dest, temp)
+            LOG.info('saved %s', dest)
             on_downloaded_chunk(chunk)
 
 
 def _run_update_loop(data_dir: str, updates_queue: mp.Queue, new_chunks_queue: mp.Queue):
     while True:
         dataset, upd = updates_queue.get()
+        LOG.info('starting update task')
         _update_state(
             data_dir,
             dataset,
             upd,
             on_downloaded_chunk=lambda chunk: new_chunks_queue.put((dataset, chunk))
         )
+        LOG.info('update task finished')
 
 
 class _State(NamedTuple):
@@ -133,6 +147,18 @@ class StateManager:
         available_ranges = list(remove_intersections(get_chunks(lfs)))
         state = DataState(available_ranges)
         return _State(dataset, state)
+
+    @property
+    def data_dir(self):
+        return self._data_dir
+
+    def get_dataset(self) -> Optional[str]:
+        if self._state:
+            return self._state.dataset
+
+    def get_range(self, first_block) -> Optional[Range]:
+        if self._state:
+            return self._state.ranges.get_range(first_block)
 
     def get_ping_message(self):
         msg = {
@@ -186,7 +212,8 @@ class StateManager:
         try:
             response = await client.post(self._router_url, json=self.get_ping_message())
             response.raise_for_status()
-        except BaseException as ex:
+        except httpx.HTTPError:
+            LOG.exception('failed to send a ping message')
             return
 
         ping = response.json()

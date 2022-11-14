@@ -1,4 +1,5 @@
 import argparse
+import os
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -42,6 +43,7 @@ def main():
 
     program.add_argument(
         '--s3-endpoint',
+        default=os.environ.get('AWS_S3_ENDPOINT'),
         help='s3 api endpoint for s3:// destinations'
     )
 

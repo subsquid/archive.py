@@ -109,7 +109,7 @@ class S3Fs(Fs):
         self._s3.delete(path, recursive=True)
 
 
-def create_fs(url: str, s3_endpoint: Optional[str] = None) -> Fs:
+def create_fs(url: str, s3_endpoint: Optional[str] = os.environ.get('AWS_S3_ENDPOINT')) -> Fs:
     u = urllib.parse.urlparse(url)
     if u.scheme == 's3':
         client_kwargs = {}
