@@ -1,4 +1,4 @@
-ame: docker
+name: docker
 on:
   workflow_dispatch: # manually run
     inputs:
