@@ -1,6 +1,8 @@
+import argparse
 import asyncio
 import logging
 import multiprocessing
+import os
 
 import uvicorn
 
@@ -11,16 +13,56 @@ LOG = logging.getLogger(__name__)
 
 
 async def main():
-    with multiprocessing.Pool() as pool:
-        sm = StateManager(
-            worker_id='1',
-            worker_url='http://localhost:8000',
-            data_dir='data',
-            router_url='http://localhost:3000'
-        )
+    program = argparse.ArgumentParser(
+        description='Subsquid eth archive worker'
+    )
 
+    program.add_argument(
+        '--router',
+        required=True,
+        metavar='URL',
+        help='URL of the router to connect to'
+    )
+
+    program.add_argument(
+        '--worker-id',
+        required=True,
+        metavar='UID',
+        help='unique id of this worker'
+    )
+
+    program.add_argument(
+        '--worker-url',
+        required=True,
+        metavar='URL',
+        help='externally visible URL of this worker'
+    )
+
+    program.add_argument(
+        '--data-dir',
+        metavar='DIR',
+        help='directory to keep in the data and state of this worker (defaults to cwd)'
+    )
+
+    program.add_argument(
+        '--port',
+        type=int,
+        default=8000,
+        help='port to listen on (defaults to 8000)'
+    )
+
+    args = program.parse_args()
+
+    sm = StateManager(
+        worker_id=args.worker_id,
+        worker_url=args.worker_url,
+        data_dir=args.data_dir or os.getcwd(),
+        router_url=args.router
+    )
+
+    with multiprocessing.Pool() as pool:
         app = create_app(sm, pool)
-        conf = uvicorn.Config(app)
+        conf = uvicorn.Config(app, port=args.port)
         server = uvicorn.Server(conf)
 
         server_task = asyncio.create_task(server.serve(), name='server')
