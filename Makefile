@@ -1,16 +1,16 @@
-PY = .env/bin/python3
+PY = env/bin/python3
 
 
 init:
-	@if [ -e .env ]; then \
-  		conda env update --prefix .env --prune; \
+	@if [ -e env ]; then \
+  		conda env update -f environments/dev.yml --prefix env --prune; \
 	else \
-  		conda env create --prefix .env; \
+  		conda env create -f environments/dev.yml --prefix env; \
 	fi
 
 
-docker:
-	docker buildx build --platform linux/amd64 . --load
+docker-writer:
+	docker buildx build --target writer --platform linux/amd64 . --load
 
 
 query:
@@ -26,4 +26,4 @@ ingest:
 	@$(PY) -m etha.writer.main --dest data/mainnet --src-node ${ETH_NODE}
 
 
-.PHONY: init docker query write
+.PHONY: init docker-writer query write

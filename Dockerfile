@@ -1,4 +1,4 @@
-FROM node:18 AS ingest
+FROM node:18 AS writer
 RUN npm i -g @subsquid/eth-ingest
 
 
@@ -13,9 +13,9 @@ RUN set -x && \
     find /opt/conda/ -follow -type f -name '*.js.map' -delete && \
     /opt/conda/bin/conda clean -afy
 
-WORKDIR /squid-etha
-ADD environment.yml .
+WORKDIR /etha-writer
+ADD environments/writer.yml environment.yml
 RUN /opt/conda/bin/conda env create --prefix env
-ENV PATH="/squid-etha/env/bin:${PATH}"
+ENV PATH="/etha-writer/env/bin:${PATH}"
 ADD etha etha/
 ENTRYPOINT ["python3", "-m", "etha.writer.main"]
