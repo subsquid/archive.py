@@ -30,4 +30,4 @@ jobs:
         run: docker build . --target ${{ inputs.target }} -t "eldar/etha-${{ inputs.target }}:${{ inputs.tag }}"
 
       - name: Publish
-        run: docker publish eldar/etha-${{ inputs.target }} --all-tags
+        run: docker push eldar/etha-${{ inputs.target }} --all-tags
