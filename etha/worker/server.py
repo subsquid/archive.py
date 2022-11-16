@@ -13,6 +13,8 @@ LOG = logging.getLogger(__name__)
 
 
 async def main():
+    logging.basicConfig(level=logging.INFO)
+
     program = argparse.ArgumentParser(
         description='Subsquid eth archive worker'
     )
@@ -88,4 +90,5 @@ async def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
     asyncio.run(main())

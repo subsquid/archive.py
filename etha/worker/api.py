@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import multiprocessing.pool as mpl
 
 import falcon
@@ -31,7 +32,12 @@ class QueryResource:
         self.pool = pool
 
     async def on_post(self, req: fa.Request, res: fa.Response):
-        dataset = req.params['dataset']
+        dataset = req.get_param('dataset', required=True)
+        try:
+            dataset = base64.urlsafe_b64decode(dataset).decode(encoding='utf-8')
+        except:
+            raise falcon.HTTPNotFound(description=f'failed to decode dataset: {dataset}')
+
         if dataset != self.sm.get_dataset():
             raise falcon.HTTPNotFound(description=f'dataset {dataset} is not available')
 

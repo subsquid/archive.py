@@ -1,4 +1,3 @@
-import datetime
 import os
 import urllib.parse
 from contextlib import AbstractContextManager, contextmanager
@@ -7,6 +6,8 @@ from typing import Optional
 import pyarrow.fs
 import pyarrow.parquet
 import s3fs
+
+from etha.util import add_temp_prefix
 
 
 class Fs:
@@ -46,10 +47,7 @@ class LocalFs(Fs):
     @contextmanager
     def transact(self, dest_dir: str) -> AbstractContextManager['LocalFs']:
         path = self.abs(dest_dir)
-        basename = os.path.basename(path)
-        parent = os.path.dirname(path)
-        ts = round(datetime.datetime.now().timestamp() * 1000)
-        temp_dir = os.path.join(parent, f'temp-{ts}-{basename}')
+        temp_dir = add_temp_prefix(path)
         yield LocalFs(temp_dir)
         if os.path.exists(temp_dir):
             os.rename(temp_dir, path)
@@ -64,7 +62,10 @@ class LocalFs(Fs):
         if os.path.isdir(path):
             os.removedirs(path)
         else:
-            os.remove(path)
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
 
     def cd(self, *segments) -> 'LocalFs':
         return LocalFs(self.abs(*segments))
@@ -107,6 +108,10 @@ class S3Fs(Fs):
     def delete(self, loc: str):
         path = self._abs_path(loc)
         self._s3.delete(path, recursive=True)
+
+    def download(self, src_loc: str, local_dest: str):
+        src_path = self._abs_path(src_loc)
+        self._s3.download(src_path, local_dest, recursive=True)
 
 
 def create_fs(url: str, s3_endpoint: Optional[str] = os.environ.get('AWS_S3_ENDPOINT')) -> Fs:

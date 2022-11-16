@@ -1,0 +1,35 @@
+### Worker status
+GET http://localhost:8000/status
+
+### Query
+POST http://localhost:8000/query/czM6Ly9ldGhhLW1haW5uZXQtc2lh
+Content-Type: application/json
+
+{
+        "fromBlock": 15000000,
+        "toBlock": 15050000,
+        "logs": [
+            {
+                "address": ["0x3883f5e181fccaf8410fa61e12b59bad963fb645"]
+            }
+        ],
+        "transactions": [],
+        "fields": {
+            "block": {
+                "number": true,
+                "hash": true,
+                "parentHash": true,
+                "nonce": true
+            },
+            "log": {
+                "address": true,
+                "topics": true,
+                "data": true,
+                "transaction": true
+            },
+            "transaction": {
+                "to": true,
+                "gas": true
+            }
+        }
+    }

@@ -9,7 +9,7 @@ init:
 	fi
 
 
-docker-writer:
+build-writer:
 	docker buildx build --target writer --platform linux/amd64 . --load
 
 
@@ -26,4 +26,16 @@ ingest:
 	@$(PY) -m etha.writer.main --dest data/mainnet --src-node ${ETH_NODE}
 
 
-.PHONY: init docker-writer query write
+router:
+	@$(PY) -m etha.worker.fake_router
+
+
+worker:
+	@$(PY) -m etha.worker.server \
+		--router http://localhost:5555 \
+		--worker-id 1 \
+		--worker-url http://localhost:8000 \
+		--data-dir data/worker
+
+
+.PHONY: init dbuild-writer query write ingest

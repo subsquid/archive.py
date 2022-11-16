@@ -1,4 +1,5 @@
 import asyncio
+import bisect
 import logging
 import multiprocessing as mp
 import os.path
@@ -11,6 +12,7 @@ import httpx
 from .intervals import difference, Range, remove_intersections, union
 from ..fs import create_fs, LocalFs
 from ..layout import DataChunk, get_chunks
+from ..util import add_temp_prefix
 
 LOG = logging.getLogger(__name__)
 
@@ -18,6 +20,9 @@ LOG = logging.getLogger(__name__)
 class DataStateUpdate(NamedTuple):
     new_ranges: list[Range]
     deleted_ranges: list[Range]
+
+    def has_updates(self):
+        return bool(self.new_ranges) or bool(self.deleted_ranges)
 
 
 class DataState:
@@ -32,7 +37,20 @@ class DataState:
         return self._downloading
 
     def get_range(self, first_block: int) -> Optional[Range]:
-        pass
+        i = bisect.bisect_left(self._available, (first_block, first_block))
+        if i == len(self._available):
+            return
+
+        c = self._available[i]
+        if c[0] == first_block:
+            return c
+
+        if i == 0:
+            return
+
+        c = self._available[i-1]
+        if c[1] >= first_block:
+            return c
 
     def ping(self, desired_ranges: list[Range]) -> DataStateUpdate:
         new_ranges = list(difference(desired_ranges, union(self._available, self._downloading)))
@@ -53,13 +71,16 @@ class DataState:
 
 def _get_dataset(data_dir: str) -> Optional[str]:
     file = os.path.join(data_dir, 'dataset.txt')
-    if os.path.exists(file):
+    try:
         with open(file, encoding='utf-8') as f:
             return f.read().strip()
+    except FileNotFoundError:
+        pass
 
 
 def _save_dataset(data_dir: str, dataset: str):
     cfg_file = os.path.join(data_dir, 'dataset.txt')
+    os.makedirs(os.path.dirname(cfg_file), exist_ok=True)
     with open(cfg_file, 'w', encoding='utf-8') as f:
         f.write(dataset)
 
@@ -101,15 +122,18 @@ def _update_state(
     for new_range in update.new_ranges:
         for chunk in get_chunks(dfs, first_block=new_range[0], last_block=new_range[1]):
             dest = lfs.abs(f'dataset/{chunk.path()}')
-            temp = lfs.abs(f'dataset/temp-{chunk.path()}')
-            LOG.info(f'downloading {chunk.path()}')
-            dfs.download(chunk.path(), temp)
-            os.rename(dest, temp)
+            temp = lfs.abs(f'dataset/{add_temp_prefix(chunk.path())}')
+            for f in ['transactions', 'logs', 'blocks']:
+                p = f'{chunk.path()}/{f}.parquet'
+                LOG.info(f'downloading {dfs.abs(p)}')
+                dfs.download(p, f'{temp}/{f}.parquet')
+            os.rename(temp, dest)
             LOG.info('saved %s', dest)
             on_downloaded_chunk(chunk)
 
 
 def _run_update_loop(data_dir: str, updates_queue: mp.Queue, new_chunks_queue: mp.Queue):
+    logging.basicConfig(level=logging.INFO)
     while True:
         dataset, upd = updates_queue.get()
         LOG.info('starting update task')
@@ -210,7 +234,7 @@ class StateManager:
 
     async def _ping(self, client: httpx.AsyncClient):
         try:
-            response = await client.post(self._router_url, json=self.get_ping_message())
+            response = await client.post(self._router_url + '/ping', json=self.get_ping_message())
             response.raise_for_status()
         except httpx.HTTPError:
             LOG.exception('failed to send a ping message')
@@ -219,13 +243,18 @@ class StateManager:
         ping = response.json()
         desired_dataset = ping['dataset']
         desired_ranges = [(r['from'], r['to']) for r in ping['ranges']]
+        desired_ranges.sort()
+        desired_ranges = list(remove_intersections(desired_ranges))
 
+        new_dataset = False
         if self._state is None or self._state.dataset != desired_dataset:
             self._state = _State(desired_dataset, DataState([]))
+            new_dataset = True
 
         upd = self._state.ranges.ping(desired_ranges)
 
-        self._updates_queue.put((desired_dataset, upd))
+        if new_dataset or upd.has_updates():
+            self._updates_queue.put((desired_dataset, upd))
 
     async def _chunk_receive_loop(self):
         while True:
@@ -248,10 +277,14 @@ class StateManager:
     async def run(self):
         assert not self._is_started
         self._is_started = True
-        update_loop = asyncio.create_task(self._update_loop(), name='sm:data_update_loop')
-        ping_loop = asyncio.create_task(self._ping_loop(), name='sm:ping_loop')
-        chunk_recv_loop = asyncio.create_task(self._chunk_receive_loop(), name='sm:chunk_receive_loop')
-        await _monitor_service_tasks(update_loop, ping_loop, chunk_recv_loop)
+        try:
+            update_loop = asyncio.create_task(self._update_loop(), name='sm:data_update_loop')
+            ping_loop = asyncio.create_task(self._ping_loop(), name='sm:ping_loop')
+            chunk_recv_loop = asyncio.create_task(self._chunk_receive_loop(), name='sm:chunk_receive_loop')
+            await _monitor_service_tasks(update_loop, ping_loop, chunk_recv_loop)
+        finally:
+            self._updates_queue.close()
+            self._new_chunks_queue.close()
 
 
 async def _monitor_service_tasks(*tasks: asyncio.Task):

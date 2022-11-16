@@ -2,7 +2,6 @@ import argparse
 import os
 import subprocess
 import sys
-from contextlib import contextmanager
 
 from .writer import Writer
 from ..fs import create_fs
@@ -99,19 +98,8 @@ def _ingest(writer, src_node, first_block, last_block=None, concurrency=None):
         cmd.append('--concurrency')
         cmd.append(str(concurrency))
 
-    with _stdout(cmd) as lines:
-        writer.write(lines)
-
-
-@contextmanager
-def _stdout(cmd: list[str]):
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-    try:
-        yield proc.stdout
-    except Exception as ex:
-        proc.kill()
-        raise ex
-    proc.wait()
+    with subprocess.Popen(cmd, stdout=subprocess.PIPE) as proc:
+        writer.write(proc.stdout)
 
 
 if __name__ == '__main__':

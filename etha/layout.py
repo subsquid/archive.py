@@ -2,6 +2,7 @@ import bisect
 import math
 import re
 from contextlib import AbstractContextManager, contextmanager
+from functools import cached_property
 from typing import Iterable, NamedTuple, Optional
 
 from .fs import Fs
