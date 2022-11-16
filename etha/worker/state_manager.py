@@ -158,7 +158,7 @@ class StateManager:
         self._worker_url = worker_url
         self._router_url = router_url
         self._state = self._read_state()
-        self._updates_queue = mp.Queue(10)
+        self._updates_queue = mp.Queue(50)
         self._new_chunks_queue = mp.Queue(100)
         self._is_started = False
 
@@ -167,14 +167,13 @@ class StateManager:
         if not dataset:
             return None
 
-        lfs = LocalFs(os.path.join(self._data_dir, 'dataset'))
+        lfs = LocalFs(self.get_dataset_dir())
         available_ranges = list(remove_intersections(get_chunks(lfs)))
         state = DataState(available_ranges)
         return _State(dataset, state)
 
-    @property
-    def data_dir(self):
-        return self._data_dir
+    def get_dataset_dir(self) -> str:
+        return os.path.join(self._data_dir, 'dataset')
 
     def get_dataset(self) -> Optional[str]:
         if self._state:

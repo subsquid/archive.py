@@ -12,7 +12,7 @@ from ..query.model import Query
 
 
 def get_json(req: fa.Request):
-    if req.content_type and req.content_type.starts_with('application/json'):
+    if req.content_type and req.content_type.startswith('application/json'):
         return req.get_media()
     else:
         raise falcon.HTTPUnsupportedMediaType(description='expected json body')
@@ -31,8 +31,7 @@ class QueryResource:
         self.sm = sm
         self.pool = pool
 
-    async def on_post(self, req: fa.Request, res: fa.Response):
-        dataset = req.get_param('dataset', required=True)
+    async def on_post(self, req: fa.Request, res: fa.Response, dataset: str):
         try:
             dataset = base64.urlsafe_b64decode(dataset).decode(encoding='utf-8')
         except:
@@ -56,9 +55,10 @@ class QueryResource:
 
     def execute_query(self, q: Query, data_range: Range):
         future = asyncio.get_event_loop().create_future()
+        args = self.sm.get_dataset_dir(), data_range, q
         self.pool.apply_async(
             execute_query,
-            args=(self.sm.data_dir, data_range, q),
+            args=args,
             callback=future.set_result,
             error_callback=future.set_exception
         )

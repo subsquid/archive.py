@@ -11,7 +11,7 @@ from ..query.model import Query
 CON = duckdb.connect(':memory:')
 
 
-def execute_query(data_dir: str, data_range: Range, q: Query):
+def execute_query(dataset_dir: str, data_range: Range, q: Query):
     first_block = max(data_range[0], q['fromBlock'])
     last_block = q.get('toBlock')
     if last_block is None:
@@ -21,8 +21,8 @@ def execute_query(data_dir: str, data_range: Range, q: Query):
 
     assert first_block <= last_block
 
-    runner = QueryRunner(CON, data_dir, q)
-    fs = LocalFs(data_dir)
+    runner = QueryRunner(CON, dataset_dir, q)
+    fs = LocalFs(dataset_dir)
 
     blocks_count = 0
     tx_count = 0

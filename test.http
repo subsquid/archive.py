@@ -6,7 +6,7 @@ POST http://localhost:8000/query/czM6Ly9ldGhhLW1haW5uZXQtc2lh
 Content-Type: application/json
 
 {
-        "fromBlock": 15000000,
+        "fromBlock": 6036411,
         "toBlock": 15050000,
         "logs": [
             {
