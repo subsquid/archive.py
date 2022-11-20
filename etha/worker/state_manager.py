@@ -219,7 +219,7 @@ class StateManager:
                     p.join()
                     raise Exception(f'data update process terminated with exitcode {p.exitcode}')
         except asyncio.CancelledError as ex:
-            p.terminate()
+            p.kill()
             p.join()
             raise ex
         finally:
