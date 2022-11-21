@@ -23,11 +23,9 @@ jobs:
           username: eldar
           password: ${{ secrets.ELDAR_DOCKER }}
 
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Build
-        run: docker build . --target ${{ inputs.target }} -t "eldar/etha-${{ inputs.target }}:${{ inputs.tag }}"
-
-      - name: Publish
-        run: docker push eldar/etha-${{ inputs.target }} --all-tags
+      - name: Docker build and push
+        uses: docker/build-push-action@v3
+        with:
+          push: true
+          target: ${{ inputs.target }}
+          tags: eldar/etha-${{ inputs.target }}:${{ inputs.tag }}

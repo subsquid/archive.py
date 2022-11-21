@@ -24,7 +24,7 @@ ENTRYPOINT ["python3", "-m", "etha.writer.main"]
 FROM debian:bullseye-slim AS worker
 
 RUN set -x && \
-    apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/* \
+    apt-get update && apt-get install -y --no-install-recommends wget ca-certificates && rm -rf /var/lib/apt/lists/* && \
     wget "https://repo.anaconda.com/miniconda/Miniconda3-py39_4.12.0-Linux-x86_64.sh" -O miniconda.sh -q && \
     echo "78f39f9bae971ec1ae7969f0516017f2413f17796670f7040725dd83fcff5689 miniconda.sh" > shasum && \
     sha256sum --check --status shasum && \
