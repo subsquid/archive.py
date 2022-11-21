@@ -1,0 +1,17 @@
+name: py-eth-worker
+
+channels:
+  - conda-forge
+
+dependencies:
+  - falcon
+  - fsspec
+  - httpx
+  - pyarrow
+  - pydantic
+  - python=3.9
+  - s3fs>=2021.8.0
+  - uvicorn
+  - pip
+  - pip:
+      - duckdb
