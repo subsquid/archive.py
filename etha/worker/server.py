@@ -64,7 +64,7 @@ async def main():
 
     with multiprocessing.Pool() as pool:
         app = create_app(sm, pool)
-        conf = uvicorn.Config(app, port=args.port)
+        conf = uvicorn.Config(app, port=args.port, host='0.0.0.0')
         server = uvicorn.Server(conf)
 
         server_task = asyncio.create_task(server.serve(), name='server')

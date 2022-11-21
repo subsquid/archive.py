@@ -42,3 +42,4 @@ RUN /opt/conda/bin/conda env create --prefix env
 ENV PATH="/etha-worker/env/bin:${PATH}"
 ADD etha etha/
 ENTRYPOINT ["python3", "-m", "etha.worker.server"]
+EXPOSE 8000
