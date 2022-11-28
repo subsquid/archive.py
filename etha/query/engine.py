@@ -34,7 +34,7 @@ class QueryRunner:
         self.data_dir = data_dir
         self.q = q
 
-    def run(self, chunk: DataChunk):
+    def run(self, chunk: DataChunk) -> tuple[Optional[pyarrow.Table], Optional[pyarrow.Table], Optional[pyarrow.Table]]:
         blocks = None
         logs = None  # !!! A name of a pyarrow table
         transactions = None  # !!! A name of a pyarrow table

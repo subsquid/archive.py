@@ -1,4 +1,5 @@
 import os
+import shutil
 import urllib.parse
 from contextlib import AbstractContextManager, contextmanager
 from typing import Optional
@@ -60,7 +61,7 @@ class LocalFs(Fs):
     def delete(self, loc: str):
         path = self.abs(loc)
         if os.path.isdir(path):
-            os.removedirs(path)
+            shutil.rmtree(path)
         else:
             try:
                 os.remove(path)

@@ -175,6 +175,9 @@ class StateManager:
     def get_dataset_dir(self) -> str:
         return os.path.join(self._data_dir, 'dataset')
 
+    def get_temp_dir(self) -> str:
+        return os.path.join(self._data_dir, 'temp')
+
     def get_dataset(self) -> Optional[str]:
         if self._state:
             return self._state.dataset
