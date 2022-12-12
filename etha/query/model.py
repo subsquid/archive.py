@@ -26,5 +26,3 @@ class Query(TypedDict):
     fields: FieldSelection
     logs: Optional[list[LogFilter]]
     transactions: Optional[list[TxFilter]]
-
-

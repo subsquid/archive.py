@@ -23,7 +23,7 @@ class QueryResult(NamedTuple):
     filesize: int
 
 
-def execute_query(out_dir: str, dataset_dir: str, data_range: Range, q: Query):
+def execute_query(out_dir: str, dataset_dir: str, data_range: Range, q: Query) -> QueryResult:
     first_block = max(data_range[0], q['fromBlock'])
     last_block = q.get('toBlock')
     if last_block is None:
@@ -34,13 +34,15 @@ def execute_query(out_dir: str, dataset_dir: str, data_range: Range, q: Query):
     assert first_block <= last_block
 
     beg = datetime.datetime.now()
-    runner = QueryRunner(CON, dataset_dir, q)
+    runner = QueryRunner(CON, q)
     result = Result(out_dir)
     last_processed_block = None
 
     with result.write() as rs:
         for chunk in get_chunks(LocalFs(dataset_dir), first_block=first_block, last_block=last_block):
-            blocks, txs, logs = runner.run(chunk)
+            blocks, txs, logs = runner.run(
+                os.path.join(dataset_dir, chunk.path())
+            )
 
             rs.write_blocks(blocks)
             rs.write_transactions(txs)

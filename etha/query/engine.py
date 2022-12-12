@@ -18,9 +18,10 @@ class Engine:
         self._con = duckdb.connect(':memory:')
 
     def run_query(self, q: Query):
-        runner = QueryRunner(self._con, self._data_dir, q)
-        for r in self._get_chunks(q):
-            yield runner.run(r)
+        runner = QueryRunner(self._con, q)
+        for c in self._get_chunks(q):
+            chunk_dir = os.path.join(self._data_dir, c.path())
+            yield runner.run(chunk_dir)
 
     def _get_chunks(self, q: Query) -> Iterable[DataChunk]:
         first_block = q.get('fromBlock')
@@ -29,22 +30,21 @@ class Engine:
 
 
 class QueryRunner:
-    def __init__(self, con: duckdb.DuckDBPyConnection, data_dir: str, q: Query):
+    def __init__(self, con: duckdb.DuckDBPyConnection, q: Query):
         self.con = con
-        self.data_dir = data_dir
         self.q = q
 
-    def run(self, chunk: DataChunk) -> tuple[Optional[pyarrow.Table], Optional[pyarrow.Table], Optional[pyarrow.Table]]:
+    def run(self, chunk_dir: str) -> tuple[Optional[pyarrow.Table], Optional[pyarrow.Table], Optional[pyarrow.Table]]:
         blocks = None
         logs = None  # !!! A name of a pyarrow table
         transactions = None  # !!! A name of a pyarrow table
 
         if self._logs_query:
-            self._logs_query.set_file(self._file(chunk, 'logs.parquet'))
+            self._logs_query.set_file(os.path.join(chunk_dir, 'logs.parquet'))
             logs = self._execute(self._logs_query)
 
         if self._tx_query:
-            self._tx_query.set_file(self._file(chunk, 'transactions.parquet'))
+            self._tx_query.set_file(os.path.join(chunk_dir, 'transactions.parquet'))
             # !!! A name of a pyarrow table
             log_txs = None
             if self._log_txs_needed:
@@ -55,13 +55,10 @@ class QueryRunner:
             transactions = self._execute(self._tx_query)
 
         if self._blocks_query:
-            self._blocks_query.set_file(self._file(chunk, 'blocks.parquet'))
+            self._blocks_query.set_file(os.path.join(chunk_dir, 'blocks.parquet'))
             blocks = self._execute(self._blocks_query)
 
         return blocks, transactions, logs
-
-    def _file(self, chunk: DataChunk, name: str):
-        return os.path.join(self.data_dir, chunk.path(), name)
 
     @cached_property
     def _logs_query(self):
