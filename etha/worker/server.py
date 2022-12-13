@@ -53,6 +53,12 @@ async def main():
         help='port to listen on (defaults to 8000)'
     )
 
+    program.add_argument(
+        '--procs',
+        type=int,
+        help='number of processes to use to execute data queries'
+    )
+
     args = program.parse_args()
 
     sm = StateManager(
@@ -62,7 +68,7 @@ async def main():
         router_url=args.router
     )
 
-    with multiprocessing.Pool() as pool:
+    with multiprocessing.Pool(processes=args.procs) as pool:
         app = create_app(sm, pool)
         conf = uvicorn.Config(app, port=args.port, host='0.0.0.0')
         server = uvicorn.Server(conf)
