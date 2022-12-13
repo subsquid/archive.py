@@ -41,8 +41,6 @@ async def main():
     cid = await ipfs_service.get_cid()
     print(cid)
 
-    await ipfs_service.get_cache(cid)
-
 
 async def read_query(src_kind: str, src: str) -> Query:
     if src_kind == 'text':

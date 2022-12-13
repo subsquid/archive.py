@@ -43,3 +43,7 @@ ENV PATH="/etha-worker/env/bin:${PATH}"
 ADD etha etha/
 ENTRYPOINT ["python3", "-m", "etha.worker.server"]
 EXPOSE 8000
+
+
+FROM worker as task
+ENTRYPOINT ["python3", "-m", "etha.task.main"]
