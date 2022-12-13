@@ -17,5 +17,6 @@ dependencies:
   - python=3.9
   - s3fs>=2021.8.0
   - uvicorn
+  - locust
   - pip:
       - duckdb
