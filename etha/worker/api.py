@@ -7,9 +7,9 @@ import aiofiles.os
 import falcon
 import falcon.asgi as fa
 
-from etha.worker.state.intervals import Range
 from .query import execute_query, QueryResult
-from etha.worker.state.manager import StateManager
+from .state.intervals import Range
+from .state.manager import StateManager
 from ..query.model import Query
 
 
