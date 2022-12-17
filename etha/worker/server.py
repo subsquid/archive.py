@@ -7,14 +7,13 @@ import os
 import uvicorn
 
 from .api import create_app
-from .state_manager import StateManager
+from .state.manager import StateManager
+from ..util import init_logging, sigterm_future
 
 LOG = logging.getLogger(__name__)
 
 
 async def main():
-    logging.basicConfig(level=logging.INFO)
-
     program = argparse.ArgumentParser(
         description='Subsquid eth archive worker'
     )
@@ -68,33 +67,40 @@ async def main():
         router_url=args.router
     )
 
-    with multiprocessing.Pool(processes=args.procs) as pool:
+    with multiprocessing.Pool(processes=args.procs, initializer=init_logging) as pool:
         app = create_app(sm, pool)
         conf = uvicorn.Config(app, port=args.port, host='0.0.0.0')
         server = uvicorn.Server(conf)
 
         server_task = asyncio.create_task(server.serve(), name='server')
-        sm_task = asyncio.create_task(sm.run())
-        await asyncio.wait([server_task, sm_task], return_when=asyncio.FIRST_COMPLETED)
+        sm_task = asyncio.create_task(sm.run(), name='state_manager')
+
+        await asyncio.wait([
+            server_task,
+            sm_task,
+            sigterm_future()
+        ], return_when=asyncio.FIRST_COMPLETED)
 
         ex = None
-        if server_task.done():
-            ex = server_task.exception()
+
+        if sm_task.done():
+            ex = sm_task.exception()
+        else:
             sm_task.cancel()
+
+        if server_task.done():
+            ex = ex or server_task.exception()
         else:
             server.should_exit = True
             try:
                 await server_task
             except:
-                LOG.exception('server task completed with error')
-
-        if sm_task.done():
-            ex = sm_task.exception()
+                LOG.exception('failed to gracefully terminate HTTP server')
 
         if ex:
             raise ex
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
+    init_logging()
     asyncio.run(main())

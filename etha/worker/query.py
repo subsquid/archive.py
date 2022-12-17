@@ -8,7 +8,7 @@ from typing import NamedTuple, Optional
 import duckdb
 import pyarrow
 
-from .intervals import Range
+from etha.worker.state.intervals import Range
 from ..fs import LocalFs
 from ..layout import get_chunks
 from ..query.engine import QueryRunner

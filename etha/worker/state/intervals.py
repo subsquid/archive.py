@@ -2,9 +2,12 @@ from typing import Iterable, Optional
 
 
 Range = tuple[int, int]
+RangeSet = list[Range]
 
 
-def difference(a: Iterable[Range], b: Iterable[Range]):
+def difference(a: RangeSet, b: RangeSet) -> RangeSet:
+    result = []
+
     bit = iter(b)
     br = next(bit, None)
 
@@ -14,7 +17,7 @@ def difference(a: Iterable[Range], b: Iterable[Range]):
 
         while br and (i := range_intersection(ar, br)):
             if ar[0] < i[0]:
-                yield ar[0], i[0] - 1
+                result.append((ar[0], i[0] - 1))
 
             if i[1] < ar[1]:
                 ar = i[1] + 1, ar[1]
@@ -24,7 +27,9 @@ def difference(a: Iterable[Range], b: Iterable[Range]):
                 break
 
         if ar:
-            yield ar
+            result.append(ar)
+
+    return result
 
 
 def range_intersection(a: Range, b: Range) -> Optional[Range]:
@@ -36,7 +41,7 @@ def range_intersection(a: Range, b: Range) -> Optional[Range]:
         return None
 
 
-def union(*sets: Iterable[Range]) -> Iterable[Range]:
+def union(*sets: RangeSet) -> RangeSet:
     if len(sets) == 0:
         return []
     elif len(sets) == 1:
@@ -51,19 +56,25 @@ def union(*sets: Iterable[Range]) -> Iterable[Range]:
         return remove_intersections(ranges)
 
 
-def remove_intersections(ordered_ranges: Iterable[Range]) -> Iterable[Range]:
+def remove_intersections(ordered_ranges: Iterable[Range]) -> RangeSet:
+    result = []
     prev = None
     for r in ordered_ranges:
         if prev:
             if prev[1] + 1 >= r[0]:
                 prev = prev[0], max(prev[1], r[1])
             else:
-                yield prev
+                result.append(prev)
                 prev = r
         else:
             prev = r
     if prev:
-        yield prev
+        result.append(prev)
+    return result
+
+
+def to_range_set(ranges: Iterable[Range]) -> RangeSet:
+    return remove_intersections(sorted(ranges))
 
 
 def _order(a: Iterable[Range], b: Iterable[Range]) -> Iterable[Range]:

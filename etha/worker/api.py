@@ -7,9 +7,9 @@ import aiofiles.os
 import falcon
 import falcon.asgi as fa
 
-from .intervals import Range
+from etha.worker.state.intervals import Range
 from .query import execute_query, QueryResult
-from .state_manager import StateManager
+from etha.worker.state.manager import StateManager
 from ..query.model import Query
 
 
@@ -49,11 +49,12 @@ class QueryResource:
         if last_block is not None and last_block < first_block:
             raise falcon.HTTPBadRequest(description=f'fromBlock={last_block} > toBlock={first_block}')
 
-        data_range = self.sm.get_range(first_block)
-        if data_range is None:
+        data_range_lock = self.sm.use_range(dataset, first_block)
+        if data_range_lock is None:
             raise falcon.HTTPBadRequest(description=f'data for block {first_block} is not available')
 
-        result: QueryResult = await self.execute_query(q, data_range)
+        with data_range_lock as data_range:
+            result: QueryResult = await self.execute_query(q, data_range)
 
         stream = await aiofiles.open(result.filename, 'rb')
         await aiofiles.os.unlink(result.filename)

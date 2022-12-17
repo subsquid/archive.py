@@ -102,10 +102,6 @@ class S3Fs(Fs):
         path = self._abs_path(dest_dir)
         yield S3Fs(self._s3, path)
 
-    def write_parquet(self, file: str, table, **kwargs):
-        path = self._abs_path(file)
-        pyarrow.parquet.write_table(table, path, filesystem=self._s3, **kwargs)
-
     def delete(self, loc: str):
         path = self._abs_path(loc)
         self._s3.delete(path, recursive=True)
@@ -113,6 +109,10 @@ class S3Fs(Fs):
     def download(self, src_loc: str, local_dest: str):
         src_path = self._abs_path(src_loc)
         self._s3.download(src_path, local_dest, recursive=True)
+
+    def write_parquet(self, file: str, table, **kwargs):
+        path = self._abs_path(file)
+        pyarrow.parquet.write_table(table, path, filesystem=self._s3, **kwargs)
 
 
 def create_fs(url: str, s3_endpoint: Optional[str] = os.environ.get('AWS_S3_ENDPOINT')) -> Fs:
