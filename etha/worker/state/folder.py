@@ -3,7 +3,7 @@ import os
 from typing import Callable, Optional
 
 from .controller import State, StateUpdate
-from .intervals import remove_intersections
+from .intervals import to_range_set
 from ...fs import create_fs, LocalFs
 from ...layout import DataChunk, get_chunks
 
@@ -29,7 +29,7 @@ class StateFolder:
     def read_state(self) -> State:
         ds = self.read_dataset()
         if ds:
-            ranges = remove_intersections(get_chunks(self.fs))
+            ranges = to_range_set((c[0], c[1]) for c in get_chunks(self.fs.cd('dataset')))
             return State(ds, ranges)
         else:
             return State('', [])
