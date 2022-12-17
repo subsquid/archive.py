@@ -56,11 +56,14 @@ class QueryResource:
         with data_range_lock as data_range:
             result: QueryResult = await self.execute_query(q, data_range)
 
-        stream = await aiofiles.open(result.filename, 'rb')
-        await aiofiles.os.unlink(result.filename)
+        if result.filename:
+            stream = await aiofiles.open(result.filename, 'rb')
+            await aiofiles.os.unlink(result.filename)
+            res.set_header('content-type', 'application/zip')
+            res.set_stream(stream, result.filesize)
+        else:
+            res.status = 204
 
-        res.set_header('content-type', 'application/zip')
-        res.set_stream(stream, result.filesize)
         res.set_header('x-sqd-last-processed-block', str(result.last_processed_block))
 
     def execute_query(self, q: Query, data_range: Range):
