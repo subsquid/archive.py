@@ -8,7 +8,8 @@ import uvicorn
 
 from .api import create_app
 from .state.manager import StateManager
-from ..util import init_logging, sigterm_future
+from ..util import sigterm_future
+from etha.log import init_logging
 
 LOG = logging.getLogger(__name__)
 
@@ -69,7 +70,13 @@ async def main():
 
     with multiprocessing.Pool(processes=args.procs, initializer=init_logging) as pool:
         app = create_app(sm, pool)
-        conf = uvicorn.Config(app, port=args.port, host='0.0.0.0')
+        conf = uvicorn.Config(
+            app,
+            port=args.port,
+            host='0.0.0.0',
+            access_log=False,
+            log_config=None
+        )
         server = uvicorn.Server(conf)
 
         server_task = asyncio.create_task(server.serve(), name='server')

@@ -8,7 +8,7 @@ from typing import Callable
 from .controller import State, StateUpdate
 from .folder import StateFolder
 from .intervals import to_range_set
-from ...util import init_logging
+from ...log import init_logging
 
 LOG = logging.getLogger(__name__)
 

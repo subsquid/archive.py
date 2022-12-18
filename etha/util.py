@@ -9,11 +9,6 @@ def add_temp_prefix(path: str) -> str:
     return os.path.join(parent, f'temp-{ts}-{name}')
 
 
-def init_logging():
-    import logging
-    logging.basicConfig(level=logging.INFO)
-
-
 def sigterm_future():
     import asyncio
     import signal

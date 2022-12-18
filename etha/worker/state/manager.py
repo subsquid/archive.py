@@ -80,6 +80,7 @@ class StateManager:
         desired_ranges = to_range_set((r['from'], r['to']) for r in ping['ranges'])
         desired_state = State(desired_dataset, desired_ranges)
 
+        LOG.info('ping', extra={'desired_state': desired_state})
         self._controller.ping(desired_state)
 
     async def _pause_ping(self, client: httpx.AsyncClient):
