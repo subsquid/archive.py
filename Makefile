@@ -35,7 +35,8 @@ worker:
 		--router http://localhost:5555 \
 		--worker-id 1 \
 		--worker-url http://localhost:8000 \
-		--data-dir data/worker
+		--data-dir data/worker \
+		--procs 2
 
 
 task:

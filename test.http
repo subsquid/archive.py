@@ -33,3 +33,10 @@ Content-Type: application/json
             }
         }
     }
+
+
+### Deployed status 1
+GET https://mainnet-v2.archive.subsquid.io/workers/1/status
+
+### Deployed status 0
+GET https://mainnet-v2.archive.subsquid.io/workers/0/status

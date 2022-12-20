@@ -67,14 +67,23 @@ class QueryResource:
         res.set_header('x-sqd-last-processed-block', str(result.last_processed_block))
 
     def execute_query(self, q: Query, data_range: Range):
-        future = asyncio.get_event_loop().create_future()
         args = self.sm.get_temp_dir(), self.sm.get_dataset_dir(), data_range, q
+        loop = asyncio.get_event_loop()
+        future = loop.create_future()
+
+        def on_done(res):
+            loop.call_soon_threadsafe(future.set_result, res)
+
+        def on_error(err):
+            loop.call_soon_threadsafe(future.set_exception, err)
+
         self.pool.apply_async(
             execute_query,
             args=args,
-            callback=future.set_result,
-            error_callback=future.set_exception
+            callback=on_done,
+            error_callback=on_error
         )
+
         return future
 
 

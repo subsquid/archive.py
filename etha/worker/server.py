@@ -5,11 +5,12 @@ import multiprocessing
 import os
 
 import uvicorn
+import uvloop
 
 from .api import create_app
 from .state.manager import StateManager
+from ..log import init_logging
 from ..util import sigterm_future
-from etha.log import init_logging
 
 LOG = logging.getLogger(__name__)
 
@@ -110,4 +111,5 @@ async def main():
 
 if __name__ == '__main__':
     init_logging()
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     asyncio.run(main())

@@ -8,8 +8,7 @@ class PingResource:
         res.media = {
             'dataset': 's3://etha-mainnet-sia',
             'ranges': [
-                {'from': 6727131, 'to': 6743261},
-                {'from': 6036411, 'to': 6049535}
+                {'from': 16143005, 'to': 16218816}
             ]
         }
 

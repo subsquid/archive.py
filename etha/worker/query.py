@@ -7,7 +7,7 @@ from typing import NamedTuple, Optional
 
 import duckdb
 
-from etha.worker.state.intervals import Range
+from .state.intervals import Range
 from ..fs import LocalFs
 from ..layout import get_chunks
 from ..query.engine import QueryRunner
