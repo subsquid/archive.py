@@ -1,11 +1,12 @@
-from etha.query.engine import Engine
-from etha.query.model import Query
+from benchmark.tools import WorkerUser
 
 
-def main():
-    q1: Query = {
-        "fromBlock": 15_000_000,
-        "toBlock": 15_040_000,
+TestSquid = WorkerUser(
+    'TestSquid',
+    dataset='s3://etha-mainnet-sia',
+    query={
+        "fromBlock": 16143005,
+        "toBlock": 16218816,
         "transactions": [
             {
                 "to": ["0x9cb7712c6a91506e69e8751fcb08e72e1256477d"],
@@ -36,6 +37,11 @@ def main():
             }
         ],
         "fields": {
+            "block": {
+                "number": True,
+                "hash": True,
+                "parentHash": True,
+            },
             "log": {
                 "address": True,
                 "topics": True,
@@ -50,51 +56,4 @@ def main():
             }
         }
     }
-
-    q2: Query = {
-        "fromBlock": 15000000,
-        "toBlock": 15050000,
-        "logs": [
-            {
-                "address": ["0x3883f5e181fccaF8410FA61e12b59BAd963fb645".lower()]
-            }
-        ],
-        "transactions": [],
-        "fields": {
-            "block": {
-                "number": True,
-                "hash": True,
-                "parentHash": True,
-                "nonce": True
-            },
-            "log": {
-                "address": True,
-                "topics": True,
-                "data": True,
-                "transaction": True
-            },
-            "transaction": {
-                "to": True,
-                "gas": True
-            }
-        }
-    }
-
-    engine = Engine('data/parquet')
-
-    blocks_count = 0
-    tx_count = 0
-    logs_count = 0
-    for blocks, txs, logs in engine.run_query(q1):
-        if blocks:
-            blocks_count += blocks.shape[0]
-        if txs:
-            tx_count += txs.shape[0]
-        if logs:
-            logs_count += logs.shape[0]
-
-    print(f"blocks: {blocks_count}, txs: {tx_count}, logs: {logs_count}")
-
-
-if __name__ == '__main__':
-    main()
+)

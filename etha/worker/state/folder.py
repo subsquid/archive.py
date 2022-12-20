@@ -2,10 +2,10 @@ import logging
 import os
 from typing import Callable, Optional
 
-from .controller import State, StateUpdate
-from .intervals import to_range_set
-from ...fs import create_fs, LocalFs
-from ...layout import DataChunk, get_chunks
+from etha.fs import create_fs, LocalFs
+from etha.layout import DataChunk, get_chunks
+from etha.worker.state.controller import State, StateUpdate
+from etha.worker.state.intervals import to_range_set
 
 
 class StateFolder:

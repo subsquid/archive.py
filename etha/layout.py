@@ -4,7 +4,7 @@ import re
 from contextlib import AbstractContextManager, contextmanager
 from typing import Iterable, NamedTuple, Optional
 
-from .fs import Fs
+from etha.fs import Fs
 
 
 def _format_block(block_number: int):

@@ -2,10 +2,10 @@ import asyncio
 
 import duckdb
 
-from . import ipfs_service
-from ..query.engine import QueryRunner
-from ..query.model import Query
-from ..query.result_set import ResultSet
+from etha.query.engine import QueryRunner
+from etha.query.model import Query
+from etha.query.result_set import ResultSet
+from etha.task import ipfs_service
 
 
 async def execute_query(q: Query, chunks: list[str]):

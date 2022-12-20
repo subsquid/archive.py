@@ -19,5 +19,6 @@ dependencies:
   - uvicorn
   - uvloop
   - locust
+  - yappi
   - pip:
       - duckdb

@@ -6,10 +6,10 @@ from typing import Iterable, Optional
 import duckdb
 import pyarrow
 
-from .model import Query
-from .sql import And, Bin, Or, SqlBuilder, SqlQuery
-from ..fs import LocalFs
-from ..layout import DataChunk, get_chunks
+from etha.fs import LocalFs
+from etha.layout import DataChunk, get_chunks
+from etha.query.model import Query
+from etha.query.sql import And, Bin, Or, SqlBuilder, SqlQuery
 
 
 class Engine:

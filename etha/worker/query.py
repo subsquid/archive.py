@@ -7,12 +7,12 @@ from typing import NamedTuple, Optional
 
 import duckdb
 
-from .state.intervals import Range
-from ..fs import LocalFs
-from ..layout import get_chunks
-from ..query.engine import QueryRunner
-from ..query.model import Query
-from ..query.result_set import ResultSet
+from etha.fs import LocalFs
+from etha.layout import get_chunks
+from etha.query.engine import QueryRunner
+from etha.query.model import Query
+from etha.query.result_set import ResultSet
+from etha.worker.state.intervals import Range
 
 CON = duckdb.connect(':memory:')
 

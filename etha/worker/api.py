@@ -7,10 +7,10 @@ import aiofiles.os
 import falcon
 import falcon.asgi as fa
 
-from .query import execute_query, QueryResult
-from .state.intervals import Range
-from .state.manager import StateManager
-from ..query.model import Query
+from etha.query.model import Query
+from etha.worker.query import execute_query, QueryResult
+from etha.worker.state.intervals import Range
+from etha.worker.state.manager import StateManager
 
 
 def get_json(req: fa.Request):

@@ -5,9 +5,9 @@ from typing import Optional
 
 import httpx
 
-from .controller import RangeLock, State, StateController
-from .intervals import to_range_set
-from .sync import SyncProcess
+from etha.worker.state.controller import RangeLock, State, StateController
+from etha.worker.state.intervals import to_range_set
+from etha.worker.state.sync import SyncProcess
 
 LOG = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@ import bisect
 import contextlib
 from typing import NamedTuple, Optional, Protocol
 
-from .intervals import difference, Range, RangeSet, to_range_set, union
+from etha.worker.state.intervals import difference, Range, RangeSet, to_range_set, union
 
 
 RangeLock = contextlib.AbstractContextManager[Range]
@@ -47,13 +47,15 @@ class StateController:
         return self._downloading
 
     def get_range(self, first_block: int) -> Optional[Range]:
-        i = bisect.bisect_left(self._available, (first_block, first_block))
-        if i == len(self._available):
+        if not self._available:
             return
 
-        c = self._available[i]
-        if c[0] == first_block:
-            return c
+        i = bisect.bisect_left(self._available, (first_block, first_block))
+
+        if i < len(self._available):
+            c = self._available[i]
+            if c[0] == first_block:
+                return c
 
         if i == 0:
             return

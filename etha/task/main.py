@@ -2,9 +2,9 @@ import argparse
 import asyncio
 import json
 
-from . import ipfs_service
-from .query import execute_query
-from ..query.model import Query
+from etha.query.model import Query
+from etha.task import ipfs_service
+from etha.task.query import execute_query
 
 
 async def main():

@@ -1,7 +1,7 @@
 import re
 from typing import Any, NamedTuple, Union
 
-from .model import FieldMap
+from etha.query.model import FieldMap
 
 
 class And(NamedTuple):

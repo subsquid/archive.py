@@ -7,10 +7,10 @@ import os
 import uvicorn
 import uvloop
 
-from .api import create_app
-from .state.manager import StateManager
-from ..log import init_logging
-from ..util import sigterm_future
+from etha.worker.api import create_app
+from etha.worker.state.manager import StateManager
+from etha.log import init_logging
+from etha.util import sigterm_future
 
 LOG = logging.getLogger(__name__)
 
