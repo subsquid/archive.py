@@ -1,9 +1,9 @@
 import json
-from typing import Iterable
 
 import pyarrow
 
 from .tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder
+from .model import Block
 from ..layout import ChunkWriter
 
 
@@ -18,15 +18,10 @@ class Writer:
         self.tx_table = TxTableBuilder()
         self.log_table = LogTableBuilder()
 
-    def write(self, json_lines: Iterable[str]):
-        for line in json_lines:
-            if line:
-                self.append(line)
+    def append(self, data: str):
+        block: Block = json.loads(data)
 
-    def append(self, json_line: str):
-        block = json.loads(json_line)
-
-        self.size += len(json_line)
+        self.size += len(data)
         self.block_table.append(block['header'])
 
         for tx in block['transactions']:

@@ -1,14 +1,24 @@
 import argparse
 import os
-import subprocess
 import sys
+import asyncio
+import logging
+import json
+from threading import Thread
+from queue import Queue
 
 from .writer import Writer
+from .ingest import Ingest, IngestOptions
+from .rpc import RpcClient
+from .progress import Progress
 from ..fs import create_fs
 from ..layout import ChunkWriter
+from ..log import init_logging
+
+LOG = logging.getLogger(__name__)
 
 
-def main():
+async def main():
     program = argparse.ArgumentParser(
         description='Subsquid eth archive writer'
     )
@@ -73,35 +83,55 @@ def main():
 
     writer = Writer(chunk_writer)
 
-    if args.src_node:
-        _ingest(
-            writer,
-            args.src_node,
-            chunk_writer.next_block,
-            last_block=args.last_block,
-            concurrency=args.src_node_concurrency
-        )
-    else:
-        writer.write(sys.stdin)
+    rpc = RpcClient(args.src_node)
 
-    writer.flush()
+    progress = Progress(window_size=10, window_granularity_seconds=1)
+    writing = Progress(window_size=10, window_granularity_seconds=1)
+
+    total_bytes = 0
+
+    def report():
+        if progress.has_news():
+            LOG.info(', '.join([
+                f'last block: {progress.get_current_value()}',
+                f'progress: {round(progress.speed())} blocks/sec',
+                f'writing: {round(writing.speed() / 1024)} kb/sec',
+            ]))
+
+    every_task = asyncio.create_task(every(5, report))
+
+    queue = Queue()
+    thread = Thread(target=writer_task, args=(queue, writer), daemon=True)
+    thread.start()
+
+    options = IngestOptions(rpc, args.first_block, args.last_block, args.src_node_concurrency)
+    async for blocks in Ingest.get_blocks(options):
+        for block in blocks:
+            data = json.dumps(block, separators=(',', ':'))
+            total_bytes += len(data)
+            queue.put(data)
+        progress.set_current_value(blocks[-1]['header']['number'])
+        writing.set_current_value(total_bytes)
+
+    every_task.cancel()
+    report()
 
 
-def _ingest(writer, src_node, first_block, last_block=None, concurrency=None):
-    cmd = ['squid-eth-ingest', '-e', src_node, '--from-block', str(first_block)]
+async def every(time: int, fn):
+    while True:
+        try:
+            fn()
+        except Exception:
+            sys.exit(1)
+        await asyncio.sleep(time)
 
-    if last_block is not None:
-        cmd.append('--to-block')
-        cmd.append(str(last_block))
 
-    if concurrency:
-        cmd.append('--concurrency')
-        cmd.append(str(concurrency))
-
-    with subprocess.Popen(cmd, stdout=subprocess.PIPE) as proc:
-        writer.write(proc.stdout)
+def writer_task(queue: Queue, writer: Writer):
+    while True:
+        data: str = queue.get()
+        writer.append(data)
 
 
 if __name__ == '__main__':
-    main()
-
+    init_logging()
+    asyncio.run(main())
