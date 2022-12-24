@@ -7,10 +7,9 @@ import os
 import uvicorn
 import uvloop
 
+from etha.log import init_logging
 from etha.worker.api import create_app
 from etha.worker.state.manager import StateManager
-from etha.log import init_logging
-from etha.util import sigterm_future
 
 LOG = logging.getLogger(__name__)
 
@@ -85,8 +84,7 @@ async def main():
 
         await asyncio.wait([
             server_task,
-            sm_task,
-            sigterm_future()
+            sm_task
         ], return_when=asyncio.FIRST_COMPLETED)
 
         ex = None
@@ -111,5 +109,5 @@ async def main():
 
 if __name__ == '__main__':
     init_logging()
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    # asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     asyncio.run(main())

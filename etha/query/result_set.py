@@ -29,7 +29,7 @@ class ResultSet:
         inp = self._inputs.get(name)
         if not inp:
             out = BytesBuffer()
-            inp = pyarrow.ipc.new_stream(pyarrow.CompressedOutputStream(out, 'gzip'), table.schema)
+            inp = pyarrow.ipc.new_stream(pyarrow.CompressedOutputStream(out, 'zstd'), table.schema)
             self._inputs[name] = inp
             self._outputs[name] = out
 

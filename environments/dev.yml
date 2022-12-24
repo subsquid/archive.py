@@ -6,19 +6,20 @@ channels:
 dependencies:
   - aiofiles
   - falcon
+  - fastparquet
   - fsspec
   - httpx
   - ipython
+  - locust
   - numpy
   - pandas
   - pip
   - pyarrow
   - pydantic
-  - python=3.9
+  - python=3.11
   - s3fs>=2021.8.0
   - uvicorn
   - uvloop
-  - locust
   - yappi
   - pip:
       - duckdb

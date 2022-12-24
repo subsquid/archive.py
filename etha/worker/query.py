@@ -3,7 +3,8 @@ import os
 import tempfile
 import zipfile
 from contextlib import AbstractContextManager, contextmanager
-from typing import NamedTuple, Optional
+from io import BytesIO
+from typing import NamedTuple, Optional, Union
 
 import duckdb
 
@@ -19,8 +20,8 @@ CON = duckdb.connect(':memory:')
 
 class QueryResult(NamedTuple):
     last_processed_block: int
-    filename: Optional[str]
-    filesize: int
+    data: Optional[Union[str, bytes]]  # either name of a temp file or raw response body
+    size: int
 
 
 def execute_query(out_dir: str, dataset_dir: str, data_range: Range, q: Query) -> QueryResult:
@@ -57,35 +58,44 @@ def execute_query(out_dir: str, dataset_dir: str, data_range: Range, q: Query) -
                 break
 
     assert last_processed_block is not None
-    return QueryResult(last_processed_block, result.filename, result.filesize)
+    return QueryResult(last_processed_block, result.data, result.size)
 
 
 class Result:
     def __init__(self, out_dir: str):
         self._out_dir = out_dir
-        self.filename = None
-        self.filesize = 0
+        self.data = None
+        self.size = 0
 
     @contextmanager
     def write(self) -> AbstractContextManager['ResultSet']:
         rs = ResultSet()
         yield rs
+
         if rs.size == 0:
             return
 
-        os.makedirs(self._out_dir, exist_ok=True)
-        fd, filename = tempfile.mkstemp(dir=self._out_dir, prefix='result-', suffix='.zip')
-        try:
-            with os.fdopen(fd, 'wb') as f, \
-                    zipfile.ZipFile(f, 'w') as arch:
-                for name, data in rs.close().items():
-                    with arch.open(f'{name}.arrow.gz', 'w') as zf:
-                        zf.write(data)
+        if rs.size > 8 * 1024 * 1024:
+            os.makedirs(self._out_dir, exist_ok=True)
+            fd, filename = tempfile.mkstemp(dir=self._out_dir, prefix='result-', suffix='.zip')
+            try:
+                with os.fdopen(fd, 'wb') as dest:
+                    _write_zip(dest, rs)
+            except Exception as ex:
+                os.unlink(filename)
+                raise ex
+            stat = os.stat(filename)
+            self.data = filename
+            self.size = stat.st_size
+        else:
+            dest = BytesIO()
+            _write_zip(dest, rs)
+            self.data = dest.getvalue()
+            self.size = len(self.data)
 
-        except Exception as ex:
-            os.unlink(filename)
-            raise ex
 
-        stat = os.stat(filename)
-        self.filename = filename
-        self.filesize = stat.st_size
+def _write_zip(dest, rs: ResultSet):
+    with zipfile.ZipFile(dest, 'w') as arch:
+        for name, data in rs.close().items():
+            with arch.open(f'{name}.arrow.gz', 'w') as zf:
+                zf.write(data)
