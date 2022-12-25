@@ -13,13 +13,11 @@ dependencies:
   - locust
   - numpy
   - pandas
-  - pip
   - pyarrow
   - pydantic
+  - python-duckdb
   - python=3.11
   - s3fs>=2021.8.0
   - uvicorn
   - uvloop
   - yappi
-  - pip:
-      - duckdb

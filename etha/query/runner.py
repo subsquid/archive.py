@@ -1,74 +1,70 @@
-import math
 import os.path
-from functools import cached_property
-from typing import Iterable, Optional
+from typing import Optional
 
 import duckdb
 import pyarrow
 
-from etha.fs import LocalFs
-from etha.layout import DataChunk, get_chunks
 from etha.query.model import Query
+from etha.query.result_set import ResultSet
 from etha.query.sql import And, Bin, Or, SqlBuilder, SqlQuery
 
-
-class Engine:
-    def __init__(self, data_dir: str):
-        self._data_dir = data_dir
-        self._con = duckdb.connect(':memory:')
-
-    def run_query(self, q: Query):
-        runner = QueryRunner(self._con, q)
-        for c in self._get_chunks(q):
-            chunk_dir = os.path.join(self._data_dir, c.path())
-            yield runner.run(chunk_dir)
-
-    def _get_chunks(self, q: Query) -> Iterable[DataChunk]:
-        first_block = q.get('fromBlock')
-        last_block = q.get('toBlock', math.inf)
-        return get_chunks(LocalFs(self._data_dir), first_block=first_block, last_block=last_block)
+CON = duckdb.connect(':memory:')
 
 
 class QueryRunner:
+    def __init__(self, q: Query):
+        self._runner = _Runner(CON, q)
+
+    def visit(self, chunk_dir: str, rs: ResultSet) -> None:
+        blocks, txs, logs = self._runner.visit(chunk_dir)
+        rs.write_blocks(blocks)
+        rs.write_transactions(txs)
+        rs.write_logs(logs)
+
+
+class _Runner:
     def __init__(self, con: duckdb.DuckDBPyConnection, q: Query):
         self.con = con
         self.q = q
+        self.logs_query = self.build_logs_query()
+        self.fetch_log_txs = self.logs_query and self.q.get('fields', {}).get('log', {}).get('transaction')
+        self.tx_query = self.build_tx_query()
+        self.blocks_query = self.build_logs_query()
 
-    def run(self, chunk_dir: str) -> tuple[Optional[pyarrow.Table], Optional[pyarrow.Table], Optional[pyarrow.Table]]:
+    def visit(self, chunk_dir: str) -> tuple[Optional[pyarrow.Table], Optional[pyarrow.Table], Optional[pyarrow.Table]]:
         blocks = None
         logs = None  # !!! A name of a pyarrow table
         transactions = None  # !!! A name of a pyarrow table
 
-        if self._logs_query:
-            self._logs_query.set_file(os.path.join(chunk_dir, 'logs.parquet'))
-            logs = self._execute(self._logs_query)
+        if self.logs_query:
+            self.logs_query.set_file(os.path.join(chunk_dir, 'logs.parquet'))
+            logs = self.execute(self.logs_query)
 
-        if self._tx_query:
-            self._tx_query.set_file(os.path.join(chunk_dir, 'transactions.parquet'))
+        if self.tx_query:
+            self.tx_query.set_file(os.path.join(chunk_dir, 'transactions.parquet'))
             # !!! A name of a pyarrow table
             log_txs = None
-            if self._log_txs_needed:
-                log_txs = self._execute(SqlQuery(
+            if self.fetch_log_txs:
+                log_txs = self.execute(SqlQuery(
                     'SELECT ((block_number::long << 24) + transaction_index::long) AS tx_id FROM logs',
                     []
                 ))
-            transactions = self._execute(self._tx_query)
+            transactions = self.execute(self.tx_query)
 
-        if self._blocks_query:
-            self._blocks_query.set_file(os.path.join(chunk_dir, 'blocks.parquet'))
-            blocks = self._execute(self._blocks_query)
+        if self.blocks_query:
+            self.blocks_query.set_file(os.path.join(chunk_dir, 'blocks.parquet'))
+            blocks = self.execute(self.blocks_query)
 
         return blocks, transactions, logs
 
-    @cached_property
-    def _logs_query(self):
+    def build_logs_query(self):
         selection = self.q.get('logs')
         if not selection:
             return None
 
         qb = SqlBuilder()
 
-        self._add_block_range_condition(qb)
+        self.add_block_range_condition(qb)
 
         cases = []
         for variant in selection:
@@ -102,20 +98,19 @@ class QueryRunner:
 
         return qb.build()
 
-    @cached_property
-    def _tx_query(self):
+    def build_tx_query(self):
         selection = self.q.get('transactions', [])
 
-        if not selection and not self._log_txs_needed:
+        if not (selection or self.fetch_log_txs):
             return None
 
         qb = SqlBuilder()
 
-        self._add_block_range_condition(qb)
+        self.add_block_range_condition(qb)
 
         cases = []
 
-        if self._log_txs_needed:
+        if self.fetch_log_txs:
             cases.append(Bin('IN', '_id', '(SELECT tx_id FROM log_txs)'))
 
         for variant in selection:
@@ -142,14 +137,13 @@ class QueryRunner:
 
         return qb.build()
 
-    @cached_property
-    def _blocks_query(self) -> Optional[SqlQuery]:
+    def build_blocks_query(self) -> Optional[SqlQuery]:
         tables = []
 
-        if self._logs_query:
+        if self.logs_query:
             tables.append('logs')
 
-        if self._tx_query:
+        if self.tx_query:
             tables.append('transactions')
 
         if not tables:
@@ -163,19 +157,12 @@ class QueryRunner:
         qb.add_columns(self.q.get('fields', {}).get('block'))
         return qb.build()
 
-    @cached_property
-    def _log_txs_needed(self) -> bool:
-        if self._logs_query and self.q.get('fields', {}).get('log', {}).get('transaction'):
-            return True
-        else:
-            return False
-
-    def _add_block_range_condition(self, qb: SqlBuilder):
+    def add_block_range_condition(self, qb: SqlBuilder):
         qb.add_where(Bin('>=', 'block_number', qb.param(self.q.get('fromBlock'))))
         if 'toBlock' in self.q:
             qb.add_where(Bin('<=', 'block_number', qb.param(self.q.get('toBlock'))))
 
-    def _execute(self, q: SqlQuery) -> pyarrow.Table:
+    def execute(self, q: SqlQuery) -> pyarrow.Table:
         self.con.execute(q.sql, parameters=q.params)
         return self.con.fetch_arrow_table()
 

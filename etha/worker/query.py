@@ -6,16 +6,12 @@ from contextlib import AbstractContextManager, contextmanager
 from io import BytesIO
 from typing import NamedTuple, Optional, Union
 
-import duckdb
-
 from etha.fs import LocalFs
 from etha.layout import get_chunks
-from etha.query.engine import QueryRunner
 from etha.query.model import Query
 from etha.query.result_set import ResultSet
+from etha.query.runner import QueryRunner
 from etha.worker.state.intervals import Range
-
-CON = duckdb.connect(':memory:')
 
 
 class QueryResult(NamedTuple):
@@ -35,19 +31,15 @@ def execute_query(out_dir: str, dataset_dir: str, data_range: Range, q: Query) -
     assert first_block <= last_block
 
     beg = datetime.datetime.now()
-    runner = QueryRunner(CON, q)
+    runner = QueryRunner(q)
     result = Result(out_dir)
     last_processed_block = None
 
     with result.write() as rs:
         for chunk in get_chunks(LocalFs(dataset_dir), first_block=first_block, last_block=last_block):
-            blocks, txs, logs = runner.run(
-                os.path.join(dataset_dir, chunk.path())
-            )
+            chunk_dir = os.path.join(dataset_dir, chunk.path())
 
-            rs.write_blocks(blocks)
-            rs.write_transactions(txs)
-            rs.write_logs(logs)
+            runner.visit(chunk_dir, rs)
 
             last_processed_block = min(chunk.last_block, last_block)
 
@@ -97,5 +89,5 @@ class Result:
 def _write_zip(dest, rs: ResultSet):
     with zipfile.ZipFile(dest, 'w') as arch:
         for name, data in rs.close().items():
-            with arch.open(f'{name}.arrow.gz', 'w') as zf:
+            with arch.open(f'{name}.arrow.zst', 'w') as zf:
                 zf.write(data)

@@ -1,16 +1,13 @@
 import asyncio
 
-import duckdb
-
-from etha.query.engine import QueryRunner
 from etha.query.model import Query
 from etha.query.result_set import ResultSet
+from etha.query.runner import QueryRunner
 from etha.task import ipfs_service
 
 
 async def execute_query(q: Query, chunks: list[str]):
-    runner = QueryRunner(con=duckdb.connect(':memory:'), q=q)
-
+    runner = QueryRunner(q)
     chunk_paths = asyncio.Queue()
     results = asyncio.Queue(1)
 
@@ -22,14 +19,9 @@ async def execute_query(q: Query, chunks: list[str]):
     async def query_runner():
         rs = ResultSet()
         rs_chunk_size = 0
-
         for i in range(0, len(chunks)):
             c = await chunk_paths.get()
-            blocks, txs, logs = runner.run(c)
-            rs.write_blocks(blocks)
-            rs.write_transactions(txs)
-            rs.write_logs(logs)
-
+            runner.visit(c, rs)
             rs_chunk_size += 1
             left = len(chunks) - i
             if rs.size > 4 * 1024 * 1024 and float(left) / rs_chunk_size > 0.2:
