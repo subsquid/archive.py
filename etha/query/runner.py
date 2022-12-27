@@ -27,9 +27,9 @@ class _Runner:
         self.con = con
         self.q = q
         self.logs_query = self.build_logs_query()
-        self.fetch_log_txs = self.logs_query and self.q.get('fields', {}).get('log', {}).get('transaction')
+        self.fetch_log_txs = bool(self.logs_query and self.q.get('fields', {}).get('log', {}).get('transaction'))
         self.tx_query = self.build_tx_query()
-        self.blocks_query = self.build_logs_query()
+        self.blocks_query = self.build_blocks_query()
 
     def visit(self, chunk_dir: str) -> tuple[Optional[pyarrow.Table], Optional[pyarrow.Table], Optional[pyarrow.Table]]:
         blocks = None
@@ -51,7 +51,7 @@ class _Runner:
                 ))
             transactions = self.execute(self.tx_query)
 
-        if self.blocks_query:
+        if self.blocks_query and (_has_data(logs) or _has_data(transactions)):
             self.blocks_query.set_file(os.path.join(chunk_dir, 'blocks.parquet'))
             blocks = self.execute(self.blocks_query)
 
@@ -98,10 +98,10 @@ class _Runner:
 
         return qb.build()
 
-    def build_tx_query(self):
+    def build_tx_query(self) -> Optional[SqlQuery]:
         selection = self.q.get('transactions', [])
 
-        if not (selection or self.fetch_log_txs):
+        if not selection and not self.fetch_log_txs:
             return None
 
         qb = SqlBuilder()
@@ -174,3 +174,7 @@ def _in_condition(qb: SqlBuilder, col: str, variants: Optional[list]) -> Optiona
         return Bin('=', col, qb.param(variants[0]))
     else:
         return Bin('IN', col, f"(SELECT UNNEST({qb.param(variants)}))")
+
+
+def _has_data(table: Optional[pyarrow.Table]) -> bool:
+    return bool(table and table.shape[0])

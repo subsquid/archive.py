@@ -98,5 +98,5 @@ def init_logging():
     h.setFormatter(f)
     logging.basicConfig(
         level=logging.INFO,
-        handlers=[h]
+        # handlers=[h]
     )

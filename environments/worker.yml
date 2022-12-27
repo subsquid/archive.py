@@ -8,8 +8,8 @@ dependencies:
   - falcon
   - fsspec
   - httpx
+  - marshmallow
   - pyarrow
-  - pydantic
   - python-duckdb
   - python=3.9
   - s3fs>=2021.8.0

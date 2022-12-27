@@ -1,11 +1,13 @@
 import asyncio
 import base64
 import multiprocessing.pool as mpl
+from typing import Optional
 
 import aiofiles
 import aiofiles.os
 import falcon
 import falcon.asgi as fa
+import marshmallow as mm
 
 from etha.query.model import Query
 from etha.worker.query import execute_query, QueryResult
@@ -13,9 +15,34 @@ from etha.worker.state.intervals import Range
 from etha.worker.state.manager import StateManager
 
 
-def get_json(req: fa.Request):
+def max_body(limit: int):
+    async def hook(req: fa.Request, *args):
+        length = req.content_length
+
+        if length is None:
+            raise falcon.HTTPMissingHeader('content-length')
+
+        if length > limit:
+            msg = (
+                    'The size of the request is too large. The body must not '
+                    'exceed ' + str(limit) + ' bytes in length.'
+            )
+            raise falcon.HTTPPayloadTooLarge(
+                title='Request body is too large', description=msg
+            )
+
+    return hook
+
+
+async def get_json(req: fa.Request, schema: Optional[mm.Schema] = None):
     if req.content_type and req.content_type.startswith('application/json'):
-        return req.get_media()
+        obj = await req.get_media()
+        if not schema:
+            return obj
+        try:
+            return schema.load(obj)
+        except mm.ValidationError as err:
+            raise falcon.HTTPBadRequest(description='validation error', errors=err.messages)
     else:
         raise falcon.HTTPUnsupportedMediaType(description='expected json body')
 
@@ -33,6 +60,7 @@ class QueryResource:
         self.sm = sm
         self.pool = pool
 
+    @falcon.before(max_body(4 * 1024 * 1024))
     async def on_post(self, req: fa.Request, res: fa.Response, dataset: str):
         try:
             dataset = base64.urlsafe_b64decode(dataset).decode(encoding='utf-8')
