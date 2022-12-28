@@ -14,6 +14,7 @@ from .progress import Progress
 from ..fs import create_fs
 from ..layout import ChunkWriter
 from ..log import init_logging
+from .metrics import Metrics
 
 LOG = logging.getLogger(__name__)
 
@@ -67,6 +68,12 @@ async def main():
         help='maximum number of pending data requests allowed'
     )
 
+    program.add_argument(
+        '--prom-port',
+        type=int,
+        help='port to use for built-in prometheus metrics server'
+    )
+
     args = program.parse_args()
 
     fs = create_fs(args.dest or '.', s3_endpoint=args.s3_endpoint)
@@ -86,7 +93,14 @@ async def main():
     rpc = RpcClient(args.src_node)
 
     progress = Progress(window_size=10, window_granularity_seconds=1)
+    progress.set_current_value(args.first_block)
     writing = Progress(window_size=10, window_granularity_seconds=1)
+
+    if args.prom_port is not None:
+        metrics = Metrics()
+        metrics.add_progress(progress)
+        metrics.add_rpc_metrics(rpc)
+        metrics.serve(args.prom_port)
 
     total_bytes = 0
 

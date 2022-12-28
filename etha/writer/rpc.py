@@ -21,6 +21,7 @@ class RpcClient:
         self._id = 0
         self._url = url
         self._client = httpx.AsyncClient(timeout=30_000)
+        self.errors = 0
 
     async def call(self, method: str, params: Optional[list[Any]] = None):
         body = {
@@ -69,6 +70,7 @@ class RpcClient:
                 if errors < len(backoff) and _is_retryable_error(e):
                     timeout = backoff[errors]
                     errors += 1
+                    self.errors += 1
                     await asyncio.sleep(timeout)
                 else:
                     raise e
