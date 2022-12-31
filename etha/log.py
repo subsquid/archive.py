@@ -1,6 +1,8 @@
 import logging
 import sys
+import traceback
 from datetime import datetime
+from io import StringIO
 from typing import Any, NamedTuple
 
 
@@ -88,7 +90,22 @@ class TextFormatter:
         else:
             kvs = ''
 
-        return f'{time} {level} {s.log_name}{rec.name}{s.reset} {rec.getMessage()}{kvs}'
+        if rec.exc_info:
+            exc_info = f'\n\n{s.dim}{_print_exception(rec.exc_info)}{s.reset}\n'
+        else:
+            exc_info = ''
+
+        return f'{time} {level} {s.log_name}{rec.name}{s.reset} {rec.getMessage()}{kvs}{exc_info}'
+
+
+def _print_exception(exc_info) -> str:
+    sio = StringIO()
+    traceback.print_exception(exc_info[0], exc_info[1], exc_info[2], None, sio)
+    s = sio.getvalue()
+    sio.close()
+    if s[-1:] == '\n':
+        s = s[:-1]
+    return s
 
 
 def init_logging():
@@ -98,5 +115,5 @@ def init_logging():
     h.setFormatter(f)
     logging.basicConfig(
         level=logging.INFO,
-        # handlers=[h]
+        handlers=[h]
     )
