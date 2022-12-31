@@ -104,7 +104,7 @@ async def main():
     thread = Thread(target=writer_task, args=(queue, writer), daemon=True)
     thread.start()
 
-    options = IngestOptions(rpc, args.first_block, args.last_block, args.src_node_concurrency)
+    options = IngestOptions(rpc, chunk_writer.next_block, args.last_block, args.src_node_concurrency)
     async for blocks in Ingest.get_blocks(options):
         for block in blocks:
             data = json.dumps(block, separators=(',', ':'))
