@@ -93,7 +93,7 @@ async def main():
     rpc = RpcClient(args.src_node)
 
     progress = Progress(window_size=10, window_granularity_seconds=1)
-    progress.set_current_value(args.first_block)
+    progress.set_current_value(chunk_writer.next_block)
     writing = Progress(window_size=10, window_granularity_seconds=1)
 
     if args.prom_port is not None:
