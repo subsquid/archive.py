@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import multiprocessing.pool as mpl
 from typing import Optional
 
@@ -9,8 +8,9 @@ import falcon
 import falcon.asgi as fa
 import marshmallow as mm
 
-from etha.query.model import Query
+from etha.query.model import Query, query_schema
 from etha.worker.query import execute_query, QueryResult
+from etha.worker.state.dataset import dataset_decode, Dataset
 from etha.worker.state.intervals import Range
 from etha.worker.state.manager import StateManager
 
@@ -42,7 +42,7 @@ async def get_json(req: fa.Request, schema: Optional[mm.Schema] = None):
         try:
             return schema.load(obj)
         except mm.ValidationError as err:
-            raise falcon.HTTPBadRequest(description='validation error', errors=err.messages)
+            raise falcon.HTTPBadRequest(description=f'validation error: {err.normalized_messages()}')
     else:
         raise falcon.HTTPUnsupportedMediaType(description='expected json body')
 
@@ -63,17 +63,14 @@ class QueryResource:
     @falcon.before(max_body(4 * 1024 * 1024))
     async def on_post(self, req: fa.Request, res: fa.Response, dataset: str):
         try:
-            dataset = base64.urlsafe_b64decode(dataset).decode(encoding='utf-8')
-        except:
+            dataset = dataset_decode(dataset)
+        except ValueError:
             raise falcon.HTTPNotFound(description=f'failed to decode dataset: {dataset}')
 
-        if dataset != self.sm.get_dataset():
-            raise falcon.HTTPNotFound(description=f'dataset {dataset} is not available')
-
-        q: Query = await get_json(req)
+        q: Query = await get_json(req, query_schema)
 
         first_block = q['fromBlock']
-        last_block = q['toBlock']
+        last_block = q.get('toBlock')
         if last_block is not None and last_block < first_block:
             raise falcon.HTTPBadRequest(description=f'fromBlock={last_block} > toBlock={first_block}')
 
@@ -82,7 +79,7 @@ class QueryResource:
             raise falcon.HTTPBadRequest(description=f'data for block {first_block} is not available')
 
         with data_range_lock as data_range:
-            result: QueryResult = await self.execute_query(q, data_range)
+            result: QueryResult = await self.execute_query(q, dataset, data_range)
 
         if isinstance(result.data, str):
             stream = await aiofiles.open(result.data, 'rb')
@@ -97,8 +94,8 @@ class QueryResource:
 
         res.set_header('x-sqd-last-processed-block', str(result.last_processed_block))
 
-    def execute_query(self, q: Query, data_range: Range):
-        args = self.sm.get_temp_dir(), self.sm.get_dataset_dir(), data_range, q
+    def execute_query(self, q: Query, dataset: Dataset, data_range: Range):
+        args = self.sm.get_temp_dir(), self.sm.get_dataset_dir(dataset), data_range, q
         loop = asyncio.get_event_loop()
         future = loop.create_future()
 

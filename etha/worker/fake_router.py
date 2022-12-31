@@ -6,10 +6,9 @@ import falcon
 class PingResource:
     def on_post(self, req: falcon.Request, res: falcon.Response):
         res.media = {
-            'dataset': 's3://etha-mainnet-sia',
-            'ranges': [
-                {'from': 16143005, 'to': 16218816}
-            ]
+            'desired_state': {
+                's3://etha-mainnet-sia': [(16143005, 16149151)]
+            }
         }
 
 

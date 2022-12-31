@@ -1,4 +1,5 @@
 import datetime
+import math
 import os
 import tempfile
 import zipfile
@@ -22,12 +23,7 @@ class QueryResult(NamedTuple):
 
 def execute_query(out_dir: str, dataset_dir: str, data_range: Range, q: Query) -> QueryResult:
     first_block = max(data_range[0], q['fromBlock'])
-    last_block = q.get('toBlock')
-    if last_block is None:
-        last_block = data_range[1]
-    else:
-        last_block = min(data_range[1], last_block)
-
+    last_block = min(data_range[1], q.get('toBlock', math.inf))
     assert first_block <= last_block
 
     beg = datetime.datetime.now()

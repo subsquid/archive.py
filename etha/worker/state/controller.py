@@ -1,22 +1,24 @@
 import bisect
 import contextlib
-from typing import NamedTuple, Optional, Protocol
+from dataclasses import dataclass, field
+from typing import NamedTuple, Optional, Protocol, Union, Literal, Callable
 
+from etha.worker.state.dataset import Dataset
 from etha.worker.state.intervals import difference, Range, RangeSet, to_range_set, union
 
 
 RangeLock = contextlib.AbstractContextManager[Range]
 
 
-class State(NamedTuple):
-    dataset: str
-    ranges: RangeSet
+State = dict[Dataset, RangeSet]
 
 
-class StateUpdate(NamedTuple):
-    dataset: str
-    new_ranges: RangeSet
-    deleted_ranges: RangeSet
+class UpdatedRanges(NamedTuple):
+    new: RangeSet
+    deleted: RangeSet
+
+
+StateUpdate = dict[Dataset, Union[Literal[False], UpdatedRanges]]
 
 
 class Sync(Protocol):
@@ -26,112 +28,166 @@ class Sync(Protocol):
     def reset(self) -> State:
         pass
 
+    def set_download_callback(self, cb: Callable[[State], None]) -> None:
+        pass
 
-class StateController:
-    def __init__(self, sync: Sync):
-        state = sync.reset()
-        self._sync = sync
-        self._dataset = self._desired_dataset = state.dataset
-        self._available = state.ranges
-        self._downloading = []
-        self._to_delete = []
-        self._locked = {}
 
-    def get_dataset(self) -> str:
-        return self._dataset
-
-    def get_available_ranges(self) -> list[Range]:
-        return self._available
-
-    def get_downloading_ranges(self) -> list[Range]:
-        return self._downloading
+@dataclass
+class _DatasetTrack:
+    available: RangeSet = field(default_factory=list)
+    downloading: RangeSet = field(default_factory=list)
+    to_delete: RangeSet = field(default_factory=list)
+    locked: dict[Range, int] = field(default_factory=dict)
+    is_live: bool = True
 
     def get_range(self, first_block: int) -> Optional[Range]:
-        if not self._available:
+        if not self.available:
             return
 
-        i = bisect.bisect_left(self._available, (first_block, first_block))
+        i = bisect.bisect_left(self.available, (first_block, first_block))
 
-        if i < len(self._available):
-            c = self._available[i]
+        if i < len(self.available):
+            c = self.available[i]
             if c[0] == first_block:
                 return c
 
         if i == 0:
             return
 
-        c = self._available[i-1]
+        c = self.available[i-1]
         if c[1] >= first_block:
             return c
 
-    def use_range(self, dataset: str, first_block: int) -> Optional[RangeLock]:
-        r = dataset == self._dataset == self._desired_dataset and self.get_range(first_block)
-        if r:
-            return self._range_lock(r)
-
     @contextlib.contextmanager
-    def _range_lock(self, r: Range) -> RangeLock:
-        self._locked[r] = self._locked.get(r, 0) + 1
+    def lock_range(self, r: Range) -> RangeLock:
+        self.locked[r] = self.locked.get(r, 0) + 1
         try:
             yield r
         finally:
-            cnt = self._locked[r]
+            cnt = self.locked[r]
             if cnt > 1:
-                self._locked[r] = cnt - 1
+                self.locked[r] = cnt - 1
             else:
-                del self._locked[r]
+                del self.locked[r]
 
-    def ping(self, desired_state: State) -> None:
-        self._desired_dataset = desired_state.dataset
+    def use_range(self, first_block: int) -> Optional[RangeLock]:
+        r = self.is_live and self.get_range(first_block)
+        if r:
+            return self.lock_range(r)
 
-        if self._dataset == desired_state.dataset:
-            new_dataset = False
-        else:
-            if self._locked:
-                # someone still uses the current dataset
-                # avoid any changes
-                return
-            else:
-                self._reset(desired_state.dataset)
-                new_dataset = True
+    def is_used(self) -> bool:
+        return bool(self.locked)
 
-        if difference(self._downloading, desired_state.ranges):
-            # Some data ranges scheduled for downloading are not needed anymore.
-            # This may be a sign of significant lag between the update process and the scheduler.
-            # To eliminate the lag we restart the update process and check the current state
-            # to issue a single update leading to the desired state.
-            self._reset(desired_state.dataset)
+    def ping(self, desired_ranges: RangeSet) -> Optional[UpdatedRanges]:
+        assert not difference(self.downloading, desired_ranges)
 
-        available = union(self._available, self._to_delete)
+        self.is_live = True
 
-        new_ranges = difference(desired_state.ranges, union(available, self._downloading))
-        deleted_ranges = difference(available, desired_state.ranges)
+        available = union(self.available, self.to_delete)
 
-        locked = to_range_set(self._locked.keys())
+        new_ranges = difference(desired_ranges, union(available, self.downloading))
+        deleted_ranges = difference(available, desired_ranges)
+
+        locked = to_range_set(self.locked.keys())
         to_delete_now = difference(deleted_ranges, locked)
 
-        self._to_delete = difference(deleted_ranges, to_delete_now)
-        self._downloading = difference(desired_state.ranges, available)
-        self._available = difference(desired_state.ranges, self._downloading)
+        self.to_delete = difference(deleted_ranges, to_delete_now)
+        self.downloading = difference(desired_ranges, available)
+        self.available = difference(desired_ranges, self.downloading)
 
-        if new_dataset or new_ranges or to_delete_now:
-            upd = StateUpdate(self._dataset, new_ranges=new_ranges, deleted_ranges=to_delete_now)
+        if new_ranges or to_delete_now:
+            return UpdatedRanges(new=new_ranges, deleted=to_delete_now)
+
+    def download_callback(self, downloaded: RangeSet) -> None:
+        assert not difference(downloaded, self.downloading)
+        self.available = union(self.available, downloaded)
+        self.downloading = difference(self.downloading, downloaded)
+
+
+class DatasetStatus(NamedTuple):
+    available_ranges: RangeSet
+    downloading_ranges: RangeSet
+
+
+class StateController:
+    _track: dict[Dataset, _DatasetTrack]
+
+    def __init__(self, sync: Sync):
+        self._sync = sync
+        self._sync.set_download_callback(self._download_callback)
+        self._track = {}
+        self._reset()
+
+    def get_status(self) -> dict[Dataset, DatasetStatus]:
+        status = {}
+        for dataset, track in self._track.items():
+            if track.is_live:
+                status[dataset] = DatasetStatus(
+                    available_ranges=track.available,
+                    downloading_ranges=track.downloading
+                )
+        return status
+
+    def get_state(self) -> State:
+        return {
+            ds: track.available for ds, track in self._track.items() if track.is_live and track.available
+        }
+
+    def use_range(self, dataset: str, first_block: int) -> Optional[RangeLock]:
+        track = self._track.get(dataset)
+        if track:
+            return track.use_range(first_block)
+
+    def ping(self, desired_state: State) -> None:
+        upd: StateUpdate = {}
+
+        for dataset, desired_ranges in desired_state.items():
+            track = self._track.get(dataset)
+            if not track:
+                track = self._track[dataset] = _DatasetTrack()
+
+            if difference(track.downloading, desired_ranges):
+                # Some data ranges scheduled for downloading are not needed anymore.
+                # This may be a sign of significant lag between the update process and the scheduler.
+                # To eliminate the lag we restart the update process and check the current state
+                # to issue a single update leading to the desired state.
+                #
+                # By this measure we also prevent scenarios like:
+                #   1. downloading chunk A in update task 1
+                #   2. chunk A becomes no longer desired, schedule task 2 to delete A
+                #   3. chunk A becomes desired again, schedule task 3 to download A
+                #   4. task 1 completes and notifies controller about A's availability
+                #   5. controller can mark A as available, but A is about to be deleted by task 2
+                self._reset()
+                return self.ping(desired_state)
+
+            if updated_ranges := track.ping(desired_ranges):
+                upd[dataset] = updated_ranges
+
+        for dataset, track in self._track.items():
+            if dataset not in desired_state:
+                if track.downloading:
+                    self._reset()
+                    return self.ping(desired_state)
+
+                track.is_live = False
+                if not track.is_used():
+                    del self._track[dataset]
+                    upd[dataset] = False
+
+        if upd:
             self._sync.send_update(upd)
 
-    def _reset(self, dataset: str):
-        current_state = self._sync.reset()
-        self._dataset = dataset
-        self._downloading = []
-        self._to_delete = []
-        if current_state.dataset == dataset:
-            self._available = current_state.ranges
-        else:
-            self._available = []
+    def _reset(self):
+        state = self._sync.reset()
+        old_track = self._track
+        self._track = {}
+        for dataset, available_ranges in state.items():
+            self._track[dataset] = _DatasetTrack(
+                available=available_ranges,
+                locked=old_track.get(dataset, _DatasetTrack()).locked
+            )
 
-    def download_callback(self, new_ranges: State) -> None:
-        assert self._dataset == new_ranges.dataset
-        downloaded = new_ranges.ranges
-        left_to_download = difference(self._downloading, downloaded)
-        awaited = difference(self._downloading, left_to_download)
-        self._available = union(self._available, awaited)
-        self._downloading = left_to_download
+    def _download_callback(self, new_ranges: State) -> None:
+        for dataset, downloaded in new_ranges.items():
+            self._track[dataset].download_callback(downloaded)

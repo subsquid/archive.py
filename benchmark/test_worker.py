@@ -6,7 +6,7 @@ TestSquid = WorkerUser(
     dataset='s3://etha-mainnet-sia',
     query={
         "fromBlock": 16143005,
-        "toBlock": 16218816,
+        "toBlock":  16149151,
         "transactions": [
             {
                 "to": ["0x9cb7712c6a91506e69e8751fcb08e72e1256477d"],

@@ -5,7 +5,8 @@ from typing import Optional
 
 import httpx
 
-from etha.worker.state.controller import RangeLock, State, StateController
+from etha.worker.state.controller import RangeLock, StateController
+from etha.worker.state.dataset import Dataset, dataset_encode
 from etha.worker.state.intervals import to_range_set
 from etha.worker.state.sync import SyncProcess
 
@@ -18,44 +19,31 @@ class StateManager:
         self._worker_id = worker_id
         self._worker_url = worker_url
         self._router_url = router_url
-        self._sync = SyncProcess(data_dir, self._download_callback)
+        self._sync = SyncProcess(data_dir)
         self._controller = StateController(self._sync)
         self._is_started = False
 
-    def _download_callback(self, new_ranges: State) -> None:
-        self._controller.download_callback(new_ranges)
+    def get_dataset_dir(self, dataset: Dataset) -> str:
+        return os.path.join(self._data_dir, dataset_encode(dataset))
 
-    def get_dataset_dir(self) -> str:
-        return os.path.join(self._data_dir, 'dataset')
-
-    def get_temp_dir(self) -> str:
+    def get_temp_dir(self):
         return os.path.join(self._data_dir, 'temp')
 
-    def get_dataset(self) -> str:
-        return self._controller.get_dataset()
-
-    def use_range(self, dataset: str, first_block: int) -> Optional[RangeLock]:
+    def use_range(self, dataset: Dataset, first_block: int) -> Optional[RangeLock]:
         return self._controller.use_range(dataset, first_block)
 
     def get_ping_message(self):
-        msg = {
+        return {
             'worker_id': self._worker_id,
-            'worker_url': self._worker_url
+            'worker_url': self._worker_url,
+            'state': self._controller.get_state()
         }
-        if self._controller.get_dataset():
-            msg['state'] = {
-                'dataset': self._controller.get_dataset(),
-                'ranges': [{'from': r[0], 'to': r[1]} for r in self._controller.get_available_ranges()]
-            }
-        return msg
 
     def get_status(self):
         return {
             'worker_id': self._worker_id,
             'worker_url': self._worker_url,
-            'dataset': self._controller.get_dataset(),
-            'available_ranges': self._controller.get_available_ranges(),
-            'downloading_ranges': self._controller.get_downloading_ranges()
+            'state': self._controller.get_status()
         }
 
     async def _ping_loop(self):
@@ -76,11 +64,12 @@ class StateManager:
             return
 
         ping = response.json()
-        desired_dataset = ping['dataset']
-        desired_ranges = to_range_set((r['from'], r['to']) for r in ping['ranges'])
-        desired_state = State(desired_dataset, desired_ranges)
+        LOG.info('ping', extra=ping)
 
-        LOG.info('ping', extra={'desired_state': desired_state})
+        desired_state = {
+            ds: to_range_set(map(tuple, ranges)) for ds, ranges in ping['desired_state'].items()
+        }
+
         self._controller.ping(desired_state)
 
     async def _pause_ping(self, client: httpx.AsyncClient):

@@ -6,7 +6,7 @@ GravatarSquid = WorkerUser(
     dataset='s3://etha-mainnet-sia',
     query={
         "fromBlock": 16143005,
-        "toBlock": 16218816,
+        "toBlock":  16149151,
         "logs": [
             {
                 "address": ["0x2e645469f354bb4f5c8a05b3b30a929361cf77ec"],

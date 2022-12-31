@@ -54,13 +54,17 @@ class QuerySchema(mm.Schema):
         validate=mm.validate.Range(min=0, min_inclusive=True)
     )
 
-    toBlock = mm.fields.Pluck('self', 'fromBlock', required=False)
+    toBlock = mm.fields.Integer(
+        required=False,
+        strict=True,
+        validate=mm.validate.Range(min=0, min_inclusive=True)
+    )
 
     fields = mm.fields.Nested(FieldSelectionSchema())
 
-    logs = mm.fields.Nested(LogFilterSchema())
+    logs = mm.fields.List(mm.fields.Nested(LogFilterSchema()))
 
-    transactions = mm.fields.Nested(TxFilterSchema())
+    transactions = mm.fields.List(mm.fields.Nested(TxFilterSchema()))
 
 
 query_schema = QuerySchema()

@@ -69,4 +69,4 @@ class Mapper:
 
 
 if __name__ == '__main__':
-    transform(Mapper(), 'data/worker/dataset')
+    transform(Mapper(), 'data/worker')

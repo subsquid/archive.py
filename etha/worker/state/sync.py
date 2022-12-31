@@ -31,7 +31,7 @@ class _SyncProc:
         self.update_queue.close()
         self.new_chunks_queue.close()
 
-    def poll(self) -> list[State]:
+    def poll(self) -> State:
         if self.proc.is_alive():
             ds_chunk_pairs = []
             while True:
@@ -41,14 +41,14 @@ class _SyncProc:
                 except Empty:
                     break
             ds_chunk_pairs.sort()
-            return list(
-                State(ds, to_range_set((p[1][0], p[1][1]) for p in pairs)) for ds, pairs in groupby(
+            return {
+                ds: to_range_set((p[1][0], p[1][1]) for p in pairs) for ds, pairs in groupby(
                     ds_chunk_pairs, key=lambda p: p[0]
                 )
-            )
+            }
         elif self.proc.exitcode is None:
             self.proc.start()
-            return []
+            return {}
         else:
             raise Exception(f'Data sync process unexpectedly terminated with exit code {self.proc.exitcode}')
 
@@ -67,10 +67,13 @@ def _sync_loop(data_dir: str, updates_queue: mp.Queue, new_chunks_queue: mp.Queu
 
 
 class SyncProcess:
-    def __init__(self, data_dir: str, download_callback: Callable[[State], None]):
+    def __init__(self, data_dir: str):
         self._data_dir = data_dir
-        self._download_callback = download_callback
+        self._download_callback = None
         self._proc = _SyncProc(data_dir)
+
+    def set_download_callback(self, cb: Callable[[State], None]) -> None:
+        self._download_callback = cb
 
     def send_update(self, upd: StateUpdate) -> None:
         self._proc.update_queue.put_nowait(upd)
@@ -84,8 +87,10 @@ class SyncProcess:
     async def run(self):
         while True:
             downloaded = self._proc.poll()
-            for s in downloaded:
-                self._download_callback(s)
+
+            if self._download_callback and downloaded:
+                self._download_callback(downloaded)
+
             await asyncio.sleep(5)
 
     def close(self):
