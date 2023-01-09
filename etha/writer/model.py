@@ -14,7 +14,7 @@ class BlockHeader(TypedDict):
     number: int
     hash: Hash32
     parentHash: Hash32
-    nonce: Bytes8
+    nonce: Optional[Bytes8]
     sha3Uncles: Hash32
     logsBloom: Bytes
     transactionsRoot: Hash32
@@ -26,6 +26,10 @@ class BlockHeader(TypedDict):
     size: int
     timestamp: int
     extraData: Bytes
+    difficulty: Optional[int]
+    totalDifficulty: Optional[int]
+    mixHash: Optional[Bytes]
+    baseFeePerGas: Optional[int]
 
 
 # Alternative syntax allows to use reserved keywords as keys
@@ -36,16 +40,21 @@ Transaction = TypedDict(
         'transactionIndex': int,
         'hash': Hash32,
         'gas': int,
-        'gasPrice': int,
+        'gasPrice': Optional[int],
+        'maxFeePerGas': Optional[int],
+        'maxPriorityFeePerGas': Optional[int],
         'from': Address20,
         'to': Optional[Address20],
         'sighash': Optional[Bytes4],
         'input': Bytes,
         'nonce': int,
         'value': int,
-        'v': int,
-        'r': int,
-        's': int,
+        'type': int,
+        'v': Optional[str],
+        'r': str,
+        's': str,
+        'yParity': Optional[int],
+        'chainId': Optional[int],
     }
 )
 
@@ -60,6 +69,7 @@ class Log(TypedDict):
     topic1: Optional[Bytes32]
     topic2: Optional[Bytes32]
     topic3: Optional[Bytes32]
+    removed: bool
 
 
 class Block(TypedDict):

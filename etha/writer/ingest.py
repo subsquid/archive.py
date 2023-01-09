@@ -1,8 +1,8 @@
 from typing import Optional, NamedTuple, AsyncIterator
 import asyncio
 
-from .rpc import RpcClient, RpcCall
-from .model import Block, Log
+from etha.writer.rpc import RpcClient, RpcCall
+from etha.writer.model import Block, Log
 
 
 class IngestOptions(NamedTuple):
@@ -29,11 +29,12 @@ class Ingest:
     async def loop(self) -> AsyncIterator[list[Block]]:
         while not self._is_finished() or len(self._strides):
             try:
-                blocks = await self._strides.pop(0)
+                stride = self._strides.pop(0)
             except IndexError:
                 await self._wait_chain()
                 self._schedule_strides()
             else:
+                blocks = await stride
                 self._schedule_strides()
                 yield blocks
 
@@ -74,23 +75,28 @@ class Ingest:
                     'transactionIndex': int(tx['transactionIndex'], 0),
                     'hash': tx['hash'],
                     'gas': int(tx['gas'], 0),
-                    'gasPrice': int(tx['gasPrice'], 0),
+                    'gasPrice': parse_optional_hex(tx, 'gasPrice'),
+                    'maxFeePerGas': parse_optional_hex(tx, 'maxFeePerGas'),
+                    'maxPriorityFeePerGas': parse_optional_hex(tx, 'maxPriorityFeePerGas'),
                     'from': tx['from'],
                     'to': tx['to'],
                     'sighash': tx['input'][:10] if len(tx['input']) > 10 else None,
                     'input': tx['input'],
                     'nonce': int(tx['nonce'], 0),
                     'value': int(tx['value'], 0),
-                    'v': str(int(tx['v'], 0)),
+                    'type': int(tx['type'], 0),
+                    'v': str(int(tx['v'], 0)) if 'v' in tx else None,
                     's': str(int(tx['s'], 0)),
-                    'r': str(int(tx['r'], 0))
+                    'r': str(int(tx['r'], 0)),
+                    'yParity': parse_optional_hex(tx, 'yParity'),
+                    'chainId': parse_optional_hex(tx, 'chainId'),
                 })
             blocks.append({
                 'header': {
                     'number': int(raw['number'], 0),
                     'hash': raw['hash'],
                     'parentHash': raw['parentHash'],
-                    'nonce': raw['nonce'],
+                    'nonce': raw.get('nonce'),
                     'sha3Uncles': raw['sha3Uncles'],
                     'logsBloom': raw['logsBloom'],
                     'transactionsRoot': raw['transactionsRoot'],
@@ -101,23 +107,29 @@ class Ingest:
                     'gasLimit': int(raw['gasLimit'], 0),
                     'size': int(raw['size'], 0),
                     'timestamp': int(raw['timestamp'], 0),
-                    'extraData': raw['extraData']
+                    'extraData': raw['extraData'],
+                    'difficulty': parse_optional_hex(raw, 'difficulty'),
+                    'totalDifficulty': parse_optional_hex(raw, 'totalDifficulty'),
+                    'mixHash': raw.get('mixHash'),
+                    'baseFeePerGas': parse_optional_hex(raw, 'baseFeePerGas'),
                 },
                 'transactions': transactions,
                 'logs': [],
             })
 
         for raw in response[-1]:
+            topics = iter(raw['topics'])
             log: Log = {
                 'blockNumber': int(raw['blockNumber'], 0),
                 'logIndex': int(raw['logIndex'], 0),
                 'transactionIndex': int(raw['transactionIndex'], 0),
                 'address': raw['address'],
                 'data': raw['data'],
-                'topic0': raw['topics'][0],
-                'topic1': raw['topics'][1],
-                'topic2': raw['topics'][2],
-                'topic3': raw['topics'][3]
+                'topic0': next(topics, None),
+                'topic1': next(topics, None),
+                'topic2': next(topics, None),
+                'topic3': next(topics, None),
+                'removed': raw['removed'],
             }
             blocks[log['blockNumber'] - from_block]['logs'].append(log)
 
@@ -142,3 +154,7 @@ class Ingest:
         if self._end is not None:
             return self._height >= self._end
         return False
+
+
+def parse_optional_hex(target: dict, key: str) -> Optional[int]:
+    return int(target[key], 0) if key in target else None
