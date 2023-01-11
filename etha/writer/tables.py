@@ -8,6 +8,17 @@ def bignum():
     return pyarrow.decimal128(38)
 
 
+def access_list(tx: Transaction):
+    if tx['accessList'] is not None:
+        access_list = []
+        for item in tx['accessList']:
+            access_list.append({
+                'address': item['address'],
+                'storage_keys': item['storageKeys']
+            })
+        return access_list
+
+
 class BlockTableBuilder:
     def __init__(self):
         self.number = Column(pyarrow.int32())
@@ -116,6 +127,12 @@ class TxTableBuilder:
         self.s = Column(pyarrow.string())
         self.y_parity = Column(pyarrow.int32())
         self.chain_id = Column(pyarrow.int32())
+        self.access_list = Column(pyarrow.list_(
+            pyarrow.struct([
+                pyarrow.field('address', pyarrow.string(), nullable=False),
+                pyarrow.field('storage_keys', pyarrow.list_(pyarrow.string()), nullable=False),
+            ])
+        ))
         self._id = Column(pyarrow.int64())
 
     def append(self, tx: Transaction):
@@ -138,6 +155,7 @@ class TxTableBuilder:
         self.s.append(tx['s'])
         self.y_parity.append(tx['yParity'])
         self.chain_id.append(tx['chainId'])
+        self.access_list.append(access_list(tx))
         self._id.append((tx['blockNumber'] << 24) + tx['transactionIndex'])
 
     def to_table(self):
@@ -161,6 +179,7 @@ class TxTableBuilder:
             self.s.build(),
             self.y_parity.build(),
             self.chain_id.build(),
+            self.access_list.build(),
             self._id.build(),
         ], names=[
             'block_number',
@@ -182,6 +201,7 @@ class TxTableBuilder:
             's',
             'y_parity',
             'chain_id',
+            'access_list',
             '_id'
         ])
 

@@ -32,6 +32,11 @@ class BlockHeader(TypedDict):
     baseFeePerGas: Optional[int]
 
 
+class AccessListItem(TypedDict):
+    address: Address20
+    storageKeys: list[Hash32]
+
+
 # Alternative syntax allows to use reserved keywords as keys
 Transaction = TypedDict(
     'Transaction',
@@ -55,6 +60,7 @@ Transaction = TypedDict(
         's': str,
         'yParity': Optional[int],
         'chainId': Optional[int],
+        'accessList': Optional[list[AccessListItem]],
     }
 )
 

@@ -2,7 +2,7 @@ from typing import Optional, NamedTuple, AsyncIterator
 import asyncio
 
 from etha.writer.rpc import RpcClient, RpcCall
-from etha.writer.model import Block, Log
+from etha.writer.model import Block, Log, Transaction
 
 
 class IngestOptions(NamedTuple):
@@ -68,7 +68,7 @@ class Ingest:
         blocks: list[Block] = []
         for i in range(len(response) - 1):
             raw = response[i]
-            transactions = []
+            transactions: list[Transaction] = []
             for tx in raw['transactions']:
                 transactions.append({
                     'blockNumber': int(tx['blockNumber'], 0),
@@ -90,6 +90,7 @@ class Ingest:
                     'r': str(int(tx['r'], 0)),
                     'yParity': parse_optional_hex(tx, 'yParity'),
                     'chainId': parse_optional_hex(tx, 'chainId'),
+                    'accessList': tx.get('accessList'),
                 })
             blocks.append({
                 'header': {
