@@ -63,11 +63,11 @@ class Ingest:
             'toBlock': hex(to_block),
         }]))
 
-        response = await self._rpc.batch(calls)
+        *raw_blocks, raw_logs = await self._rpc.batch(calls)
+        tx_status = await self._fetch_tx_status(raw_blocks)
 
         blocks: list[Block] = []
-        for i in range(len(response) - 1):
-            raw = response[i]
+        for raw in raw_blocks:
             transactions: list[Transaction] = []
             for tx in raw['transactions']:
                 transactions.append({
@@ -91,6 +91,7 @@ class Ingest:
                     'yParity': parse_optional_hex(tx, 'yParity'),
                     'chainId': parse_optional_hex(tx, 'chainId'),
                     'accessList': tx.get('accessList'),
+                    'status': tx_status[tx['hash']],
                 })
             blocks.append({
                 'header': {
@@ -118,7 +119,7 @@ class Ingest:
                 'logs': [],
             })
 
-        for raw in response[-1]:
+        for raw in raw_logs:
             topics = iter(raw['topics'])
             log: Log = {
                 'blockNumber': int(raw['blockNumber'], 0),
@@ -155,6 +156,21 @@ class Ingest:
         if self._end is not None:
             return self._height >= self._end
         return False
+
+    async def _fetch_tx_status(self, raw_blocks) -> dict[str, Optional[bool]]:
+        calls = []
+        for raw in raw_blocks:
+            for tx in raw['transactions']:
+                calls.append(RpcCall('eth_getTransactionReceipt', [tx['hash']]))
+
+        tx_status = {}
+        if calls:
+            receipts = await self._rpc.batch(calls)
+            for receipt in receipts:
+                status = bool(int(receipt['status'], 0)) if 'status' in receipt else None
+                tx_status[receipt['transactionHash']] = status
+
+        return tx_status
 
 
 def parse_optional_hex(target: dict, key: str) -> Optional[int]:

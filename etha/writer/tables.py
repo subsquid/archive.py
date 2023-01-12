@@ -133,6 +133,7 @@ class TxTableBuilder:
                 pyarrow.field('storage_keys', pyarrow.list_(pyarrow.string()), nullable=False),
             ])
         ))
+        self.status = Column(pyarrow.bool_())
         self._id = Column(pyarrow.int64())
 
     def append(self, tx: Transaction):
@@ -156,6 +157,7 @@ class TxTableBuilder:
         self.y_parity.append(tx['yParity'])
         self.chain_id.append(tx['chainId'])
         self.access_list.append(access_list(tx))
+        self.status.append(tx['status'])
         self._id.append((tx['blockNumber'] << 24) + tx['transactionIndex'])
 
     def to_table(self):
@@ -180,6 +182,7 @@ class TxTableBuilder:
             self.y_parity.build(),
             self.chain_id.build(),
             self.access_list.build(),
+            self.status.build(),
             self._id.build(),
         ], names=[
             'block_number',
@@ -202,6 +205,7 @@ class TxTableBuilder:
             'y_parity',
             'chain_id',
             'access_list',
+            'status',
             '_id'
         ])
 
