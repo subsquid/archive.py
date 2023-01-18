@@ -67,7 +67,7 @@ class StateManager:
         LOG.info('ping', extra=ping)
 
         desired_state = {
-            ds: to_range_set(map(tuple, ranges)) for ds, ranges in ping['desired_state'].items()
+            ds: to_range_set(map(tuple, ranges)) for ds, ranges in ping.items()
         }
 
         self._controller.ping(desired_state)
