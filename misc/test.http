@@ -40,3 +40,7 @@ GET https://mainnet-v2.archive.subsquid.io/workers/1/status
 
 ### Deployed status 0
 GET https://mainnet-v2.archive.subsquid.io/workers/0/status
+
+
+### Deployed worker request
+GET https://mainnet-v2.archive.subsquid.io/worker/s3%3A%2F%2Fetha-mainnet-sia/0
