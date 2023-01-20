@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import multiprocessing as mp
+import signal
 from itertools import groupby
 from queue import Empty
 from typing import Callable
@@ -58,6 +59,7 @@ class _SyncProc:
 
 def _sync_loop(data_dir: str, updates_queue: mp.Queue, new_chunks_queue: mp.Queue):
     init_logging()
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     while True:
         upd = updates_queue.get()
         StateFolder(data_dir).apply_update(
