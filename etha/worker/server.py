@@ -3,20 +3,32 @@ import asyncio
 import logging
 import multiprocessing
 import os
-import signal
-import threading
-import time
 
 import uvicorn
 
-from etha.log import init_logging
+from etha.util import create_child_task, init_child_process, monitor_service_tasks, run_async_program
 from etha.worker.api import create_app
 from etha.worker.state.manager import StateManager
 
-LOG = logging.getLogger(__name__)
+
+LOG = logging.getLogger('etha.worker')
 
 
-def main():
+class Server(uvicorn.Server):
+    def install_signal_handlers(self) -> None:
+        pass
+
+    async def run_server_task(self) -> None:
+        task = create_child_task('serve', self.serve())
+        try:
+            # wrap with `asyncio.wait()` to prevent immediate coroutine abortion
+            await asyncio.wait([task])
+        except asyncio.CancelledError:
+            self.should_exit = True
+            await task
+
+
+async def main():
     program = argparse.ArgumentParser(
         description='Subsquid eth archive worker'
     )
@@ -70,64 +82,24 @@ def main():
         router_url=args.router
     )
 
-    def initializer():
-        init_logging()
-        signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-    with multiprocessing.Pool(processes=args.procs, initializer=initializer) as pool:
+    with multiprocessing.Pool(processes=args.procs, initializer=init_child_process) as pool:
         app = create_app(sm, pool)
-        conf = uvicorn.Config(
+
+        server_conf = uvicorn.Config(
             app,
             port=args.port,
             host='0.0.0.0',
             access_log=False,
             log_config=None
         )
-        server = uvicorn.Server(conf)
 
-        async def run():
-            server_task = asyncio.create_task(server.serve(), name='server')
-            sm_task = asyncio.create_task(sm.run(), name='state_manager')
+        server = Server(server_conf)
 
-            await asyncio.wait([
-                server_task,
-                sm_task
-            ], return_when=asyncio.FIRST_COMPLETED)
-
-            ex = None
-
-            if sm_task.done():
-                ex = sm_task.exception()
-            else:
-                sm_task.cancel()
-
-            if server_task.done():
-                ex = ex or server_task.exception()
-            else:
-                server.should_exit = True
-                try:
-                    await server_task
-                except:
-                    LOG.exception('failed to gracefully terminate HTTP server')
-
-            if ex:
-                raise ex
-
-        # It is spawned in a new thread so that uvicorn doesn't register signal handler,
-        # and we can control application shutdown.
-        t = threading.Thread(target=asyncio.run, args=(run(),))
-        t.start()
-
-        while True:
-            try:
-                time.sleep(1000000)
-            except KeyboardInterrupt:
-                server.handle_exit(signal.SIGINT, frame=None)
-                break
-
-        t.join(timeout=5)
+        await monitor_service_tasks([
+            asyncio.create_task(server.run_server_task(), name='http_server'),
+            asyncio.create_task(sm.run(), name='state_manager')
+        ], log=LOG)
 
 
 if __name__ == '__main__':
-    init_logging()
-    main()
+    run_async_program(main(), log=LOG)

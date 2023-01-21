@@ -1,12 +1,10 @@
 import asyncio
 import logging
 import multiprocessing as mp
-import signal
 from itertools import groupby
 from queue import Empty
 from typing import Callable
 
-from etha.log import init_logging
 from etha.worker.state.controller import State, StateUpdate
 from etha.worker.state.folder import StateFolder
 from etha.worker.state.intervals import to_range_set
@@ -58,8 +56,8 @@ class _SyncProc:
 
 
 def _sync_loop(data_dir: str, updates_queue: mp.Queue, new_chunks_queue: mp.Queue):
-    init_logging()
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    from etha.util import init_child_process
+    init_child_process()
     while True:
         upd = updates_queue.get()
         StateFolder(data_dir).apply_update(

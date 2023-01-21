@@ -5,10 +5,12 @@ from typing import Optional
 
 import httpx
 
+from etha.util import create_child_task, monitor_service_tasks
 from etha.worker.state.controller import RangeLock, StateController
 from etha.worker.state.dataset import Dataset, dataset_encode
 from etha.worker.state.intervals import to_range_set
 from etha.worker.state.sync import SyncProcess
+
 
 LOG = logging.getLogger(__name__)
 
@@ -78,35 +80,14 @@ class StateManager:
         try:
             await client.post('/ping', json=msg, timeout=1)
         except:
-            pass
+            LOG.exception('failed to send a pause ping')
 
     async def run(self):
         assert not self._is_started
         self._is_started = True
         try:
-            sync_task = asyncio.create_task(self._sync.run(), name='sm:data_sync')
-            ping_task = asyncio.create_task(self._ping_loop(), name='sm:ping')
-            await _monitor_service_tasks(sync_task, ping_task)
+            data_sync_task = create_child_task('data_sync', self._sync.run())
+            ping_task = create_child_task('ping', self._ping_loop())
+            await monitor_service_tasks([data_sync_task, ping_task], log=LOG)
         finally:
             self._sync.close()
-
-
-async def _monitor_service_tasks(*tasks: asyncio.Task):
-    # FIXME: validate this logic
-    try:
-        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-    except asyncio.CancelledError as ex:
-        for task in tasks:
-            task.cancel()
-        raise ex
-
-    terminated = []
-
-    for task in tasks:
-        if task.done():
-            terminated.append(task)
-        else:
-            task.cancel()
-
-    tt = terminated[0]
-    raise Exception(f'Service task {tt.get_name()} unexpectedly terminated') from tt.exception()
