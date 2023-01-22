@@ -37,16 +37,12 @@ class StateManager:
     def get_ping_message(self):
         return {
             'worker_id': self._worker_id,
-            'worker_url': self._worker_url,
+            'worker_url': self._worker_url + '/query',
             'state': self._controller.get_state()
         }
 
     def get_status(self):
-        return {
-            'worker_id': self._worker_id,
-            'worker_url': self._worker_url,
-            'state': self._controller.get_status()
-        }
+        return self.get_ping_message()
 
     async def _ping_loop(self):
         async with httpx.AsyncClient(base_url=self._router_url) as client:
