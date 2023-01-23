@@ -1,9 +1,8 @@
-from queries import ETH, GRAVATAR
+from queries import GRAVATAR
 from tools import ArchiveUser
 
 
 GravatarSquid = ArchiveUser(
     'GravatarSquid',
-    dataset=ETH,
     query=GRAVATAR
 )
