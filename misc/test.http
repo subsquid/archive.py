@@ -6,11 +6,10 @@ POST http://localhost:8000/query/czM6Ly9ldGhhLW1haW5uZXQtc2lh
 Content-Type: application/json
 
 {
-        "fromBlock": 6036411,
-        "toBlock": 15050000,
+        "fromBlock": 16143005,
         "logs": [
             {
-                "address": ["0x3883f5e181fccaf8410fa61e12b59bad963fb645"]
+                "address": ["0x1f98431c8ad98523631ae4a59f267346ea31f984"]
             }
         ],
         "transactions": [],
@@ -35,12 +34,40 @@ Content-Type: application/json
     }
 
 
-### Deployed status 1
-GET https://mainnet-v2.archive.subsquid.io/workers/1/status
-
 ### Deployed status 0
-GET https://mainnet-v2.archive.subsquid.io/workers/0/status
+GET https://v2.archive.subsquid.io/worker/0/status
 
+### Deployed status 1
+GET https://v2.archive.subsquid.io/worker/1/status
 
-### Deployed worker request
-GET https://mainnet-v2.archive.subsquid.io/worker/s3%3A%2F%2Fetha-mainnet-sia/0
+###
+POST https://v2.archive.subsquid.io/worker/0/query/czM6Ly9ldGhhLW1haW5uZXQtc2lh
+Content-Type: application/json
+
+{
+  "fromBlock": 16000000,
+  "logs": [
+    {
+      "address": ["0x3883f5e181fccaf8410fa61e12b59bad963fb645"]
+    }
+  ],
+  "transactions": [],
+  "fields": {
+    "block": {
+      "number": true,
+      "hash": true,
+      "parentHash": true,
+      "nonce": true
+    },
+    "log": {
+      "address": true,
+      "topics": true,
+      "data": true,
+      "transaction": true
+    },
+    "transaction": {
+      "to": true,
+      "gas": true
+    }
+  }
+}

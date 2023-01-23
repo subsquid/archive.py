@@ -6,12 +6,11 @@ import pyarrow
 
 class ResultSet:
     _inputs: dict[str, pyarrow.RecordBatchStreamWriter]
-    _outputs: dict[str, 'BytesBuffer']
+    _outputs: dict[str, BytesIO]
 
     def __init__(self):
         self._inputs = {}
         self._outputs = {}
-        self.size = 0
 
     def write_blocks(self, table: Optional[pyarrow.Table]):
         self._write('blocks', table)
@@ -28,13 +27,12 @@ class ResultSet:
 
         inp = self._inputs.get(name)
         if not inp:
-            out = BytesBuffer()
-            inp = pyarrow.ipc.new_stream(pyarrow.CompressedOutputStream(out, 'zstd'), table.schema)
+            out = BytesIO()
+            inp = pyarrow.ipc.new_stream(out, table.schema)
             self._inputs[name] = inp
             self._outputs[name] = out
 
         inp.write_table(table)
-        self.size += table.get_total_buffer_size()
 
     def close(self) -> dict[str, bytes]:
         tables = {}
@@ -44,7 +42,9 @@ class ResultSet:
             tables[table] = out.getvalue()
         return tables
 
-
-class BytesBuffer(BytesIO):
-    def close(self):
-        pass
+    @property
+    def size(self) -> int:
+        size = 0
+        for out in self._outputs.values():
+            size += len(out.getvalue())
+        return size

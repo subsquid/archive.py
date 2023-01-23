@@ -83,7 +83,7 @@ class Result:
 
 
 def _write_zip(dest, rs: ResultSet):
-    with zipfile.ZipFile(dest, 'w') as arch:
+    with zipfile.ZipFile(dest, 'w', compression=zipfile.ZIP_DEFLATED) as arch:
         for name, data in rs.close().items():
-            with arch.open(f'{name}.arrow.zst', 'w') as zf:
+            with arch.open(f'{name}.arrow_stream', 'w') as zf:
                 zf.write(data)
