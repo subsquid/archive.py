@@ -61,7 +61,7 @@ Transaction = TypedDict(
         'yParity': Optional[int],
         'chainId': Optional[int],
         'accessList': Optional[list[AccessListItem]],
-        'status': Optional[bool],
+        'status': Optional[int],
     }
 )
 

@@ -133,7 +133,7 @@ class TxTableBuilder:
                 pyarrow.field('storage_keys', pyarrow.list_(pyarrow.string()), nullable=False),
             ])
         ))
-        self.status = Column(pyarrow.bool_())
+        self.status = Column(pyarrow.int32())
         self._id = Column(pyarrow.int64())
 
     def append(self, tx: Transaction):

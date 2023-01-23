@@ -157,7 +157,7 @@ class Ingest:
             return self._height >= self._end
         return False
 
-    async def _fetch_tx_status(self, raw_blocks) -> dict[str, Optional[bool]]:
+    async def _fetch_tx_status(self, raw_blocks) -> dict[str, Optional[int]]:
         calls = []
         for raw in raw_blocks:
             for tx in raw['transactions']:
@@ -167,7 +167,7 @@ class Ingest:
         if calls:
             receipts = await self._rpc.batch(calls)
             for receipt in receipts:
-                status = bool(int(receipt['status'], 0)) if 'status' in receipt else None
+                status = int(receipt['status'], 0) if 'status' in receipt else None
                 tx_status[receipt['transactionHash']] = status
 
         return tx_status
