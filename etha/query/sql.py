@@ -1,5 +1,5 @@
 import re
-from typing import Any, NamedTuple, Union
+from typing import Any, NamedTuple, Union, Iterable
 
 from etha.query.model import FieldMap
 
@@ -51,7 +51,7 @@ class SqlBuilder:
 
     def add_columns(self, fields: Union[FieldMap, list[str], None]):
         if isinstance(fields, dict):
-            ls = [f'"{to_snake_case(k)}"' for k, include in fields.items() if include]
+            ls = [to_snake_case(k) for k, include in fields.items() if include]
             ls.sort()
             self._columns.extend(ls)
         elif fields:
@@ -66,14 +66,22 @@ class SqlBuilder:
 
     def build(self) -> SqlQuery:
         assert self._columns
-        cols = set(self._columns)
-        sql = f"SELECT {', '.join(c for c in self._columns if c in cols)} FROM read_parquet(?1)"
+
+        sql = f"SELECT {', '.join(self._iter_column_names())} FROM read_parquet(?1)"
 
         where = print_where(self._where)
         if where:
             sql += f" WHERE {where}"
 
         return SqlQuery(sql, self._params)
+
+    def _iter_column_names(self) -> Iterable[str]:
+        added = set()
+        for c in self._columns:
+            if c not in added:
+                added.add(c)
+                yield f'"{c}"'
+
 
 
 def to_snake_case(name):
