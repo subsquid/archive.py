@@ -2,7 +2,8 @@ from typing import Optional, NamedTuple, AsyncIterator
 import asyncio
 
 from etha.writer.rpc import RpcClient, RpcCall
-from etha.writer.model import Block, Log, Transaction
+from etha.writer.model import Block, Log, Transaction, Trace
+from etha.writer.trace import parse_action, parse_result
 
 
 class IngestOptions(NamedTuple):
@@ -58,16 +59,18 @@ class Ingest:
         calls = []
         for i in range(from_block, to_block + 1):
             calls.append(RpcCall('eth_getBlockByNumber', [hex(i), True]))
+        for i in range(from_block, to_block + 1):
+            calls.append(RpcCall('trace_block', [hex(i)]))
         calls.append(RpcCall('eth_getLogs', [{
             'fromBlock': hex(from_block),
             'toBlock': hex(to_block),
         }]))
 
-        *raw_blocks, raw_logs = await self._rpc.batch(calls)
-        tx_status = await self._fetch_tx_status(raw_blocks)
+        response = await self._rpc.batch(calls)
+        tx_status = await self._fetch_tx_status(response[:len(response) // 2])
 
         blocks: list[Block] = []
-        for raw in raw_blocks:
+        for raw in response[:len(response) // 2]:
             transactions: list[Transaction] = []
             for tx in raw['transactions']:
                 transactions.append({
@@ -117,9 +120,24 @@ class Ingest:
                 },
                 'transactions': transactions,
                 'logs': [],
+                'traces': [],
             })
 
-        for raw in raw_logs:
+        for traces in response[len(response) // 2:-1]:
+            for raw in traces:
+                trace: Trace = {
+                    'action': parse_action(raw),
+                    'blockNumber': raw['blockNumber'],
+                    'error': raw.get('error'),
+                    'result': parse_result(raw),
+                    'subtraces': raw['subtraces'],
+                    'traceAddress': raw['traceAddress'],
+                    'transactionPosition': raw.get('transactionPosition'),
+                    'type': raw['type'],
+                }
+                blocks[trace['blockNumber'] - from_block]['traces'].append(trace)
+
+        for raw in response[-1]:
             topics = iter(raw['topics'])
             log: Log = {
                 'blockNumber': int(raw['blockNumber'], 0),

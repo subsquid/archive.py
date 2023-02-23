@@ -1,4 +1,4 @@
-from typing import TypedDict, Optional
+from typing import TypedDict, Optional, Literal, Any
 
 
 Bytes = str
@@ -8,6 +8,7 @@ Bytes32 = str
 Address20 = str
 Hash32 = str
 HexNumber = str
+TraceType = Literal['create', 'call', 'suicide', 'reward']
 
 
 class BlockHeader(TypedDict):
@@ -66,6 +67,21 @@ Transaction = TypedDict(
 )
 
 
+Trace = TypedDict(
+    'Trace',
+    {
+        'type': TraceType,
+        'transactionPosition': Optional[int],  # empty for 'reward' traces
+        'traceAddress': list[int],
+        'subtraces': int,
+        'blockNumber': int,
+        'action': dict,
+        'result': Any,
+        'error': Optional[str],
+    }
+)
+
+
 class Log(TypedDict):
     blockNumber: int
     logIndex: int
@@ -83,3 +99,4 @@ class Block(TypedDict):
     header: BlockHeader
     transactions: list[Transaction]
     logs: list[Log]
+    traces: list[Trace]

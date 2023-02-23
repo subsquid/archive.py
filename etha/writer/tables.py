@@ -1,7 +1,8 @@
 import pyarrow
 
 from etha.writer.column import Column
-from etha.writer.model import BlockHeader, Transaction, Log
+from etha.writer.model import BlockHeader, Transaction, Log, Trace
+from etha.writer.trace import extract_trace_fields
 
 
 def bignum():
@@ -258,4 +259,124 @@ class LogTableBuilder:
             'topic2',
             'topic3',
             'removed',
+        ])
+
+
+class TraceTableBuilder:
+    def __init__(self):
+        self.type = Column(pyarrow.string())
+        self.block_number = Column(pyarrow.int32())
+        self.subtraces = Column(pyarrow.int32())
+        self.transaction_index = Column(pyarrow.int32())
+        self.trace_address = Column(pyarrow.list_(pyarrow.int32()))
+        self.error = Column(pyarrow.string())
+        self.create_from = Column(pyarrow.string())
+        self.create_gas = Column(bignum())
+        self.create_init = Column(pyarrow.string())
+        self.create_value = Column(bignum())
+        self.create_address = Column(pyarrow.string())
+        self.create_code = Column(pyarrow.string())
+        self.create_gas_used = Column(bignum())
+        self.suicide_address = Column(pyarrow.string())
+        self.suicide_refund_address = Column(pyarrow.string())
+        self.suicide_balance = Column(bignum())
+        self.call_from = Column(pyarrow.string())
+        self.call_type = Column(pyarrow.string())
+        self.call_gas = Column(bignum())
+        self.call_input = Column(pyarrow.string())
+        self.call_to = Column(pyarrow.string())
+        self.call_value = Column(bignum())
+        self.call_gas_used = Column(bignum())
+        self.call_output = Column(pyarrow.string())
+        self.reward_author = Column(pyarrow.string())
+        self.reward_type = Column(pyarrow.string())
+        self.reward_value = Column(bignum())
+
+    def append(self, trace: Trace):
+        self.type.append(trace['type'])
+        self.block_number.append(trace['blockNumber'])
+        self.subtraces.append(trace['subtraces'])
+        self.transaction_index.append(trace['transactionPosition'])
+        self.trace_address.append(trace['traceAddress'])
+        self.error.append(trace['error'])
+        fields = extract_trace_fields(trace)
+        self.create_from.append(fields.get('create_from'))
+        self.create_gas.append(fields.get('create_gas'))
+        self.create_init.append(fields.get('create_init'))
+        self.create_value.append(fields.get('create_value'))
+        self.create_address.append(fields.get('create_address'))
+        self.create_code.append(fields.get('create_code'))
+        self.create_gas_used.append(fields.get('create_gas_used'))
+        self.suicide_address.append(fields.get('suicide_address'))
+        self.suicide_refund_address.append(fields.get('suicide_refund_address'))
+        self.suicide_balance.append(fields.get('suicide_balance'))
+        self.call_from.append(fields.get('call_from'))
+        self.call_type.append(fields.get('call_type'))
+        self.call_gas.append(fields.get('call_gas'))
+        self.call_input.append(fields.get('call_input'))
+        self.call_to.append(fields.get('call_to'))
+        self.call_value.append(fields.get('call_value'))
+        self.call_gas_used.append(fields.get('call_gas_used'))
+        self.call_output.append(fields.get('call_output'))
+        self.reward_author.append(fields.get('reward_author'))
+        self.reward_type.append(fields.get('reward_type'))
+        self.reward_value.append(fields.get('reward_value'))
+
+    def to_table(self):
+        return pyarrow.table([
+            self.type.build(),
+            self.block_number.build(),
+            self.subtraces.build(),
+            self.transaction_index.build(),
+            self.trace_address.build(),
+            self.error.build(),
+            self.create_from.build(),
+            self.create_gas.build(),
+            self.create_init.build(),
+            self.create_value.build(),
+            self.create_address.build(),
+            self.create_code.build(),
+            self.create_gas_used.build(),
+            self.suicide_address.build(),
+            self.suicide_refund_address.build(),
+            self.suicide_balance.build(),
+            self.call_from.build(),
+            self.call_type.build(),
+            self.call_gas.build(),
+            self.call_input.build(),
+            self.call_to.build(),
+            self.call_value.build(),
+            self.call_gas_used.build(),
+            self.call_output.build(),
+            self.reward_author.build(),
+            self.reward_type.build(),
+            self.reward_value.build(),
+        ], names=[
+            'type',
+            'block_number',
+            'subtraces',
+            'transaction_index',
+            'trace_address',
+            'error',
+            'create_from',
+            'create_gas',
+            'create_init',
+            'create_value',
+            'create_address',
+            'create_code',
+            'create_gas_used',
+            'suicide_address',
+            'suicide_refund_address',
+            'suicide_balance',
+            'call_from',
+            'call_type',
+            'call_gas',
+            'call_input',
+            'call_to',
+            'call_value',
+            'call_gas_used',
+            'call_output',
+            'reward_author',
+            'reward_type',
+            'reward_value',
         ])
