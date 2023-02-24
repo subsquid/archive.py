@@ -52,11 +52,37 @@ class Writer:
         first_block = block_numbers[0].as_py()
         last_block = block_numbers[-1].as_py()
 
-        # transactions = transactions.sort_by([('sighash', 'ascending'), ('to', 'ascending')])
-        # logs = logs.sort_by([('topic0', 'ascending'), ('address', 'ascending')])
+        transactions = transactions.sort_by([('to', 'ascending'), ('sighash', 'ascending')])
+        logs = logs.sort_by([('address', 'ascending'), ('topic0', 'ascending')])
 
         with self.chunk_writer.write(first_block, last_block) as loc:
-            loc.write_parquet('logs.parquet', logs, compression='gzip')
-            loc.write_parquet('transactions.parquet', transactions, compression='gzip')
-            loc.write_parquet('blocks.parquet', blocks, compression='gzip')
-            loc.write_parquet('traces.parquet', traces, compression='gzip')
+            kwargs = {
+                'data_page_size': 32 * 1024,
+                'compression': 'zstd',
+                'compression_level': 16
+            }
+            loc.write_parquet(
+                'logs.parquet',
+                logs,
+                use_dictionary=['address', 'topic0'],
+                row_group_size=15000,
+                **kwargs
+            )
+            loc.write_parquet(
+                'transactions.parquet',
+                transactions,
+                use_dictionary=['to', 'sighash'],
+                row_group_size=15000,
+                **kwargs
+            )
+            loc.write_parquet(
+                'traces.parquet',
+                traces,
+                **kwargs
+            )
+            loc.write_parquet(
+                'blocks.parquet',
+                blocks,
+                use_dictionary=False,
+                **kwargs
+            )
