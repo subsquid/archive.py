@@ -21,3 +21,4 @@ dependencies:
   - uvicorn
   - uvloop
   - yappi
+  - py-evm

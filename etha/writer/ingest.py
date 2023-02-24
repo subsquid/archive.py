@@ -2,8 +2,9 @@ from typing import Optional, NamedTuple, AsyncIterator
 import asyncio
 
 from etha.writer.rpc import RpcClient, RpcCall
-from etha.writer.model import Block, Log, Transaction, Trace
+from etha.writer.model import Block, Log, Transaction, Trace, BlockHeader
 from etha.writer.trace import parse_action, parse_result
+from etha.writer.block import calculate_hash
 
 
 class IngestOptions(NamedTuple):
@@ -96,28 +97,30 @@ class Ingest:
                     'accessList': tx.get('accessList'),
                     'status': tx_status[tx['hash']],
                 })
+            header: BlockHeader = {
+                'number': int(raw['number'], 0),
+                'hash': raw['hash'],
+                'parentHash': raw['parentHash'],
+                'nonce': raw.get('nonce'),
+                'sha3Uncles': raw['sha3Uncles'],
+                'logsBloom': raw['logsBloom'],
+                'transactionsRoot': raw['transactionsRoot'],
+                'stateRoot': raw['stateRoot'],
+                'receiptsRoot': raw['receiptsRoot'],
+                'miner': raw['miner'],
+                'gasUsed': int(raw['gasUsed'], 0),
+                'gasLimit': int(raw['gasLimit'], 0),
+                'size': int(raw['size'], 0),
+                'timestamp': int(raw['timestamp'], 0),
+                'extraData': raw['extraData'],
+                'difficulty': parse_optional_hex(raw, 'difficulty'),
+                'totalDifficulty': parse_optional_hex(raw, 'totalDifficulty'),
+                'mixHash': raw.get('mixHash'),
+                'baseFeePerGas': parse_optional_hex(raw, 'baseFeePerGas'),
+            }
+            assert calculate_hash(header) == header['hash']
             blocks.append({
-                'header': {
-                    'number': int(raw['number'], 0),
-                    'hash': raw['hash'],
-                    'parentHash': raw['parentHash'],
-                    'nonce': raw.get('nonce'),
-                    'sha3Uncles': raw['sha3Uncles'],
-                    'logsBloom': raw['logsBloom'],
-                    'transactionsRoot': raw['transactionsRoot'],
-                    'stateRoot': raw['stateRoot'],
-                    'receiptsRoot': raw['receiptsRoot'],
-                    'miner': raw['miner'],
-                    'gasUsed': int(raw['gasUsed'], 0),
-                    'gasLimit': int(raw['gasLimit'], 0),
-                    'size': int(raw['size'], 0),
-                    'timestamp': int(raw['timestamp'], 0),
-                    'extraData': raw['extraData'],
-                    'difficulty': parse_optional_hex(raw, 'difficulty'),
-                    'totalDifficulty': parse_optional_hex(raw, 'totalDifficulty'),
-                    'mixHash': raw.get('mixHash'),
-                    'baseFeePerGas': parse_optional_hex(raw, 'baseFeePerGas'),
-                },
+                'header': header,
                 'transactions': transactions,
                 'logs': [],
                 'traces': [],
