@@ -7,15 +7,32 @@ import json
 from threading import Thread
 from queue import Queue
 
-from .writer import Writer
-from .ingest import Ingest, IngestOptions
-from .rpc import RpcClient
-from .progress import Progress
-from ..fs import create_fs
-from ..layout import ChunkWriter
-from ..log import init_logging
+from etha.writer.writer import Writer
+from etha.writer.ingest import Ingest, IngestOptions
+from etha.writer.rpc import RpcClient, RpcEndpoint
+from etha.writer.progress import Progress
+from etha.fs import create_fs
+from etha.layout import ChunkWriter
+from etha.log import init_logging
 
 LOG = logging.getLogger(__name__)
+
+
+class SrcNodeAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string):
+        endpoints = namespace.__dict__.setdefault('endpoints', [])
+        endpoint = {'url': values}
+        endpoints.append(endpoint)
+
+
+class SrcNodeLimitAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string):
+        if 'endpoints' not in namespace:
+            raise argparse.ArgumentError(self, '"--src-node" must be specified before the limit param')
+        endpoint = namespace.endpoints[-1]
+        if 'limit' in endpoint:
+            raise argparse.ArgumentError(self, f'"{endpoint["url"]}" already has specified limit')
+        endpoint['limit'] = values
 
 
 async def main():
@@ -58,7 +75,15 @@ async def main():
 
     program.add_argument(
         '--src-node',
+        action=SrcNodeAction,
         help='rpc api url of an ethereum node to fetch data from'
+    )
+
+    program.add_argument(
+        '--src-node-limit',
+        action=SrcNodeLimitAction,
+        type=int,
+        help='maximum number of requests to the rpc api per second'
     )
 
     program.add_argument(
@@ -83,7 +108,8 @@ async def main():
 
     writer = Writer(chunk_writer)
 
-    rpc = RpcClient(args.src_node)
+    endpoints = [RpcEndpoint(e['url'], e.get('limit')) for e in args.endpoints]
+    rpc = RpcClient(endpoints)
 
     progress = Progress(window_size=10, window_granularity_seconds=1)
     writing = Progress(window_size=10, window_granularity_seconds=1)

@@ -158,7 +158,6 @@ class Ingest:
 
         return blocks
 
-
     def _schedule_strides(self):
         while (len(self._strides) < self._concurrency) and not self._is_finished() and (self._dist() > 0):
             from_block = self._height + 1
