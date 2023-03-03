@@ -6,6 +6,7 @@ from typing import NamedTuple, Any, Optional
 import httpx
 
 from etha.writer.rpc.connection import Connection
+from etha.writer.rpc.generator import connection_generator
 
 
 class RpcEndpoint(NamedTuple):
@@ -102,45 +103,18 @@ class RpcClient:
         return response.json()
 
     async def _control_loop(self):
+        interval = 0.1
         while True:
-            await asyncio.sleep(0.1)
-
-            limits = self._calculate_limits()
-            gen = self._connection_generator(limits)
+            await asyncio.sleep(interval)
 
             qsize = self._queue.qsize()
-            while qsize > 0:
-                try:
-                    con = next(gen)
-                    item: _QueueItem = self._queue.get_nowait()
-                    task = asyncio.create_task(self._perform_request(con, item.data))
-                    task.add_done_callback(callback(item.future))
-                    qsize -= 1
-                except StopIteration:
+            for con in connection_generator(self._connections, interval):
+                if qsize == 0:
                     break
-
-    def _calculate_limits(self) -> dict[Connection, int]:
-        limits = {}
-        for connection in self._connections:
-            limit = math.ceil(0.1 / connection.average_response_time())
-            if connection.limit:
-                fixed_limit = math.ceil(connection.limit * 0.1)
-                limit = min(limit, fixed_limit)
-            limits[connection] = limit
-        return limits
-
-    def _connection_generator(self, limits: dict[Connection, int]):
-        state = collections.defaultdict(int)
-        while True:
-            found_slot = False
-            for con in limits.keys():
-                taken = state[con]
-                if taken < limits[con]:
-                    state[con] += 1
-                    found_slot = True
-                    yield con
-            if not found_slot:
-                break
+                item: _QueueItem = self._queue.get_nowait()
+                task = asyncio.create_task(self._perform_request(con, item.data))
+                task.add_done_callback(callback(item.future))
+                qsize -= 1
 
     def id(self) -> int:
         id = self._id
