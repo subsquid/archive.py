@@ -28,6 +28,8 @@ def connection_generator(connections: list[Connection], interval: float) -> Gene
 def _calculate_limits(connections: list[Connection], interval: float) -> dict[Connection, int]:
     limits = {}
     for connection in connections:
+        if not connection.is_online():
+            continue
         limit = math.ceil(interval / connection.average_response_time())
         if connection.limit:
             fixed_limit = math.ceil(connection.limit * interval)

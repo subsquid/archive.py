@@ -1,11 +1,9 @@
 import asyncio
-import math
-import collections
 from typing import NamedTuple, Any, Optional
 
 import httpx
 
-from etha.writer.rpc.connection import Connection
+from etha.writer.rpc.connection import Connection, RetriableException
 from etha.writer.rpc.generator import connection_generator
 
 
@@ -42,9 +40,9 @@ class _QueueItem(NamedTuple):
 
 class RpcClient:
     def __init__(self, endpoints: list[RpcEndpoint]):
+        client = httpx.AsyncClient(timeout=30_000)
         self._id = 0
-        self._client = httpx.AsyncClient(timeout=30_000)
-        self._connections = [Connection(e.url, e.limit) for e in endpoints]
+        self._connections = [Connection(e.url, e.limit, client) for e in endpoints]
         self._queue = asyncio.PriorityQueue()
         self._control_loop_task = asyncio.create_task(self._control_loop())
 
@@ -56,7 +54,7 @@ class RpcClient:
             'params': params,
         }
 
-        rpc_response = await self._request(body)
+        rpc_response = await self._schedule_request(body)
 
         if error := rpc_response.get('error'):
             call = RpcCall(method, params)
@@ -74,7 +72,7 @@ class RpcClient:
                 'params': call.params,
             })
 
-        rpc_response = await self._request(data)
+        rpc_response = await self._schedule_request(data)
         assert len(rpc_response) == len(data)
 
         result: list[Any] = [None] * len(data)
@@ -85,22 +83,12 @@ class RpcClient:
             result[idx] = res['result']
         return result
 
-    def _request(self, data):
+    def _schedule_request(self, data):
         loop = asyncio.get_event_loop()
         future = loop.create_future()
         item = _QueueItem(future, data, PRIORITY)
         self._queue.put_nowait(item)
         return future
-
-    async def _perform_request(self, con: Connection, data):
-        headers = {
-            'accept': 'application/json',
-            'accept-encoding': 'gzip, br',
-            'content-type': 'application/json',
-        }
-        response = await self._client.post(con.url, json=data, headers=headers)
-        response.raise_for_status()
-        return response.json()
 
     async def _control_loop(self):
         interval = 0.1
@@ -112,17 +100,23 @@ class RpcClient:
                 if qsize == 0:
                     break
                 item: _QueueItem = self._queue.get_nowait()
-                task = asyncio.create_task(self._perform_request(con, item.data))
-                task.add_done_callback(callback(item.future))
+                task = asyncio.create_task(con.request(item.data))
+                task.add_done_callback(self._callback(item))
                 qsize -= 1
+
+    def _callback(self, item: _QueueItem):
+        def inner(task: asyncio.Task):
+            if exception := task.exception():
+                if isinstance(exception, RetriableException):
+                    retry_item = _QueueItem(item.future, item.data, RETRY_PRIORITY)
+                    self._queue.put_nowait(retry_item)
+                else:
+                    item.future.set_exception(exception)
+            else:
+                item.future.set_result(task.result())
+        return inner
 
     def id(self) -> int:
         id = self._id
         self._id += 1
         return id
-
-
-def callback(future: asyncio.Future):
-    def inner(task: asyncio.Task):
-        future.set_result(task.result())
-    return inner
