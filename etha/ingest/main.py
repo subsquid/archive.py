@@ -115,7 +115,7 @@ async def main():
 
     writer = Writer(chunk_writer)
 
-    endpoints = [RpcEndpoint(e['url'], e.get('limit')) for e in args.endpoints]
+    endpoints = [RpcEndpoint(e['url'], e.get('limit')) for e in getattr(args, 'endpoints', [])]
     rpc = RpcClient(endpoints)
 
     progress = Progress(window_size=10, window_granularity_seconds=1)
