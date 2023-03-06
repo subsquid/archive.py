@@ -30,7 +30,7 @@ def _calculate_limits(connections: list[Connection], interval: float) -> dict[Co
     for connection in connections:
         if not connection.is_online():
             continue
-        limit = math.ceil(interval / connection.average_response_time())
+        limit = math.ceil(interval / connection.avg_response_time())
         if connection.limit:
             fixed_limit = math.ceil(connection.limit * interval)
             limit = min(limit, fixed_limit)

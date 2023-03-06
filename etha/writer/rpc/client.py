@@ -83,6 +83,9 @@ class RpcClient:
             result[idx] = res['result']
         return result
 
+    def metrics(self):
+        return [con.metrics() for con in self._connections]
+
     def _schedule_request(self, data):
         loop = asyncio.get_event_loop()
         future = loop.create_future()

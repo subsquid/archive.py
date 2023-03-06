@@ -11,6 +11,7 @@ from etha.writer.writer import Writer
 from etha.writer.ingest import Ingest, IngestOptions
 from etha.writer.rpc import RpcClient, RpcEndpoint
 from etha.writer.progress import Progress
+from etha.writer.metrics import Metrics
 from etha.fs import create_fs
 from etha.layout import ChunkWriter
 from etha.log import init_logging
@@ -92,6 +93,12 @@ async def main():
         help='maximum number of pending data requests allowed'
     )
 
+    program.add_argument(
+        '--prom-port',
+        type=int,
+        help='port to use for built-in prometheus metrics server'
+    )
+
     args = program.parse_args()
 
     fs = create_fs(args.dest or '.', s3_endpoint=args.s3_endpoint)
@@ -112,7 +119,14 @@ async def main():
     rpc = RpcClient(endpoints)
 
     progress = Progress(window_size=10, window_granularity_seconds=1)
+    progress.set_current_value(chunk_writer.next_block)
     writing = Progress(window_size=10, window_granularity_seconds=1)
+
+    if args.prom_port is not None:
+        metrics = Metrics()
+        metrics.add_progress(progress)
+        metrics.add_rpc_metrics(rpc)
+        metrics.serve(args.prom_port)
 
     total_bytes = 0
 
