@@ -7,11 +7,11 @@ import json
 from threading import Thread
 from queue import Queue
 
-from etha.writer.writer import Writer
-from etha.writer.ingest import Ingest, IngestOptions
-from etha.writer.rpc import RpcClient, RpcEndpoint
-from etha.writer.progress import Progress
-from etha.writer.metrics import Metrics
+from etha.ingest.writer import Writer
+from etha.ingest.ingest import Ingest, IngestOptions
+from etha.ingest.rpc import RpcClient, RpcEndpoint
+from etha.ingest.progress import Progress
+from etha.ingest.metrics import Metrics
 from etha.fs import create_fs
 from etha.layout import ChunkWriter
 from etha.log import init_logging

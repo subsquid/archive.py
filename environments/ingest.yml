@@ -1,4 +1,4 @@
-name: py-eth-writer
+name: py-eth-ingest
 
 channels:
   - conda-forge
@@ -8,5 +8,5 @@ dependencies:
   - pyarrow
   - python=3.11
   - s3fs>=2021.8.0
-  - py-evm
   - prometheus_client
+  - httpx

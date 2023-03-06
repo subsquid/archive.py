@@ -3,8 +3,8 @@ from typing import NamedTuple, Any, Optional
 
 import httpx
 
-from etha.writer.rpc.connection import Connection, RetriableException
-from etha.writer.rpc.generator import connection_generator
+from etha.ingest.rpc.connection import Connection, RetriableException
+from etha.ingest.rpc.generator import connection_generator
 
 
 class RpcEndpoint(NamedTuple):

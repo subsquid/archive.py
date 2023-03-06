@@ -1,4 +1,4 @@
-from etha.writer.model import Trace
+from etha.ingest.model import Trace
 
 
 def extract_trace_fields(trace: Trace) -> dict:

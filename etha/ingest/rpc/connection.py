@@ -5,7 +5,7 @@ from typing import Optional, NamedTuple
 
 import httpx
 
-from etha.writer.speed import Speed
+from etha.ingest.speed import Speed
 
 LOG = logging.getLogger(__name__)
 

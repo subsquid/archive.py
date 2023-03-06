@@ -1,8 +1,8 @@
 import pyarrow
 
-from etha.writer.column import Column
-from etha.writer.model import BlockHeader, Transaction, Log, Trace
-from etha.writer.trace import extract_trace_fields
+from etha.ingest.column import Column
+from etha.ingest.model import BlockHeader, Transaction, Log, Trace
+from etha.ingest.trace import extract_trace_fields
 
 
 def bignum():

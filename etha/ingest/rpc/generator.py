@@ -2,7 +2,7 @@ import math
 import collections
 from typing import Generator
 
-from etha.writer.rpc.connection import Connection
+from etha.ingest.rpc.connection import Connection
 
 
 def connection_generator(connections: list[Connection], interval: float) -> Generator[Connection, None, None]:

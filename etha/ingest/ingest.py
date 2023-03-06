@@ -1,10 +1,10 @@
 from typing import Optional, NamedTuple, AsyncIterator
 import asyncio
 
-from etha.writer.rpc import RpcClient, RpcCall
-from etha.writer.model import Block, Log, Transaction, Trace, BlockHeader
-from etha.writer.trace import parse_action, parse_result
-from etha.writer.block import calculate_hash
+from etha.ingest.rpc import RpcClient, RpcCall
+from etha.ingest.model import Block, Log, Transaction, Trace, BlockHeader
+from etha.ingest.trace import parse_action, parse_result
+from etha.ingest.block import calculate_hash
 
 
 class IngestOptions(NamedTuple):

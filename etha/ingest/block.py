@@ -2,7 +2,7 @@ import binascii
 
 from eth.rlp import headers
 
-from etha.writer.model import BlockHeader
+from etha.ingest.model import BlockHeader
 
 
 def int_to_big_endian(value: int) -> bytes:
