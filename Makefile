@@ -9,8 +9,8 @@ init:
 	fi
 
 
-build-writer:
-	docker buildx build --target writer --platform linux/amd64 . --load
+build-ingest:
+	docker buildx build --target ingest --platform linux/amd64 . --load
 
 
 query:
@@ -19,11 +19,11 @@ query:
 
 write:
 	@rm -rf data/parquet
-	@cat data/blocks.jsonl | $(PY) -m etha.writer.main --dest data/parquet
+	@cat data/blocks.jsonl | $(PY) -m etha.ingest.main --dest data/parquet
 
 
 ingest:
-	@$(PY) -m etha.writer.main --dest data/mainnet --src-node ${ETH_NODE}
+	@$(PY) -m etha.ingest.main --dest data/mainnet --src-node ${ETH_NODE}
 
 
 router:
@@ -49,4 +49,4 @@ task:
 		QmXppbDq35YX4zxeZbK1MTg5jnaR1q2ce9AXURaUD98Ty5
 
 
-.PHONY: init dbuild-writer query write ingest task
+.PHONY: init dbuild-ingest query write ingest task

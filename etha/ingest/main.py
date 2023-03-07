@@ -8,7 +8,7 @@ from threading import Thread
 from queue import Queue
 
 from etha.ingest.writer import Writer
-from etha.ingest.ingest import Ingest, IngestOptions
+from etha.ingest.ingest import Ingest
 from etha.ingest.rpc import RpcClient, RpcEndpoint
 from etha.ingest.progress import Progress
 from etha.ingest.metrics import Metrics
@@ -38,7 +38,7 @@ class SrcNodeLimitAction(argparse.Action):
 
 async def main():
     program = argparse.ArgumentParser(
-        description='Subsquid eth archive writer'
+        description='Subsquid eth archive ingest'
     )
 
     program.add_argument(
@@ -54,6 +54,12 @@ async def main():
         type=int,
         metavar='N',
         help='last block of a range to write'
+    )
+
+    program.add_argument(
+        '--best-block-offset',
+        type=int,
+        help='offset from tip of the chain (to avoid rollbacks)'
     )
 
     program.add_argument(
@@ -144,8 +150,9 @@ async def main():
     thread = Thread(target=writer_task, args=(queue, writer), daemon=True)
     thread.start()
 
-    options = IngestOptions(rpc, chunk_writer.next_block, args.last_block, args.src_node_concurrency)
-    async for blocks in Ingest.get_blocks(options):
+    ingest = Ingest(rpc, chunk_writer.next_block, args.last_block,
+                    args.src_node_concurrency, args.best_block_offset)
+    async for blocks in ingest.loop():
         for block in blocks:
             data = json.dumps(block, separators=(',', ':'))
             total_bytes += len(data)

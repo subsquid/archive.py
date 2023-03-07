@@ -1,4 +1,4 @@
-from typing import Optional, NamedTuple, AsyncIterator
+from typing import Optional, AsyncIterator
 import asyncio
 
 from etha.ingest.rpc import RpcClient, RpcCall
@@ -7,23 +7,14 @@ from etha.ingest.trace import parse_action, parse_result
 from etha.ingest.block import calculate_hash
 
 
-class IngestOptions(NamedTuple):
-    rpc: RpcClient
-    from_block: Optional[int]
-    to_block: Optional[int]
-    concurrency: Optional[int]
-
-
 class Ingest:
-    @staticmethod
-    def get_blocks(options: IngestOptions) -> AsyncIterator[list[Block]]:
-        return Ingest(options).loop()
-
-    def __init__(self, options: IngestOptions):
-        self._rpc = options.rpc
-        self._height = (options.from_block or 0) - 1
-        self._end = options.to_block
-        self._concurrency = options.concurrency or 5
+    def __init__(self, rpc: RpcClient, from_block: Optional[int], to_block: Optional[int],
+                 concurrency: Optional[int], offset: Optional[int]):
+        self._rpc = rpc
+        self._height = (from_block or 0) - 1
+        self._end = to_block
+        self._concurrency = concurrency or 5
+        self._offset = offset or 10
         self._chain_height = 0
         self._strides = []
         self._stride_size = 10
@@ -54,7 +45,7 @@ class Ingest:
     async def _get_chain_height(self) -> int:
         hex = await self._rpc.call('eth_blockNumber')
         height = int(hex, 0)
-        return max(height - 10, 0)
+        return max(height - self._offset, 0)
 
     async def _fetch_stride(self, from_block: int, to_block: int) -> list[Block]:
         calls = []
