@@ -8,13 +8,19 @@ from etha.ingest.block import calculate_hash
 
 
 class Ingest:
-    def __init__(self, rpc: RpcClient, from_block: Optional[int], to_block: Optional[int],
-                 concurrency: Optional[int], offset: Optional[int]):
+    def __init__(
+            self,
+            rpc: RpcClient,
+            from_block: int = 0,
+            to_block: Optional[int] = None,
+            concurrency: int = 5,
+            offset: int = 10
+    ):
         self._rpc = rpc
-        self._height = (from_block or 0) - 1
+        self._height = from_block - 1
         self._end = to_block
-        self._concurrency = concurrency or 5
-        self._offset = offset or 10
+        self._concurrency = concurrency
+        self._offset = offset
         self._chain_height = 0
         self._strides = []
         self._stride_size = 10
@@ -33,8 +39,10 @@ class Ingest:
 
     async def _wait_chain(self):
         stride_size = self._stride_size
+
         if self._end is not None:
             stride_size = min(stride_size, self._end - self._height)
+
         if self._dist() < stride_size:
             self._chain_height = await self._get_chain_height()
 
@@ -43,26 +51,36 @@ class Ingest:
             self._chain_height = await self._get_chain_height()
 
     async def _get_chain_height(self) -> int:
-        hex = await self._rpc.call('eth_blockNumber')
-        height = int(hex, 0)
+        hex_height = await self._rpc.call('eth_blockNumber')
+        height = int(hex_height, 0)
         return max(height - self._offset, 0)
 
     async def _fetch_stride(self, from_block: int, to_block: int) -> list[Block]:
         calls = []
+
         for i in range(from_block, to_block + 1):
             calls.append(RpcCall('eth_getBlockByNumber', [hex(i), True]))
+
+        # FIXME: trace_block is not always available, put it behind a flag?
         for i in range(from_block, to_block + 1):
             calls.append(RpcCall('trace_block', [hex(i)]))
+
         calls.append(RpcCall('eth_getLogs', [{
             'fromBlock': hex(from_block),
             'toBlock': hex(to_block),
         }]))
 
         response = await self._rpc.batch(calls)
+        raw_blocks = response[:len(response) // 2]
+        raw_traces = response[len(response) // 2:-1]
+        raw_logs = response[-1]
+
+        # FIXME: receipts also have logs, looks like when receipts are available eth_getLogs is not needed
+        # FIXME: is it always available? Put it behind a flag?
         tx_status = await self._fetch_tx_status(response[:len(response) // 2])
 
         blocks: list[Block] = []
-        for raw in response[:len(response) // 2]:
+        for raw in raw_blocks:
             transactions: list[Transaction] = []
             for tx in raw['transactions']:
                 transactions.append({
@@ -109,7 +127,10 @@ class Ingest:
                 'mixHash': raw.get('mixHash'),
                 'baseFeePerGas': parse_optional_hex(raw, 'baseFeePerGas'),
             }
+
+            # TODO: need to assert validity of transactions and logs as well...
             assert calculate_hash(header) == header['hash']
+
             blocks.append({
                 'header': header,
                 'transactions': transactions,
@@ -117,7 +138,7 @@ class Ingest:
                 'traces': [],
             })
 
-        for traces in response[len(response) // 2:-1]:
+        for traces in raw_traces:
             for raw in traces:
                 trace: Trace = {
                     'action': parse_action(raw),
@@ -131,7 +152,7 @@ class Ingest:
                 }
                 blocks[trace['blockNumber'] - from_block]['traces'].append(trace)
 
-        for raw in response[-1]:
+        for raw in raw_logs:
             topics = iter(raw['topics'])
             log: Log = {
                 'blockNumber': int(raw['blockNumber'], 0),
@@ -142,15 +163,18 @@ class Ingest:
                 'topic0': next(topics, None),
                 'topic1': next(topics, None),
                 'topic2': next(topics, None),
-                'topic3': next(topics, None),
-                'removed': raw['removed'],
+                'topic3': next(topics, None)
             }
             blocks[log['blockNumber'] - from_block]['logs'].append(log)
 
         return blocks
 
     def _schedule_strides(self):
-        while (len(self._strides) < self._concurrency) and not self._is_finished() and (self._dist() > 0):
+        # FIXME: if strides are not fetched strictly sequentially,
+        #   then single priority queue is likely suboptimal.
+        #   On the other hand, sequential stride fetching can lead to under utilisation of
+        #   RPC resources.
+        while len(self._strides) < self._concurrency and not self._is_finished() and self._dist() > 0:
             from_block = self._height + 1
             stride_size = min(self._stride_size, self._dist())
             if self._end is not None:

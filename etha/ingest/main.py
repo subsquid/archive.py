@@ -20,14 +20,14 @@ LOG = logging.getLogger(__name__)
 
 
 class SrcNodeAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string):
+    def __call__(self, parser, namespace, values, option_string=None):
         endpoints = namespace.__dict__.setdefault('endpoints', [])
         endpoint = {'url': values}
         endpoints.append(endpoint)
 
 
 class SrcNodeLimitAction(argparse.Action):
-    def __call__(self, parser, namespace, values, option_string):
+    def __call__(self, parser, namespace, values, option_string=None):
         if 'endpoints' not in namespace:
             raise argparse.ArgumentError(self, '"--src-node" must be specified before the limit param')
         endpoint = namespace.endpoints[-1]
@@ -59,7 +59,8 @@ async def main():
     program.add_argument(
         '--best-block-offset',
         type=int,
-        help='offset from tip of the chain (to avoid rollbacks)'
+        metavar='N',
+        help='offset from the head of a chain (to avoid rollbacks)'
     )
 
     program.add_argument(
@@ -146,15 +147,22 @@ async def main():
 
     every_task = asyncio.create_task(every(5, report))
 
+    # FIXME: separate process is better, as it doesn't compete for GIL
     queue = Queue()
     thread = Thread(target=writer_task, args=(queue, writer), daemon=True)
     thread.start()
 
-    ingest = Ingest(rpc, chunk_writer.next_block, args.last_block,
-                    args.src_node_concurrency, args.best_block_offset)
+    ingest = Ingest(
+        rpc,
+        chunk_writer.next_block,
+        args.last_block,
+        args.src_node_concurrency,
+        args.best_block_offset
+    )
+
     async for blocks in ingest.loop():
         for block in blocks:
-            data = json.dumps(block, separators=(',', ':'))
+            data = json.dumps(block)
             total_bytes += len(data)
             queue.put(data)
         progress.set_current_value(blocks[-1]['header']['number'])

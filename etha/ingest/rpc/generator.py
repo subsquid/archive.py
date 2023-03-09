@@ -6,11 +6,11 @@ from etha.ingest.rpc.connection import Connection
 
 
 def connection_generator(connections: list[Connection], interval: float) -> Generator[Connection, None, None]:
-    '''
+    """
     Generator is trying to calculate how many requests can be processed
     within the specified interval per connection
     and spread requests equally between the connections.
-    '''
+    """
     limits = _calculate_limits(connections, interval)
     state = collections.defaultdict(int)
     while True:

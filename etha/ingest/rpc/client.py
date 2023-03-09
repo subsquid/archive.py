@@ -3,7 +3,7 @@ from typing import NamedTuple, Any, Optional
 
 import httpx
 
-from etha.ingest.rpc.connection import Connection, RetriableException
+from etha.ingest.rpc.connection import Connection, RetryableException
 from etha.ingest.rpc.generator import connection_generator
 
 
@@ -72,6 +72,8 @@ class RpcClient:
                 'params': call.params,
             })
 
+        # FIXME: individual calls in batch count towards rate limit (as far as I understand)
+        #  https://docs.blastapi.io/blast-documentation/things-you-need-to-know/anatomy-of-a-request#method-calls-and-request-limits
         rpc_response = await self._schedule_request(data)
         assert len(rpc_response) == len(data)
 
@@ -97,20 +99,16 @@ class RpcClient:
         interval = 0.1
         while True:
             await asyncio.sleep(interval)
-
-            qsize = self._queue.qsize()
-            for con in connection_generator(self._connections, interval):
-                if qsize == 0:
-                    break
+            cons = connection_generator(self._connections, interval)
+            while self._queue.qsize() > 0 and (con := next(cons, None)):
                 item: _QueueItem = self._queue.get_nowait()
                 task = asyncio.create_task(con.request(item.data))
                 task.add_done_callback(self._callback(item))
-                qsize -= 1
 
     def _callback(self, item: _QueueItem):
         def inner(task: asyncio.Task):
             if exception := task.exception():
-                if isinstance(exception, RetriableException):
+                if isinstance(exception, RetryableException):
                     retry_item = _QueueItem(item.future, item.data, RETRY_PRIORITY)
                     self._queue.put_nowait(retry_item)
                 else:

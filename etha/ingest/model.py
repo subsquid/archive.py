@@ -92,7 +92,6 @@ class Log(TypedDict):
     topic1: Optional[Bytes32]
     topic2: Optional[Bytes32]
     topic3: Optional[Bytes32]
-    removed: bool
 
 
 class Block(TypedDict):

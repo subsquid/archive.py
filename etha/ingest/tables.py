@@ -11,13 +11,13 @@ def bignum():
 
 def access_list(tx: Transaction):
     if tx['accessList'] is not None:
-        access_list = []
-        for item in tx['accessList']:
-            access_list.append({
+        return [
+            {
                 'address': item['address'],
                 'storage_keys': item['storageKeys']
-            })
-        return access_list
+            }
+            for item in tx['accessList']
+        ]
 
 
 class BlockTableBuilder:
@@ -130,8 +130,8 @@ class TxTableBuilder:
         self.chain_id = Column(pyarrow.int32())
         self.access_list = Column(pyarrow.list_(
             pyarrow.struct([
-                pyarrow.field('address', pyarrow.string(), nullable=False),
-                pyarrow.field('storage_keys', pyarrow.list_(pyarrow.string()), nullable=False),
+                pyarrow.field('address', pyarrow.string(), bool_nullable=False),
+                pyarrow.field('storage_keys', pyarrow.list_(pyarrow.string()), bool_nullable=False),
             ])
         ))
         self.status = Column(pyarrow.int32())
@@ -222,7 +222,6 @@ class LogTableBuilder:
         self.topic1 = Column(pyarrow.string())
         self.topic2 = Column(pyarrow.string())
         self.topic3 = Column(pyarrow.string())
-        self.removed = Column(pyarrow.bool_())
 
     def append(self, log: Log):
         self.block_number.append(log['blockNumber'])
@@ -234,7 +233,6 @@ class LogTableBuilder:
         self.topic1.append(log.get('topic1'))
         self.topic2.append(log.get('topic2'))
         self.topic3.append(log.get('topic3'))
-        self.removed.append(log['removed'])
 
     def to_table(self):
         return pyarrow.table([
@@ -247,7 +245,6 @@ class LogTableBuilder:
             self.topic1.build(),
             self.topic2.build(),
             self.topic3.build(),
-            self.removed.build(),
         ], names=[
             'block_number',
             'log_index',
@@ -257,8 +254,7 @@ class LogTableBuilder:
             'topic0',
             'topic1',
             'topic2',
-            'topic3',
-            'removed',
+            'topic3'
         ])
 
 

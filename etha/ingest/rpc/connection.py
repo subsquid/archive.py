@@ -17,7 +17,7 @@ class ConnectionMetrics(NamedTuple):
     errors: int
 
 
-class RetriableException(Exception):
+class RetryableException(Exception):
     pass
 
 
@@ -52,7 +52,7 @@ class Connection:
         except httpx.HTTPStatusError as e:
             if _is_retryable_error(e):
                 self._backoff()
-                raise RetriableException
+                raise RetryableException
             raise e
         end = time.time()
         self._speed.push(1, beg, end)
