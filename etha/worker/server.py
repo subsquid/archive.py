@@ -28,7 +28,7 @@ class Server(uvicorn.Server):
             await task
 
 
-async def main():
+def parse_cli_args():
     program = argparse.ArgumentParser(
         description='Subsquid eth archive worker'
     )
@@ -73,8 +73,10 @@ async def main():
         help='number of processes to use to execute data queries'
     )
 
-    args = program.parse_args()
+    return program.parse_args()
 
+
+async def main(args):
     sm = StateManager(
         worker_id=args.worker_id,
         worker_url=args.worker_url,
@@ -102,4 +104,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    run_async_program(main(), log=LOG)
+    run_async_program(main, parse_cli_args(), log=LOG)

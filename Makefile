@@ -23,7 +23,7 @@ write:
 
 
 ingest:
-	@$(PY) -m etha.ingest.main --dest data/mainnet --src-node ${ETH_NODE}
+	@$(PY) -m etha.ingest.main --dest data/mainnet -e ${ETH_NODE} -c 10 --with-receipts
 
 
 router:

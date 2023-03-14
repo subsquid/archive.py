@@ -1,89 +1,190 @@
 import asyncio
 import logging
 import time
-from typing import Optional, NamedTuple
+from typing import Optional, NamedTuple, Any, TypedDict, Literal, Callable
 
 import httpx
 
-from etha.ingest.speed import Speed
+from etha.counters import Speed, Rate
+
 
 LOG = logging.getLogger(__name__)
 
 
-class ConnectionMetrics(NamedTuple):
+class RpcRequest(TypedDict):
+    id: int
+    jsonrpc: Literal['2.0']
+    method: str
+    params: Optional[list[Any]]
+
+
+class RpcError(Exception):
+    def __init__(self, info: Any, request: RpcRequest, url: str):
+        self.message = 'rpc error'
+        self.info = info
+        self.request = request
+        self.url = url
+
+
+class RpcEndpoint(NamedTuple):
+    url: str
+    capacity: int = 5
+    request_timeout: int = 2_000
+    rps_limit: Optional[int] = None
+    rps_limit_window: int = 10
+
+
+class RpcEndpointMetrics(NamedTuple):
     url: str
     avg_response_time: float
     served: int
     errors: int
 
 
-class RetryableException(Exception):
+class RpcRetryException(Exception):
     pass
 
 
-class Connection:
-    def __init__(self, url: str, limit: Optional[int], client: httpx.AsyncClient):
-        self.url = url
-        self.limit = limit
-        self._client = client
-        self._speed = Speed(window_size=200)
+class _Timer:
+    def __init__(self):
+        self.beg = time.time()
+        self._end = None
+
+    @property
+    def end(self) -> float:
+        assert self._end
+        return self._end
+
+    def is_stopped(self) -> bool:
+        return self._end is not None
+
+    def stop(self):
+        self._end = time.time()
+
+    def time_ms(self) -> int:
+        return round((self.end - self.beg) * 1000)
+
+
+class RpcConnection:
+    def __init__(self, endpoint: RpcEndpoint, online_callback: Optional[Callable[[], None]] = None):
+        self.endpoint = endpoint
+        self._online_callback = online_callback
+        self._client = httpx.AsyncClient(
+            base_url=endpoint.url,
+            timeout=endpoint.request_timeout,
+            limits=httpx.Limits(
+                max_connections=endpoint.capacity,
+                max_keepalive_connections=endpoint.capacity
+            )
+        )
+        self._speed = Speed(window_size=100)
+        self._rate = Rate(window_size=endpoint.rps_limit_window, slot_secs=1/endpoint.rps_limit_window) or None
         self._online = True
         self._backoff_schedule = [10, 100, 500, 2000, 10000, 20000]
         self._served = 0
         self._errors = 0
         self._errors_in_row = 0
+        self._pending_requests = 0
+        self._extra = {'rpc_url': endpoint.url}
 
-    def __hash__(self):
-        return hash(self.url)
-
-    def avg_response_time(self):
+    def avg_response_time(self) -> float:
         return self._speed.time() or 0.01
 
-    def is_online(self):
+    def is_online(self) -> bool:
         return self._online
 
-    def metrics(self):
-        return ConnectionMetrics(self.url, self.avg_response_time(), self._served, self._errors)
+    def get_capacity(self, current_time: Optional[float] = None) -> int:
+        cap = max(0, self.endpoint.capacity - self._pending_requests)
+        if self.endpoint.rps_limit:
+            cap = min(cap, max(0, self.endpoint.rps_limit - self._rate.get(current_time)))
+        return cap
 
-    async def request(self, data):
-        beg = time.time()
+    def can_serve_during(self, duration_secs: float) -> int:
+        response_time = self.avg_response_time()
+        if self.endpoint.rps_limit:
+            response_time = max(response_time, 1 / self.endpoint.rps_limit)
+        return max(0, round((duration_secs - 2 * response_time) / duration_secs))
+
+    def metrics(self) -> RpcEndpointMetrics:
+        return RpcEndpointMetrics(
+            self.endpoint.url,
+            self.avg_response_time(),
+            self._served,
+            self._errors
+        )
+
+    async def request(self, request: RpcRequest) -> Any:
+        timer = _Timer()
+        if self._rate:
+            self._rate.inc(timer.beg)
+        self._pending_requests += 1
         try:
-            response = await self._perform_request(data)
-        except httpx.HTTPStatusError as e:
+            return await self._perform_request(request, timer)
+        except Exception as e:
             if _is_retryable_error(e):
+                LOG.warning('rpc connection error', exc_info=e, extra={**self._extra, 'rpc_call': request['id']})
                 self._backoff()
-                raise RetryableException
+                raise RpcRetryException
+            if isinstance(e, RpcError):
+                self._count_request(timer)
             raise e
-        end = time.time()
-        self._speed.push(1, beg, end)
-        self._served += 1
-        self._errors_in_row = 0
-        LOG.debug('rpc_result', extra={'rpc_time': round(end - beg, 2), 'rpc_result': response})
-        return response
+        finally:
+            self._pending_requests -= 1
 
-    async def _perform_request(self, data):
-        headers = {
+    async def _perform_request(self, request: RpcRequest, timer: _Timer):
+        LOG.debug('rpc send', extra={**self._extra, 'rpc_call': request['id']})
+
+        http_response = await self._client.post('/', json=request, headers={
             'accept': 'application/json',
             'accept-encoding': 'gzip, br',
             'content-type': 'application/json',
-        }
-        response = await self._client.post(self.url, json=data, headers=headers)
-        response.raise_for_status()
-        return response.json()
+        })
+
+        timer.stop()
+
+        http_response.raise_for_status()
+        result = http_response.json()
+        assert isinstance(result, dict)
+        assert result['id'] == request['id']
+        assert 'result' in result or 'error' in result
+
+        LOG.debug('rpc result', extra={
+            **self._extra,
+            'rpc_call': request['id'],
+            'rpc_time': timer.time_ms(),
+            'rpc_response': result
+        })
+
+        if 'error' in result:
+            raise RpcError(result['error'], request, self.endpoint.url)
+        else:
+            self._count_request(timer)
+            return result['result']
+
+    def _count_request(self, timer: _Timer):
+        self._speed.push(1, timer.beg, timer.end)
+        self._served += 1
+        self._errors_in_row = 0
 
     def _backoff(self):
         backoff = self._backoff_schedule[min(self._errors_in_row, len(self._backoff_schedule) - 1)]
-        LOG.warning(f'going offline for {backoff} ms')
+        LOG.warning(f'going offline for {backoff} ms', extra=self._extra)
         self._errors += 1
         self._errors_in_row += 1
         self._online = False
-        task = asyncio.create_task(asyncio.sleep(backoff / 1000))
-        task.add_done_callback(lambda _: self._reconnect())
+        asyncio.get_event_loop().call_later(backoff / 1000, self._reconnect)
 
     def _reconnect(self):
-        LOG.debug('online')
+        LOG.debug('online', extra=self._extra)
         self._online = True
+        if self._online_callback:
+            self._online_callback()
 
 
-def _is_retryable_error(e: httpx.HTTPStatusError) -> bool:
-    return e.response.status_code in (429, 502, 503, 504)
+def _is_retryable_error(e: Exception) -> bool:
+    if isinstance(e, httpx.HTTPStatusError):
+        return e.response.status_code in (429, 502, 503, 504)
+    elif isinstance(e, httpx.ConnectError) or isinstance(e, httpx.TimeoutException):
+        return True
+    else:
+        return False

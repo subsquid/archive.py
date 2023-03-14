@@ -1,26 +1,27 @@
-from typing import Optional, AsyncIterator
 import asyncio
+from itertools import groupby
+from typing import Optional, AsyncIterator
 
-from etha.ingest.rpc import RpcClient, RpcCall
-from etha.ingest.model import Block, Log, Transaction, Trace, BlockHeader
-from etha.ingest.trace import parse_action, parse_result
-from etha.ingest.block import calculate_hash
+from etha.ingest.model import Block, Log, Receipt
+from etha.ingest.rpc import RpcClient
 
 
 class Ingest:
     def __init__(
             self,
             rpc: RpcClient,
+            finality_offset: int = 10,
             from_block: int = 0,
             to_block: Optional[int] = None,
-            concurrency: int = 5,
-            offset: int = 10
+            with_receipts: bool = False,
+            with_traces: bool = False
     ):
         self._rpc = rpc
+        self._finality_offset = finality_offset
+        self._with_receipts = with_receipts
+        self._with_traces = with_traces
         self._height = from_block - 1
         self._end = to_block
-        self._concurrency = concurrency
-        self._offset = offset
         self._chain_height = 0
         self._strides = []
         self._stride_size = 10
@@ -36,6 +37,26 @@ class Ingest:
                 blocks = await stride
                 self._schedule_strides()
                 yield blocks
+
+    def _schedule_strides(self):
+        while len(self._strides) < 2 and not self._is_finished() and self._dist() > 0:
+            from_block = self._height + 1
+            stride_size = min(self._stride_size, self._dist())
+            if self._end is not None:
+                stride_size = min(stride_size, self._end - self._height)
+            to_block = self._height + stride_size
+            task = asyncio.create_task(self._fetch_stride(from_block, to_block))
+            self._strides.append(task)
+            self._height = to_block
+
+    def _dist(self) -> int:
+        return self._chain_height - self._height
+
+    def _is_finished(self) -> bool:
+        if self._end is None:
+            return False
+        else:
+            return self._height >= self._end
 
     async def _wait_chain(self):
         stride_size = self._stride_size
@@ -53,160 +74,61 @@ class Ingest:
     async def _get_chain_height(self) -> int:
         hex_height = await self._rpc.call('eth_blockNumber')
         height = int(hex_height, 0)
-        return max(height - self._offset, 0)
+        return max(height - self._finality_offset, 0)
 
     async def _fetch_stride(self, from_block: int, to_block: int) -> list[Block]:
-        calls = []
+        if self._with_receipts:
+            logs_future = None
+        else:
+            logs_future = self._rpc.call('eth_getLogs', [{
+                'fromBlock': hex(from_block),
+                'toBlock': hex(to_block)
+            }], priority=from_block)
 
-        for i in range(from_block, to_block + 1):
-            calls.append(RpcCall('eth_getBlockByNumber', [hex(i), True]))
+        block_tasks = [asyncio.create_task(self._fetch_block(i)) for i in range(from_block, to_block + 1)]
+        await asyncio.wait(block_tasks)
+        blocks = [t.result() for t in block_tasks]
 
-        # FIXME: trace_block is not always available, put it behind a flag?
-        for i in range(from_block, to_block + 1):
-            calls.append(RpcCall('trace_block', [hex(i)]))
+        if logs_future:
+            logs: list[Log] = await logs_future
+            logs.sort(key=lambda b: b['blockNumber'])
+            logs_by_block = {k: list(it) for k, it in groupby(logs, key=lambda b: b['blockNumber'])}
 
-        calls.append(RpcCall('eth_getLogs', [{
-            'fromBlock': hex(from_block),
-            'toBlock': hex(to_block),
-        }]))
-
-        response = await self._rpc.batch(calls)
-        raw_blocks = response[:len(response) // 2]
-        raw_traces = response[len(response) // 2:-1]
-        raw_logs = response[-1]
-
-        # FIXME: receipts also have logs, looks like when receipts are available eth_getLogs is not needed
-        # FIXME: is it always available? Put it behind a flag?
-        tx_status = await self._fetch_tx_status(response[:len(response) // 2])
-
-        blocks: list[Block] = []
-        for raw in raw_blocks:
-            transactions: list[Transaction] = []
-            for tx in raw['transactions']:
-                transactions.append({
-                    'blockNumber': int(tx['blockNumber'], 0),
-                    'transactionIndex': int(tx['transactionIndex'], 0),
-                    'hash': tx['hash'],
-                    'gas': int(tx['gas'], 0),
-                    'gasPrice': parse_optional_hex(tx, 'gasPrice'),
-                    'maxFeePerGas': parse_optional_hex(tx, 'maxFeePerGas'),
-                    'maxPriorityFeePerGas': parse_optional_hex(tx, 'maxPriorityFeePerGas'),
-                    'from': tx['from'],
-                    'to': tx['to'],
-                    'sighash': tx['input'][:10] if len(tx['input']) > 10 else None,
-                    'input': tx['input'],
-                    'nonce': int(tx['nonce'], 0),
-                    'value': int(tx['value'], 0),
-                    'type': int(tx['type'], 0),
-                    'v': str(int(tx['v'], 0)) if 'v' in tx else None,
-                    's': str(int(tx['s'], 0)),
-                    'r': str(int(tx['r'], 0)),
-                    'yParity': parse_optional_hex(tx, 'yParity'),
-                    'chainId': parse_optional_hex(tx, 'chainId'),
-                    'accessList': tx.get('accessList'),
-                    'status': tx_status[tx['hash']],
-                })
-            header: BlockHeader = {
-                'number': int(raw['number'], 0),
-                'hash': raw['hash'],
-                'parentHash': raw['parentHash'],
-                'nonce': raw.get('nonce'),
-                'sha3Uncles': raw['sha3Uncles'],
-                'logsBloom': raw['logsBloom'],
-                'transactionsRoot': raw['transactionsRoot'],
-                'stateRoot': raw['stateRoot'],
-                'receiptsRoot': raw['receiptsRoot'],
-                'miner': raw['miner'],
-                'gasUsed': int(raw['gasUsed'], 0),
-                'gasLimit': int(raw['gasLimit'], 0),
-                'size': int(raw['size'], 0),
-                'timestamp': int(raw['timestamp'], 0),
-                'extraData': raw['extraData'],
-                'difficulty': parse_optional_hex(raw, 'difficulty'),
-                'totalDifficulty': parse_optional_hex(raw, 'totalDifficulty'),
-                'mixHash': raw.get('mixHash'),
-                'baseFeePerGas': parse_optional_hex(raw, 'baseFeePerGas'),
-            }
-
-            # TODO: need to assert validity of transactions and logs as well...
-            assert calculate_hash(header) == header['hash']
-
-            blocks.append({
-                'header': header,
-                'transactions': transactions,
-                'logs': [],
-                'traces': [],
-            })
-
-        for traces in raw_traces:
-            for raw in traces:
-                trace: Trace = {
-                    'action': parse_action(raw),
-                    'blockNumber': raw['blockNumber'],
-                    'error': raw.get('error'),
-                    'result': parse_result(raw),
-                    'subtraces': raw['subtraces'],
-                    'traceAddress': raw['traceAddress'],
-                    'transactionPosition': raw.get('transactionPosition'),
-                    'type': raw['type'],
-                }
-                blocks[trace['blockNumber'] - from_block]['traces'].append(trace)
-
-        for raw in raw_logs:
-            topics = iter(raw['topics'])
-            log: Log = {
-                'blockNumber': int(raw['blockNumber'], 0),
-                'logIndex': int(raw['logIndex'], 0),
-                'transactionIndex': int(raw['transactionIndex'], 0),
-                'address': raw['address'],
-                'data': raw['data'],
-                'topic0': next(topics, None),
-                'topic1': next(topics, None),
-                'topic2': next(topics, None),
-                'topic3': next(topics, None)
-            }
-            blocks[log['blockNumber'] - from_block]['logs'].append(log)
+            for block in blocks:
+                block_hash = block['hash']
+                block_logs = logs_by_block.get(block['number'], [])
+                for rec in block_logs:
+                    assert rec['blockHash'] == block_hash
+                block['logs_'] = block_logs
 
         return blocks
 
-    def _schedule_strides(self):
-        # FIXME: if strides are not fetched strictly sequentially,
-        #   then single priority queue is likely suboptimal.
-        #   On the other hand, sequential stride fetching can lead to under utilisation of
-        #   RPC resources.
-        while len(self._strides) < self._concurrency and not self._is_finished() and self._dist() > 0:
-            from_block = self._height + 1
-            stride_size = min(self._stride_size, self._dist())
-            if self._end is not None:
-                stride_size = min(stride_size, self._end - self._height)
-            to_block = self._height + stride_size
-            task = asyncio.create_task(self._fetch_stride(from_block, to_block))
-            self._strides.append(task)
-            self._height = to_block
+    async def _fetch_block(self, height: int) -> Block:
+        if self._with_traces:
+            trace_future = self._rpc.call('trace_block', [hex(height)], priority=height)
+        else:
+            trace_future = None
 
-    def _dist(self) -> int:
-        return self._chain_height - self._height
+        block: Block = await self._rpc.call('eth_getBlockByNumber', [hex(height), True], priority=height)
 
-    def _is_finished(self) -> bool:
-        if self._end is not None:
-            return self._height >= self._end
-        return False
+        if self._with_receipts and block['transactions']:
+            logs: list[Log] = []
 
-    async def _fetch_tx_status(self, raw_blocks) -> dict[str, Optional[int]]:
-        calls = []
-        for raw in raw_blocks:
-            for tx in raw['transactions']:
-                calls.append(RpcCall('eth_getTransactionReceipt', [tx['hash']]))
+            receipt_futures = [
+                self._rpc.call('eth_getTransactionReceipt', [tx['hash']], priority=height)
+                for tx in block['transactions']
+            ]
 
-        tx_status = {}
-        if calls:
-            receipts = await self._rpc.batch(calls)
-            for receipt in receipts:
-                status = int(receipt['status'], 0) if 'status' in receipt else None
-                tx_status[receipt['transactionHash']] = status
+            await asyncio.wait(receipt_futures)
 
-        return tx_status
+            for rf, tx in zip(receipt_futures, block['transactions']):
+                receipt: Receipt = rf.result()
+                tx['receipt_'] = receipt
+                logs.extend(receipt['logs'])
 
+            block['logs_'] = logs
 
-def parse_optional_hex(target: dict, key: str) -> Optional[int]:
-    return int(target[key], 0) if key in target else None
+        if trace_future:
+            block['trace_'] = await trace_future
+
+        return block

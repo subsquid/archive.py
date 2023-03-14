@@ -1,26 +1,34 @@
+from typing import Optional
+
 import pyarrow
 
 from etha.ingest.column import Column
-from etha.ingest.model import BlockHeader, Transaction, Log, Trace
-from etha.ingest.trace import extract_trace_fields
+from etha.ingest.model import Transaction, Log, Trace, Block, Qty
 
 
 def bignum():
     return pyarrow.decimal128(38)
 
 
-def access_list(tx: Transaction):
-    if tx['accessList'] is not None:
-        return [
-            {
-                'address': item['address'],
-                'storage_keys': item['storageKeys']
-            }
-            for item in tx['accessList']
-        ]
+class TableBuilderBase:
+    def to_table(self) -> pyarrow.Table:
+        arrays = []
+        names = []
+        for n, c in self.__dict__.items():
+            if isinstance(c, Column):
+                names.append(n)
+                arrays.append(c.build())
+        return pyarrow.table(arrays, names=names)
+
+    def bytesize(self) -> int:
+        size = 0
+        for c in self.__dict__.values():
+            if isinstance(c, Column):
+                size += c.bytesize()
+        return size
 
 
-class BlockTableBuilder:
+class BlockTableBuilder(TableBuilderBase):
     def __init__(self):
         self.number = Column(pyarrow.int32())
         self.hash = Column(pyarrow.string())
@@ -31,19 +39,18 @@ class BlockTableBuilder:
         self.transactions_root = Column(pyarrow.string())
         self.state_root = Column(pyarrow.string())
         self.receipts_root = Column(pyarrow.string())
+        self.mix_hash = Column(pyarrow.string())
         self.miner = Column(pyarrow.string())
-        self.gas_used = Column(bignum())
-        self.gas_limit = Column(bignum())
-        self.size = Column(pyarrow.int32())
-        self.timestamp = Column(pyarrow.timestamp('s'))
-        self.extra_data = Column(pyarrow.string())
         self.difficulty = Column(bignum())
         self.total_difficulty = Column(bignum())
-        self.mix_hash = Column(pyarrow.string())
-        self.base_fee_per_gas = Column(bignum())
+        self.extra_data = Column(pyarrow.string())
+        self.size = Column(pyarrow.int32())
+        self.gas_limit = Column(bignum())
+        self.gas_used = Column(bignum())
+        self.timestamp = Column(pyarrow.timestamp('s'))
 
-    def append(self, block: BlockHeader):
-        self.number.append(block['number'])
+    def append(self, block: Block) -> None:
+        self.number.append(qty2int(block['number']))
         self.hash.append(block['hash'])
         self.parent_hash.append(block['parentHash'])
         self.nonce.append(block['nonce'])
@@ -52,166 +59,79 @@ class BlockTableBuilder:
         self.transactions_root.append(block['transactionsRoot'])
         self.state_root.append(block['stateRoot'])
         self.receipts_root.append(block['receiptsRoot'])
-        self.miner.append(block['miner'])
-        self.gas_used.append(block['gasUsed'])
-        self.gas_limit.append(block['gasLimit'])
-        self.size.append(block['size'])
-        self.timestamp.append(block['timestamp'])
-        self.extra_data.append(block['extraData'])
-        self.difficulty.append(block['difficulty'])
-        self.total_difficulty.append(block['totalDifficulty'])
         self.mix_hash.append(block['mixHash'])
-        self.base_fee_per_gas.append(block['baseFeePerGas'])
-
-    def to_table(self) -> pyarrow.Table:
-        return pyarrow.table([
-            self.number.build(),
-            self.hash.build(),
-            self.parent_hash.build(),
-            self.nonce.build(),
-            self.sha3_uncles.build(),
-            self.logs_bloom.build(),
-            self.transactions_root.build(),
-            self.state_root.build(),
-            self.receipts_root.build(),
-            self.miner.build(),
-            self.gas_used.build(),
-            self.gas_limit.build(),
-            self.size.build(),
-            self.timestamp.build(),
-            self.extra_data.build(),
-            self.difficulty.build(),
-            self.total_difficulty.build(),
-            self.mix_hash.build(),
-            self.base_fee_per_gas.build(),
-        ], names=[
-            'number',
-            'hash',
-            'parent_hash',
-            'nonce',
-            'sha3_uncles',
-            'logs_bloom',
-            'transactions_root',
-            'state_root',
-            'receipts_root',
-            'miner',
-            'gas_used',
-            'gas_limit',
-            'size',
-            'timestamp',
-            'extra_data',
-            'difficulty',
-            'total_difficulty',
-            'mix_hash',
-            'base_fee_per_gas',
-        ])
+        self.miner.append(block['miner'])
+        self.difficulty.append(qty2int(block['difficulty']))
+        self.total_difficulty.append(qty2int(block['totalDifficulty']))
+        self.extra_data.append(block['extraData'])
+        self.size.append(qty2int(block['size']))
+        self.gas_used.append(qty2int(block['gasUsed']))
+        self.gas_limit.append(qty2int(block['gasLimit']))
+        self.timestamp.append(qty2int(block['timestamp']))
 
 
-class TxTableBuilder:
+class TxTableBuilder(TableBuilderBase):
     def __init__(self):
         self.block_number = Column(pyarrow.int32())
-        self.transaction_index = Column(pyarrow.int32())
-        self.hash = Column(pyarrow.string())
-        self.gas_price = Column(bignum())
+        self.__dict__['from'] = Column(pyarrow.string())
         self.gas = Column(bignum())
-        self.max_fee_per_gas = Column(bignum())
-        self.max_priority_fee_per_gas = Column(bignum())
-        self.from_ = Column(pyarrow.string())
-        self.to = Column(pyarrow.string())
-        self.sighash = Column(pyarrow.string())
+        self.gas_price = Column(bignum())
+        self.hash = Column(pyarrow.string())
         self.input = Column(pyarrow.string())
         self.nonce = Column(pyarrow.int64())
+        self.to = Column(pyarrow.string())
+        self.transaction_index = Column(pyarrow.int32())
         self.value = Column(bignum())
-        self.type = Column(pyarrow.int32())
         self.v = Column(pyarrow.string())
         self.r = Column(pyarrow.string())
         self.s = Column(pyarrow.string())
-        self.y_parity = Column(pyarrow.int32())
-        self.chain_id = Column(pyarrow.int32())
-        self.access_list = Column(pyarrow.list_(
-            pyarrow.struct([
-                pyarrow.field('address', pyarrow.string(), bool_nullable=False),
-                pyarrow.field('storage_keys', pyarrow.list_(pyarrow.string()), bool_nullable=False),
-            ])
-        ))
-        self.status = Column(pyarrow.int32())
+        self.sighash = Column(pyarrow.string())
+        self.gas_used = Column(bignum())
+        self.cumulative_gas_used = Column(bignum())
+        self.effective_gas_price = Column(bignum())
+        self.type = Column(pyarrow.int8())
+        self.status = Column(pyarrow.int8())
         self._id = Column(pyarrow.int64())
 
     def append(self, tx: Transaction):
-        self.block_number.append(tx['blockNumber'])
-        self.transaction_index.append(tx['transactionIndex'])
+        block_number = qty2int(tx['blockNumber'])
+        tx_index = qty2int(tx['transactionIndex'])
+        tx_input = tx['input']
+
+        self.block_number.append(block_number)
+        self.__dict__['from'].append(tx['from'])
+        self.gas.append(qty2int(tx['gas']))
+        self.gas_price.append(qty2int(tx['gasPrice']))
         self.hash.append(tx['hash'])
-        self.gas_price.append(tx['gasPrice'])
-        self.gas.append(tx['gas'])
-        self.max_fee_per_gas.append(tx['maxFeePerGas'])
-        self.max_priority_fee_per_gas.append(tx['maxPriorityFeePerGas'])
-        self.from_.append(tx['from'])
+        self.input.append(tx_input)
+        self.nonce.append(qty2int(tx['nonce']))
         self.to.append(tx.get('to'))
-        self.sighash.append(tx.get('sighash'))
-        self.input.append(tx['input'])
-        self.nonce.append(tx['nonce'])
-        self.value.append(tx['value'])
-        self.type.append(tx['type'])
+        self.transaction_index.append(tx_index)
+        self.value.append(qty2int(tx['value']))
         self.v.append(tx['v'])
         self.r.append(tx['r'])
         self.s.append(tx['s'])
-        self.y_parity.append(tx['yParity'])
-        self.chain_id.append(tx['chainId'])
-        self.access_list.append(access_list(tx))
-        self.status.append(tx['status'])
-        self._id.append((tx['blockNumber'] << 24) + tx['transactionIndex'])
 
-    def to_table(self):
-        return pyarrow.table([
-            self.block_number.build(),
-            self.transaction_index.build(),
-            self.hash.build(),
-            self.gas_price.build(),
-            self.gas.build(),
-            self.max_fee_per_gas.build(),
-            self.max_priority_fee_per_gas.build(),
-            self.from_.build(),
-            self.to.build(),
-            self.sighash.build(),
-            self.input.build(),
-            self.nonce.build(),
-            self.value.build(),
-            self.type.build(),
-            self.v.build(),
-            self.r.build(),
-            self.s.build(),
-            self.y_parity.build(),
-            self.chain_id.build(),
-            self.access_list.build(),
-            self.status.build(),
-            self._id.build(),
-        ], names=[
-            'block_number',
-            'transaction_index',
-            'hash',
-            'gas_price',
-            'gas',
-            'max_fee_per_gas',
-            'max_priority_fee_per_gas',
-            'from',
-            'to',
-            'sighash',
-            'input',
-            'nonce',
-            'value',
-            'type',
-            'v',
-            'r',
-            's',
-            'y_parity',
-            'chain_id',
-            'access_list',
-            'status',
-            '_id'
-        ])
+        self.sighash.append(tx_input[:10] if len(tx_input) >= 10 else None)
+
+        receipt = tx.get('receipt_')
+        if receipt:
+            self.gas_used.append(qty2int(receipt['gasUsed']))
+            self.cumulative_gas_used.append(qty2int(receipt['cumulativeGasUsed']))
+            self.effective_gas_price.append(qty2int(receipt['effectiveGasPrice']))
+            self.type.append(qty2int(receipt['type']))
+            self.status.append(qty2int(receipt['status']))
+        else:
+            self.gas_used.append(None)
+            self.cumulative_gas_used.append(None)
+            self.effective_gas_price.append(None)
+            self.type.append(None)
+            self.status.append(None)
+
+        self._id.append((block_number << 24) + tx_index)
 
 
-class LogTableBuilder:
+class LogTableBuilder(TableBuilderBase):
     def __init__(self):
         self.block_number = Column(pyarrow.int32())
         self.log_index = Column(pyarrow.int32())
@@ -224,155 +144,126 @@ class LogTableBuilder:
         self.topic3 = Column(pyarrow.string())
 
     def append(self, log: Log):
-        self.block_number.append(log['blockNumber'])
-        self.log_index.append(log['logIndex'])
-        self.transaction_index.append(log['transactionIndex'])
+        self.block_number.append(qty2int(log['blockNumber']))
+        self.log_index.append(qty2int(log['logIndex']))
+        self.transaction_index.append(qty2int(log['transactionIndex']))
         self.address.append(log['address'])
-        self.data.append(log.get('data'))
-        self.topic0.append(log.get('topic0'))
-        self.topic1.append(log.get('topic1'))
-        self.topic2.append(log.get('topic2'))
-        self.topic3.append(log.get('topic3'))
-
-    def to_table(self):
-        return pyarrow.table([
-            self.block_number.build(),
-            self.log_index.build(),
-            self.transaction_index.build(),
-            self.address.build(),
-            self.data.build(),
-            self.topic0.build(),
-            self.topic1.build(),
-            self.topic2.build(),
-            self.topic3.build(),
-        ], names=[
-            'block_number',
-            'log_index',
-            'transaction_index',
-            'address',
-            'data',
-            'topic0',
-            'topic1',
-            'topic2',
-            'topic3'
-        ])
+        self.data.append(log['data'])
+        topics = iter(log['topics'])
+        self.topic0.append(next(topics, None))
+        self.topic1.append(next(topics, None))
+        self.topic2.append(next(topics, None))
+        self.topic3.append(next(topics, None))
 
 
-class TraceTableBuilder:
+class TraceTableBuilder(TableBuilderBase):
     def __init__(self):
-        self.type = Column(pyarrow.string())
         self.block_number = Column(pyarrow.int32())
+        self.trace_address = Column(pyarrow.list_(pyarrow.int32()))
         self.subtraces = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
-        self.trace_address = Column(pyarrow.list_(pyarrow.int32()))
+        self.type = Column(pyarrow.string())
         self.error = Column(pyarrow.string())
+
         self.create_from = Column(pyarrow.string())
+        self.create_value = Column(bignum())
         self.create_gas = Column(bignum())
         self.create_init = Column(pyarrow.string())
-        self.create_value = Column(bignum())
-        self.create_address = Column(pyarrow.string())
-        self.create_code = Column(pyarrow.string())
-        self.create_gas_used = Column(bignum())
+        self.create_result_gas_used = Column(bignum())
+        self.create_result_code = Column(pyarrow.string())
+        self.create_result_address = Column(pyarrow.string())
+
+        self.call_from = Column(pyarrow.string())
+        self.call_to = Column(pyarrow.string())
+        self.call_value = Column(bignum())
+        self.call_gas = Column(bignum())
+        self.call_input = Column(pyarrow.string())
+        self.call_type = Column(pyarrow.string())
+        self.call_result_gas_used = Column(bignum())
+        self.call_result_output = Column(pyarrow.string())
+
         self.suicide_address = Column(pyarrow.string())
         self.suicide_refund_address = Column(pyarrow.string())
         self.suicide_balance = Column(bignum())
-        self.call_from = Column(pyarrow.string())
-        self.call_type = Column(pyarrow.string())
-        self.call_gas = Column(bignum())
-        self.call_input = Column(pyarrow.string())
-        self.call_to = Column(pyarrow.string())
-        self.call_value = Column(bignum())
-        self.call_gas_used = Column(bignum())
-        self.call_output = Column(pyarrow.string())
+
         self.reward_author = Column(pyarrow.string())
-        self.reward_type = Column(pyarrow.string())
         self.reward_value = Column(bignum())
+        self.reward_type = Column(pyarrow.string())
 
     def append(self, trace: Trace):
-        self.type.append(trace['type'])
-        self.block_number.append(trace['blockNumber'])
-        self.subtraces.append(trace['subtraces'])
-        self.transaction_index.append(trace['transactionPosition'])
+        self.block_number.append(qty2int(trace['blockNumber']))
         self.trace_address.append(trace['traceAddress'])
-        self.error.append(trace['error'])
-        fields = extract_trace_fields(trace)
-        self.create_from.append(fields.get('create_from'))
-        self.create_gas.append(fields.get('create_gas'))
-        self.create_init.append(fields.get('create_init'))
-        self.create_value.append(fields.get('create_value'))
-        self.create_address.append(fields.get('create_address'))
-        self.create_code.append(fields.get('create_code'))
-        self.create_gas_used.append(fields.get('create_gas_used'))
-        self.suicide_address.append(fields.get('suicide_address'))
-        self.suicide_refund_address.append(fields.get('suicide_refund_address'))
-        self.suicide_balance.append(fields.get('suicide_balance'))
-        self.call_from.append(fields.get('call_from'))
-        self.call_type.append(fields.get('call_type'))
-        self.call_gas.append(fields.get('call_gas'))
-        self.call_input.append(fields.get('call_input'))
-        self.call_to.append(fields.get('call_to'))
-        self.call_value.append(fields.get('call_value'))
-        self.call_gas_used.append(fields.get('call_gas_used'))
-        self.call_output.append(fields.get('call_output'))
-        self.reward_author.append(fields.get('reward_author'))
-        self.reward_type.append(fields.get('reward_type'))
-        self.reward_value.append(fields.get('reward_value'))
+        self.subtraces.append(trace['subtraces'])
+        self.transaction_index.append(_get_optional_qty(trace, 'transactionIndex'))
+        self.type.append(trace['type'])
+        self.error.append(trace.get('error'))
 
-    def to_table(self):
-        return pyarrow.table([
-            self.type.build(),
-            self.block_number.build(),
-            self.subtraces.build(),
-            self.transaction_index.build(),
-            self.trace_address.build(),
-            self.error.build(),
-            self.create_from.build(),
-            self.create_gas.build(),
-            self.create_init.build(),
-            self.create_value.build(),
-            self.create_address.build(),
-            self.create_code.build(),
-            self.create_gas_used.build(),
-            self.suicide_address.build(),
-            self.suicide_refund_address.build(),
-            self.suicide_balance.build(),
-            self.call_from.build(),
-            self.call_type.build(),
-            self.call_gas.build(),
-            self.call_input.build(),
-            self.call_to.build(),
-            self.call_value.build(),
-            self.call_gas_used.build(),
-            self.call_output.build(),
-            self.reward_author.build(),
-            self.reward_type.build(),
-            self.reward_value.build(),
-        ], names=[
-            'type',
-            'block_number',
-            'subtraces',
-            'transaction_index',
-            'trace_address',
-            'error',
-            'create_from',
-            'create_gas',
-            'create_init',
-            'create_value',
-            'create_address',
-            'create_code',
-            'create_gas_used',
-            'suicide_address',
-            'suicide_refund_address',
-            'suicide_balance',
-            'call_from',
-            'call_type',
-            'call_gas',
-            'call_input',
-            'call_to',
-            'call_value',
-            'call_gas_used',
-            'call_output',
-            'reward_author',
-            'reward_type',
-            'reward_value',
-        ])
+        if trace['type'] == 'create':
+            action = trace['action']
+            self.create_from.append(action['from'])
+            self.create_value.append(qty2int(action['value']))
+            self.create_gas.append(qty2int(action['gas']))
+            self.create_init.append(action['init'])
+            self.create_result_gas_used.append(qty2int(action['result']['gasUsed']))
+            self.create_result_code.append(action['result']['code'])
+            self.create_result_address.append(action['result']['address'])
+        else:
+            self.create_from.append(None)
+            self.create_value.append(None)
+            self.create_gas.append(None)
+            self.create_init.append(None)
+            self.create_result_gas_used.append(None)
+            self.create_result_code.append(None)
+            self.create_result_address.append(None)
+
+        if trace['type'] == 'call':
+            action = trace['action']
+            self.call_from.append(action['from'])
+            self.call_to.append(action['to'])
+            self.call_value.append(qty2int(action['value']))
+            self.call_gas.append(qty2int(action['gas']))
+            self.call_input.append(action['input'])
+            self.call_type.append(action['type'])
+            self.call_result_gas_used.append(qty2int(action['result']['gasUsed']))
+            self.call_result_output.append(action['result']['output'])
+        else:
+            self.call_from.append(None)
+            self.call_to.append(None)
+            self.call_value.append(None)
+            self.call_gas.append(None)
+            self.call_input.append(None)
+            self.call_type.append(None)
+            self.call_result_gas_used.append(None)
+            self.call_result_output.append(None)
+
+        if trace['type'] == 'suicide':
+            action = trace['action']
+            self.suicide_address.append(action['address'])
+            self.suicide_refund_address.append(action['refundAddress'])
+            self.suicide_balance.append(qty2int(action['balance']))
+        else:
+            self.suicide_address.append(None)
+            self.suicide_refund_address.append(None)
+            self.suicide_balance.append(None)
+
+        if trace['type'] == 'reward':
+            action = trace['action']
+            self.reward_author.append(action['author'])
+            self.reward_value.append(qty2int(action['value']))
+            self.reward_type.append(action['type'])
+        else:
+            self.reward_author.append(None)
+            self.reward_value.append(None)
+            self.reward_type.append(None)
+
+
+def _get_optional_qty(rec: dict, key: str) -> Optional[int]:
+    v = rec.get(key, None)
+    if v is None:
+        return None
+    else:
+        return int(v)
+
+
+def qty2int(v: Qty) -> int:
+    return int(v, 16)
