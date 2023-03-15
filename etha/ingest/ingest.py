@@ -2,8 +2,8 @@ import asyncio
 from itertools import groupby
 from typing import Optional, AsyncIterator
 
-from etha.ingest.model import Block, Log, Receipt
-from etha.ingest.rpc import RpcClient
+from etha.ingest.model import Block, Log, Receipt, Trace
+from etha.ingest.rpc import RpcClient, RpcBatchCall
 
 
 class Ingest:
@@ -39,7 +39,7 @@ class Ingest:
                 yield blocks
 
     def _schedule_strides(self):
-        while len(self._strides) < 2 and not self._is_finished() and self._dist() > 0:
+        while len(self._strides) < 5 and not self._is_finished() and self._dist() > 0:
             from_block = self._height + 1
             stride_size = min(self._stride_size, self._dist())
             if self._end is not None:
@@ -77,58 +77,74 @@ class Ingest:
         return max(height - self._finality_offset, 0)
 
     async def _fetch_stride(self, from_block: int, to_block: int) -> list[Block]:
-        if self._with_receipts:
-            logs_future = None
+        block_batch: RpcBatchCall = [
+            ('eth_getBlockByNumber', [hex(i), True])
+            for i in range(from_block, to_block + 1)
+        ]
+
+        if not self._with_receipts:
+            block_batch.append(
+                ('eth_getLogs', [{
+                    'fromBlock': hex(from_block),
+                    'toBlock': hex(to_block)
+                }])
+            )
+
+        if self._with_traces:
+            trace_batch = [
+                ('trace_block', [hex(i)])
+                for i in range(from_block, to_block + 1)
+            ]
         else:
-            logs_future = self._rpc.call('eth_getLogs', [{
-                'fromBlock': hex(from_block),
-                'toBlock': hex(to_block)
-            }], priority=from_block)
+            trace_batch = []
 
-        block_tasks = [asyncio.create_task(self._fetch_block(i)) for i in range(from_block, to_block + 1)]
-        await asyncio.wait(block_tasks)
-        blocks = [t.result() for t in block_tasks]
+        trace_future = self._rpc.batch_call(trace_batch, priority=from_block)
 
-        if logs_future:
-            logs: list[Log] = await logs_future
-            logs.sort(key=lambda b: b['blockNumber'])
-            logs_by_block = {k: list(it) for k, it in groupby(logs, key=lambda b: b['blockNumber'])}
+        block_batch_response = await self._rpc.batch_call(block_batch, priority=from_block)
+        blocks: list[Block] = block_batch_response[:(to_block - from_block + 1)]
 
-            for block in blocks:
-                block_hash = block['hash']
-                block_logs = logs_by_block.get(block['number'], [])
-                for rec in block_logs:
-                    assert rec['blockHash'] == block_hash
-                block['logs_'] = block_logs
+        receipts: list[Receipt]
+        logs: list[Log]
+        if self._with_receipts:
+            receipts = await self._rpc.batch_call(
+                [
+                    ('eth_getTransactionReceipt', [tx['hash']])
+                    for b in blocks
+                    for tx in b['transactions']
+                ],
+                priority=from_block
+            )
+            logs = []
+            for r in receipts:
+                logs.extend(r['logs'])
+        else:
+            receipts = []
+            logs = block_batch_response[-1]
+
+        traces: list[list[Trace]] = await trace_future
+
+        logs.sort(key=lambda rec: rec['blockNumber'])
+        logs_by_block = {k: list(it) for k, it in groupby(logs, key=lambda b: b['blockNumber'])}
+
+        receipts_by_tx = {r['transactionHash']: r for r in receipts}
+
+        for i, block in enumerate(blocks):
+            block_number = block['number']
+            block_hash = block['hash']
+
+            block_logs = logs_by_block.get(block_number, [])
+            for item in block_logs:
+                assert item['blockHash'] == block_hash
+            block['logs_'] = block_logs
+
+            if self._with_traces:
+                block_traces = traces[i]
+                for item in block_traces:
+                    assert item['blockHash'] == block_hash
+                block['trace_'] = block_traces
+
+            if self._with_receipts:
+                for tx in block['transactions']:
+                    tx['receipt_'] = receipts_by_tx[tx['hash']]
 
         return blocks
-
-    async def _fetch_block(self, height: int) -> Block:
-        if self._with_traces:
-            trace_future = self._rpc.call('trace_block', [hex(height)], priority=height)
-        else:
-            trace_future = None
-
-        block: Block = await self._rpc.call('eth_getBlockByNumber', [hex(height), True], priority=height)
-
-        if self._with_receipts and block['transactions']:
-            logs: list[Log] = []
-
-            receipt_futures = [
-                self._rpc.call('eth_getTransactionReceipt', [tx['hash']], priority=height)
-                for tx in block['transactions']
-            ]
-
-            await asyncio.wait(receipt_futures)
-
-            for rf, tx in zip(receipt_futures, block['transactions']):
-                receipt: Receipt = rf.result()
-                tx['receipt_'] = receipt
-                logs.extend(receipt['logs'])
-
-            block['logs_'] = logs
-
-        if trace_future:
-            block['trace_'] = await trace_future
-
-        return block

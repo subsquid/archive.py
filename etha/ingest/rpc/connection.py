@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from typing import Optional, NamedTuple, Any, TypedDict, Literal, Callable
+from typing import Optional, NamedTuple, Any, TypedDict, Literal, Callable, Union
 
 import httpx
 
@@ -18,8 +18,11 @@ class RpcRequest(TypedDict):
     params: Optional[list[Any]]
 
 
+BatchRpcRequest = list[RpcRequest]
+
+
 class RpcError(Exception):
-    def __init__(self, info: Any, request: RpcRequest, url: str):
+    def __init__(self, info: Any, request: Union[RpcRequest, BatchRpcRequest], url: str):
         self.message = 'rpc error'
         self.info = info
         self.request = request
@@ -29,7 +32,7 @@ class RpcError(Exception):
 class RpcEndpoint(NamedTuple):
     url: str
     capacity: int = 5
-    request_timeout: int = 2_000
+    request_timeout: int = 10_000
     rps_limit: Optional[int] = None
     rps_limit_window: int = 10
 
@@ -71,7 +74,12 @@ class RpcConnection:
         self._online_callback = online_callback
         self._client = httpx.AsyncClient(
             base_url=endpoint.url,
-            timeout=endpoint.request_timeout,
+            timeout=httpx.Timeout(
+                connect=5,
+                write=5,
+                pool=1,
+                read=endpoint.request_timeout
+            ),
             limits=httpx.Limits(
                 max_connections=endpoint.capacity,
                 max_keepalive_connections=endpoint.capacity
@@ -113,16 +121,18 @@ class RpcConnection:
             self._errors
         )
 
-    async def request(self, request: RpcRequest) -> Any:
+    async def request(self, req_id: Any, request: Union[RpcRequest, BatchRpcRequest]) -> Any:
         timer = _Timer()
         if self._rate:
             self._rate.inc(timer.beg)
         self._pending_requests += 1
         try:
-            return await self._perform_request(request, timer)
+            res = await self._perform_request(req_id, request, timer)
+            self._count_request(timer)
+            return res
         except Exception as e:
             if _is_retryable_error(e):
-                LOG.warning('rpc connection error', exc_info=e, extra={**self._extra, 'rpc_call': request['id']})
+                LOG.warning('rpc connection error', exc_info=e, extra={**self._extra, 'rpc_req': req_id})
                 self._backoff()
                 raise RpcRetryException
             if isinstance(e, RpcError):
@@ -131,8 +141,8 @@ class RpcConnection:
         finally:
             self._pending_requests -= 1
 
-    async def _perform_request(self, request: RpcRequest, timer: _Timer):
-        LOG.debug('rpc send', extra={**self._extra, 'rpc_call': request['id']})
+    async def _perform_request(self, req_id: Any, request: Union[RpcRequest, BatchRpcRequest], timer: _Timer) -> Any:
+        LOG.debug('rpc send', extra={**self._extra, 'rpc_req': req_id})
 
         http_response = await self._client.post('/', json=request, headers={
             'accept': 'application/json',
@@ -143,22 +153,34 @@ class RpcConnection:
         timer.stop()
 
         http_response.raise_for_status()
+
         result = http_response.json()
-        assert isinstance(result, dict)
-        assert result['id'] == request['id']
-        assert 'result' in result or 'error' in result
 
         LOG.debug('rpc result', extra={
             **self._extra,
-            'rpc_call': request['id'],
+            'rpc_req': req_id,
             'rpc_time': timer.time_ms(),
             'rpc_response': result
         })
 
+        if isinstance(request, list):  # is batch
+            if isinstance(result, dict):
+                assert 'error' in result
+                raise RpcError(result['error'], request, self.endpoint.url)
+            else:
+                assert isinstance(result, list)
+                assert len(result) == len(request)
+                result.sort(key=lambda i: i['id'])
+                return [self._unpack_result(req, res) for req, res in zip(request, result)]
+        else:
+            return self._unpack_result(request, result)
+
+    def _unpack_result(self, request: RpcRequest, result) -> Any:
+        assert isinstance(result, dict)
+        assert request['id'] == result['id']
         if 'error' in result:
             raise RpcError(result['error'], request, self.endpoint.url)
         else:
-            self._count_request(timer)
             return result['result']
 
     def _count_request(self, timer: _Timer):

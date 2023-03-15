@@ -2,7 +2,7 @@ import asyncio
 import heapq
 import logging
 import time
-from typing import NamedTuple, Any, Optional
+from typing import NamedTuple, Any, Optional, Union, Iterable
 
 from etha.ingest.rpc.connection import RpcConnection, RpcEndpoint, RpcEndpointMetrics, RpcRequest, RpcRetryException
 
@@ -12,9 +12,13 @@ LOG = logging.getLogger(__name__)
 
 class _ReqItem(NamedTuple):
     priority: int
-    id: int
-    request: RpcRequest
+    id: Any
+    request: Union[RpcRequest, list[RpcRequest]]
     future: asyncio.Future
+
+
+RpcBatchCallItem = tuple[str, Optional[list[Any]]]
+RpcBatchCall = list[RpcBatchCallItem]
 
 
 class RpcClient:
@@ -43,13 +47,51 @@ class RpcClient:
         )
 
         LOG.debug('rpc call', extra={
-            'rpc_call': request['id'],
+            'rpc_req': request['id'],
             'rpc_priority': priority,
             'rpc_method': method,
             'rpc_params': params
         })
 
-        heapq.heappush(self._queue, item)
+        self._push(item)
+        self._schedule_soon()
+        return item.future
+
+    def batch_call(self, calls: list[tuple[str, Optional[list[Any]]]], priority: int = 0) -> asyncio.Future[list[Any]]:
+        if not calls:
+            f = asyncio.get_event_loop().create_future()
+            f.set_result([])
+            return f
+
+        request = []
+        req_id = self._id, self._id + len(calls)
+        self._id += len(calls)
+
+        for i, (method, params) in enumerate(calls):
+            call_id = req_id[0] + i
+
+            request.append({
+                'id': call_id,
+                'jsonrpc': '2.0',
+                'method': method,
+                'params': params
+            })
+
+            LOG.debug('rpc call', extra={
+                'rpc_req': req_id,
+                'rpc_priority': priority,
+                'rpc_method': method,
+                'rpc_params': params
+            })
+
+        item = _ReqItem(
+            priority,
+            req_id,
+            request,
+            asyncio.get_event_loop().create_future()
+        )
+
+        self._push(item)
         self._schedule_soon()
         return item.future
 
@@ -93,10 +135,10 @@ class RpcClient:
 
     async def _send(self, con: RpcConnection, item: _ReqItem):
         try:
-            result = await con.request(item.request)
+            result = await con.request(item.id, item.request)
             item.future.set_result(result)
         except RpcRetryException:
-            self._queue.append(item)
+            self._push(item)
         except Exception as ex:
             item.future.set_exception(ex)
         finally:
@@ -112,7 +154,10 @@ class RpcClient:
                 count += faster.can_serve_during(response_time)
         return count
 
-    def _take(self, n: int) -> list[_ReqItem]:
+    def _push(self, item: _ReqItem) -> None:
+        heapq.heappush(self._queue, item)
+
+    def _take(self, n: int) -> Iterable[_ReqItem]:
         n = min(len(self._queue), n)
         while n:
             yield heapq.heappop(self._queue)
