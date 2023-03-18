@@ -29,7 +29,7 @@ class BatchBuilder:
         return self.block_table.bytesize() \
             + self.tx_table.bytesize() \
             + self.log_table.bytesize() \
-            + self.trace_table.bytesize()
+            + round(self.trace_table.bytesize() / 3)
 
     def append(self, block: Block):
         self.block_table.append(block)

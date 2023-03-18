@@ -1,7 +1,8 @@
 import asyncio
 import logging
+import sys
 import time
-from typing import Optional, NamedTuple, Any, TypedDict, Literal, Callable, Union
+from typing import Optional, NamedTuple, Any, TypedDict, Literal, Callable, Union, Tuple, Set
 
 import httpx
 
@@ -35,6 +36,7 @@ class RpcEndpoint(NamedTuple):
     request_timeout: int = 10_000
     rps_limit: Optional[int] = None
     rps_limit_window: int = 10
+    missing_methods: Union[list[str], Set[str], Tuple[str, ...]] = ()
 
 
 class RpcEndpointMetrics(NamedTuple):
@@ -49,8 +51,8 @@ class RpcRetryException(Exception):
 
 
 class _Timer:
-    def __init__(self):
-        self.beg = time.time()
+    def __init__(self, current_time: Optional[float] = None):
+        self.beg = current_time or time.time()
         self._end = None
 
     @property
@@ -94,24 +96,10 @@ class RpcConnection:
         self._errors_in_row = 0
         self._pending_requests = 0
         self._extra = {'rpc_url': endpoint.url}
+        self.in_queue = 0
 
     def avg_response_time(self) -> float:
         return self._speed.time() or 0.01
-
-    def is_online(self) -> bool:
-        return self._online
-
-    def get_capacity(self, current_time: Optional[float] = None) -> int:
-        cap = max(0, self.endpoint.capacity - self._pending_requests)
-        if self.endpoint.rps_limit:
-            cap = min(cap, max(0, self.endpoint.rps_limit - self._rate.get(current_time)))
-        return cap
-
-    def can_serve_during(self, duration_secs: float) -> int:
-        response_time = self.avg_response_time()
-        if self.endpoint.rps_limit:
-            response_time = max(response_time, 1 / self.endpoint.rps_limit)
-        return max(0, round((duration_secs - 2 * response_time) / duration_secs))
 
     def metrics(self) -> RpcEndpointMetrics:
         return RpcEndpointMetrics(
@@ -121,10 +109,36 @@ class RpcConnection:
             self._errors
         )
 
+    def is_online(self) -> bool:
+        return self._online
+
+    def get_capacity(self) -> int:
+        return max(0, self.endpoint.capacity - self._pending_requests)
+
+    def get_rps_capacity(self, current_time: Optional[float] = None) -> int:
+        if self.endpoint.rps_limit:
+            return max(0, self.endpoint.rps_limit - self._rate.get(current_time))
+        else:
+            return sys.maxsize
+
+    def can_handle(self, request: Union[RpcRequest, BatchRpcRequest]) -> bool:
+        if not self.endpoint.missing_methods:
+            return True
+        if isinstance(request, list):
+            return any(
+                req['method'] not in self.endpoint.missing_methods
+                for req in request
+
+            )
+        else:
+            return request['method'] not in self.endpoint.missing_methods
+
     async def request(self, req_id: Any, request: Union[RpcRequest, BatchRpcRequest]) -> Any:
         timer = _Timer()
         if self._rate:
-            self._rate.inc(timer.beg)
+            size = len(request) if isinstance(request, list) else 1
+            self._rate.inc(size, timer.beg)
+
         self._pending_requests += 1
         try:
             res = await self._perform_request(req_id, request, timer)

@@ -17,23 +17,23 @@ class Rate:
         self.slot_secs = slot_secs
         self._window = []
 
-    def inc(self, current_time: Optional[float] = None) -> None:
+    def inc(self, count: int = 1, current_time: Optional[float] = None) -> None:
         current_time = current_time or time.time()
         if not self._window or current_time > self._window[-1].time + self.slot_secs:
             self._window.append(_Slot(current_time, 1))
         else:
-            self._window[-1].counter += 1
+            self._window[-1].counter += count
         self._remove_old(current_time)
 
     def get(self, current_time: Optional[float] = None) -> int:
         current_time = current_time or time.time()
         cutoff = self._cutoff_time(current_time)
-        return sum((s.counter for s in self._window if s.counter >= cutoff), 0)
+        return sum(s.counter for s in self._window if s.counter >= cutoff)
 
     def _remove_old(self, current_time: float):
         cutoff = self._cutoff_time(current_time)
         while self._window and self._window[0].time < cutoff:
-            self._window.pop()
+            self._window.pop(0)
 
     def _cutoff_time(self, current_time: float):
         return current_time - (self.window_size + 1) * self.slot_secs

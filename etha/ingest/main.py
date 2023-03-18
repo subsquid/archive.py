@@ -1,11 +1,9 @@
 import argparse
 import asyncio
-import itertools
 import logging
 import multiprocessing as mp
 import os
 import sys
-from typing import Iterable, TypeVar
 
 from etha.counters import Progress
 from etha.fs import create_fs
@@ -21,6 +19,38 @@ from etha.util import run_async_program, init_child_process, create_child_task, 
 LOG = logging.getLogger('etha.ingest.main')
 
 
+class EndpointAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        endpoints = namespace.__dict__.setdefault('endpoints', [])
+        endpoint = {'url': values}
+        endpoints.append(endpoint)
+
+
+class EndpointOptionAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        if 'endpoints' not in namespace:
+            raise argparse.ArgumentError(
+                self,
+                f'"-e, --endpoint" option must be specified before "{option_string}"'
+            )
+        endpoint = namespace.endpoints[-1]
+        endpoint[self.dest] = values
+
+
+class EndpointListOptionAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        if 'endpoints' not in namespace:
+            raise argparse.ArgumentError(
+                self,
+                f'"-e, --endpoint" option must be specified before "{option_string}"'
+            )
+        endpoint = namespace.endpoints[-1]
+        if self.dest in endpoint:
+            endpoint[self.dest].append(values)
+        else:
+            endpoint[self.dest] = [values]
+
+
 def parse_cli_arguments():
     program = argparse.ArgumentParser(
         description='Subsquid eth archive ingest'
@@ -28,7 +58,7 @@ def parse_cli_arguments():
 
     program.add_argument(
         '-e', '--endpoint',
-        action='append',
+        action=EndpointAction,
         metavar='URL',
         required=True,
         default=[],
@@ -37,20 +67,36 @@ def parse_cli_arguments():
 
     program.add_argument(
         '-c', '--endpoint-capacity',
-        action='append',
+        action=EndpointOptionAction,
+        dest='capacity',
         metavar='N',
         type=int,
-        default=[],
         help='maximum number of allowed pending requests'
     )
 
     program.add_argument(
         '-r', '--endpoint-rate-limit',
-        action='append',
+        action=EndpointOptionAction,
+        dest='rps_limit',
         metavar='RPS',
         type=int,
-        default=[],
         help='maximum number of requests per second'
+    )
+
+    program.add_argument(
+        '--batch-limit',
+        dest='batch_limit',
+        metavar='N',
+        type=int,
+        default=200,
+        help='maximum number of requests in RPC batch'
+    )
+
+    program.add_argument(
+        '-m', '--endpoint-missing-method',
+        action=EndpointListOptionAction,
+        dest='missing_methods',
+        metavar='NAME'
     )
 
     program.add_argument(
@@ -117,20 +163,12 @@ def parse_cli_arguments():
 
 
 async def main(args):
-    endpoints = [
-        RpcEndpoint(
-            url=url,
-            capacity=cap,
-            rps_limit=rps
-        )
-        for url, cap, rps in zip(
-            args.endpoint,
-            _repeat_last(5, args.endpoint_capacity),
-            _repeat_last(None, args.endpoint_rate_limit)
-        )
-    ]
+    endpoints = [RpcEndpoint(**e) for e in args.endpoints]
 
-    rpc = RpcClient(endpoints)
+    rpc = RpcClient(
+        endpoints=endpoints,
+        batch_limit=args.batch_limit
+    )
 
     fs = create_fs(args.dest or '.', s3_endpoint=args.s3_endpoint)
 
@@ -232,16 +270,9 @@ def _write_loop(writer: Writer, write_queue: mp.Queue) -> None:
         for b in blocks:
             bb.append(b)
 
-        if bb.buffered_bytes() > 512 * 1024 * 1024:
+        if bb.buffered_bytes() > 1024 * 1024 * 1024:
             batch = bb.build()
             writer.write(batch)
-
-
-_T = TypeVar('_T')
-
-
-def _repeat_last(default: _T, seq: Iterable[_T]) -> Iterable[_T]:
-    return itertools.chain(seq, itertools.repeat(default))
 
 
 if __name__ == '__main__':

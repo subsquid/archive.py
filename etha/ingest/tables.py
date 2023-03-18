@@ -191,10 +191,10 @@ class TraceTableBuilder(TableBuilderBase):
         self.reward_type = Column(pyarrow.string())
 
     def append(self, trace: Trace):
-        self.block_number.append(qty2int(trace['blockNumber']))
+        self.block_number.append(trace['blockNumber'])
         self.trace_address.append(trace['traceAddress'])
         self.subtraces.append(trace['subtraces'])
-        self.transaction_index.append(_get_optional_qty(trace, 'transactionIndex'))
+        self.transaction_index.append(trace.get('transactionIndex'))
         self.type.append(trace['type'])
         self.error.append(trace.get('error'))
 
@@ -204,9 +204,14 @@ class TraceTableBuilder(TableBuilderBase):
             self.create_value.append(qty2int(action['value']))
             self.create_gas.append(qty2int(action['gas']))
             self.create_init.append(action['init'])
-            self.create_result_gas_used.append(qty2int(action['result']['gasUsed']))
-            self.create_result_code.append(action['result']['code'])
-            self.create_result_address.append(action['result']['address'])
+            if result := trace.get('result'):
+                self.create_result_gas_used.append(qty2int(result['gasUsed']))
+                self.create_result_code.append(result['code'])
+                self.create_result_address.append(result['address'])
+            else:
+                self.create_result_gas_used.append(None)
+                self.create_result_code.append(None)
+                self.create_result_address.append(None)
         else:
             self.create_from.append(None)
             self.create_value.append(None)
@@ -223,9 +228,13 @@ class TraceTableBuilder(TableBuilderBase):
             self.call_value.append(qty2int(action['value']))
             self.call_gas.append(qty2int(action['gas']))
             self.call_input.append(action['input'])
-            self.call_type.append(action['type'])
-            self.call_result_gas_used.append(qty2int(action['result']['gasUsed']))
-            self.call_result_output.append(action['result']['output'])
+            self.call_type.append(action['callType'])
+            if result := trace.get('result'):
+                self.call_result_gas_used.append(qty2int(result['gasUsed']))
+                self.call_result_output.append(result['output'])
+            else:
+                self.call_result_gas_used.append(None)
+                self.call_result_output.append(None)
         else:
             self.call_from.append(None)
             self.call_to.append(None)
@@ -250,19 +259,11 @@ class TraceTableBuilder(TableBuilderBase):
             action = trace['action']
             self.reward_author.append(action['author'])
             self.reward_value.append(qty2int(action['value']))
-            self.reward_type.append(action['type'])
+            self.reward_type.append(action['rewardType'])
         else:
             self.reward_author.append(None)
             self.reward_value.append(None)
             self.reward_type.append(None)
-
-
-def _get_optional_qty(rec: dict, key: str) -> Optional[int]:
-    v = rec.get(key, None)
-    if v is None:
-        return None
-    else:
-        return int(v)
 
 
 def qty2int(v: Qty) -> int:

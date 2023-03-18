@@ -22,12 +22,31 @@ write:
 	@cat data/blocks.jsonl | $(PY) -m etha.ingest.main --dest data/parquet
 
 
-ingest:
-	@$(PY) -m etha.ingest.main --dest data/mainnet -e ${ETH_NODE} \
+ingest-eth:
+	@$(PY) -m etha.ingest.main --dest data/mainnet \
+		-e ${ETH_NODE} \
 		-c 10 \
+		-m trace_block \
+		-m eth_getTransactionReceipt \
+		-e ${ETH_BLAST} \
+		-c 10 \
+		-r 500 \
+		--batch-limit 100 \
 		--with-receipts \
+		--with-traces \
 		--first-block 15000000
 
+
+ingest-poly:
+	@$(PY) -m etha.ingest.main --dest data/poly \
+		-e ${POLY_POKT} \
+		-c 20 \
+		-m eth_getTransactionReceipt \
+		-e ${POLY_BLAST} \
+		-c 10 \
+		-r 500 \
+		--batch-limit 100 \
+		--first-block 40000000
 
 router:
 	@$(PY) -m etha.worker.fake_router
@@ -52,4 +71,4 @@ task:
 		QmXppbDq35YX4zxeZbK1MTg5jnaR1q2ce9AXURaUD98Ty5
 
 
-.PHONY: init dbuild-ingest query write ingest task
+.PHONY: init dbuild-ingest query write ingest-eth ingest-poly task

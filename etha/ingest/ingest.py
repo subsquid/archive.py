@@ -39,7 +39,9 @@ class Ingest:
                 yield blocks
 
     def _schedule_strides(self):
-        while len(self._strides) < 5 and not self._is_finished() and self._dist() > 0:
+        while len(self._strides) < max(1, min(50, self._rpc.get_total_capacity())) \
+                and not self._is_finished() \
+                and self._dist() > 0:
             from_block = self._height + 1
             stride_size = min(self._stride_size, self._dist())
             if self._end is not None:
