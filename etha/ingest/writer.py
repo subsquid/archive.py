@@ -1,9 +1,11 @@
-from typing import NamedTuple
+from functools import cache
+from typing import NamedTuple, Optional
 
 import pyarrow
 
 from .model import Block
 from .tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder, TraceTableBuilder
+from ..fs import create_fs
 from ..layout import ChunkWriter
 
 
@@ -56,7 +58,7 @@ class BatchBuilder:
         return batch
 
 
-class Writer:
+class BlockWriter:
     def __init__(self, chunk_writer: ChunkWriter, with_traces: bool):
         self.chunk_writer = chunk_writer
         self.with_traces = with_traces
@@ -120,3 +122,35 @@ class Writer:
                 use_dictionary=False,
                 **kwargs
             )
+
+
+class WriteOptions(NamedTuple):
+    dest: str
+    s3_endpoint: Optional[str] = None
+    chunk_size: int = 1024
+    first_block: int = 0
+    last_block: Optional[int] = None
+    with_traces: bool = False
+
+
+# WriteOptions class is serializable, while WriteService is not
+class WriteService:
+    def __init__(self, options: WriteOptions):
+        self.options = options
+
+    @cache
+    def chunk_writer(self) -> ChunkWriter:
+        fs = create_fs(self.options.dest, s3_endpoint=self.options.s3_endpoint)
+        return ChunkWriter(
+            fs,
+            first_block=self.options.first_block,
+            last_block=self.options.last_block
+        )
+
+    @cache
+    def block_writer(self) -> BlockWriter:
+        return BlockWriter(
+            self.chunk_writer(),
+            with_traces=self.options.with_traces
+        )
+
