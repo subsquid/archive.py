@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import concurrent.futures
+import uvloop
 import logging
 import os
 from typing import Optional
@@ -269,4 +270,5 @@ class IngestionProcess:
 
 
 if __name__ == '__main__':
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     run_async_program(main, parse_cli_arguments(), log=LOG)
