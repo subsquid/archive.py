@@ -1,9 +1,13 @@
 import asyncio
+import logging
 from itertools import groupby
 from typing import Optional, AsyncIterator
 
 from etha.ingest.model import Block, Log, Receipt, Trace
 from etha.ingest.rpc import RpcClient, RpcBatchCall
+
+
+LOG = logging.getLogger(__name__)
 
 
 class Ingest:
@@ -79,6 +83,10 @@ class Ingest:
         return max(height - self._finality_offset, 0)
 
     async def _fetch_stride(self, from_block: int, to_block: int) -> list[Block]:
+        extra = {'first_block': from_block, 'last_block': to_block}
+
+        LOG.debug('fetching new stride', extra=extra)
+
         block_batch: RpcBatchCall = [
             ('eth_getBlockByNumber', [hex(i), True])
             for i in range(from_block, to_block + 1)
@@ -148,5 +156,7 @@ class Ingest:
             if self._with_receipts:
                 for tx in block['transactions']:
                     tx['receipt_'] = receipts_by_tx[tx['hash']]
+
+        LOG.debug('stride is ready', extra=extra)
 
         return blocks

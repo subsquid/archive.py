@@ -1,3 +1,4 @@
+import logging
 from functools import cache
 from typing import NamedTuple, Optional
 
@@ -7,6 +8,9 @@ from .model import Block
 from .tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder, TraceTableBuilder
 from ..fs import create_fs
 from ..layout import ChunkWriter
+
+
+LOG = logging.getLogger(__name__)
 
 
 class DataBatch(NamedTuple):
@@ -73,6 +77,9 @@ class BlockWriter:
         first_block = block_numbers[0].as_py()
         last_block = block_numbers[-1].as_py()
 
+        extra = {'first_block': first_block, 'last_block': last_block}
+        LOG.debug('saving data chunk', extra=extra)
+
         transactions = transactions.sort_by([('to', 'ascending'), ('sighash', 'ascending')])
         logs = logs.sort_by([('address', 'ascending'), ('topic0', 'ascending')])
 
@@ -91,6 +98,8 @@ class BlockWriter:
                 **kwargs
             )
 
+            LOG.debug('wrote %s', loc.abs('logs.parquet'))
+
             loc.write_parquet(
                 'transactions.parquet',
                 transactions,
@@ -98,6 +107,8 @@ class BlockWriter:
                 row_group_size=15000,
                 **kwargs
             )
+
+            LOG.debug('wrote %s', loc.abs('transactions.parquet'))
 
             if self.with_traces:
                 loc.write_parquet(
@@ -116,12 +127,16 @@ class BlockWriter:
                     **kwargs
                 )
 
+                LOG.debug('wrote %s', loc.abs('traces.parquet'))
+
             loc.write_parquet(
                 'blocks.parquet',
                 blocks,
                 use_dictionary=False,
                 **kwargs
             )
+
+            LOG.debug('wrote %s', loc.abs('blocks.parquet'))
 
 
 class WriteOptions(NamedTuple):
