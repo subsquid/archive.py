@@ -46,7 +46,6 @@ ingest-poly:
 		-c 10 \
 		-r 1000 \
 		--batch-limit 100 \
-		--write-chunk-size 100 \
 		--first-block 40000000
 
 router:
