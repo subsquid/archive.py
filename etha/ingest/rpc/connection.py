@@ -10,6 +10,7 @@ from etha.counters import Speed, Rate
 
 
 LOG = logging.getLogger(__name__)
+# LOG.setLevel(logging.INFO)
 
 
 class RpcRequest(TypedDict):

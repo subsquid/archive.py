@@ -2,17 +2,15 @@ import argparse
 import asyncio
 import concurrent.futures
 import logging
-import multiprocessing as mp
 import os
 from typing import Optional
 
 from etha.counters import Progress
 from etha.ingest.ingest import Ingest
-from etha.ingest.model import Block
 from etha.ingest.rpc import RpcClient, RpcEndpoint
 from etha.ingest.tables import qty2int
 from etha.ingest.writer import BatchBuilder, WriteOptions, WriteService
-from etha.util import run_async_program, init_child_process, create_child_task, monitor_pipeline
+from etha.util import run_async_program, create_child_task, monitor_pipeline
 
 
 LOG = logging.getLogger('etha.ingest.main')
@@ -213,20 +211,43 @@ class IngestionProcess:
     def __init__(self, ingest: Ingest, write_service: WriteService):
         self._running = False
         self._ingest = ingest
-        self._write_queue = mp.Queue(10)
-        self._write_process = mp.Process(
-            target=_write_loop,
-            args=(self._write_queue, write_service.options),
-            name='writer'
-        )
+        self._write_service = write_service
         self._progress = Progress(window_size=10, window_granularity_seconds=1)
         self._progress.set_current_value(write_service.chunk_writer().next_block)
 
     async def _ingest_loop(self):
-        async for blocks in self._ingest.loop():
-            self._write_queue.put(blocks)
-            last_block = qty2int(blocks[-1]['number'])
-            self._progress.set_current_value(last_block)
+        bb = BatchBuilder()
+        writer = self._write_service.block_writer()
+        chunk_size = self._write_service.options.chunk_size
+
+        with concurrent.futures.ThreadPoolExecutor(
+                max_workers=1,
+                thread_name_prefix='block_writer'
+        ) as executor:
+            prev_write: Optional[concurrent.futures.Future] = None
+
+            async for blocks in self._ingest.loop():
+                first_block = qty2int(blocks[0]['number'])
+                last_block = qty2int(blocks[-1]['number'])
+                extra = {'first_block': first_block, 'last_block': last_block}
+
+                for b in blocks:
+                    bb.append(b)
+
+                if bb.buffered_bytes() > chunk_size * 1024 * 1024:
+                    batch = bb.build()
+
+                    LOG.debug('time to write a chunk', extra=extra)
+                    if prev_write:
+                        prev_write.result()
+
+                    prev_write = executor.submit(writer.write, batch)
+                    LOG.debug('scheduled for writing', extra=extra)
+
+                self._progress.set_current_value(last_block)
+
+            if prev_write:
+                prev_write.result()
 
     async def _report_loop(self):
         while True:
@@ -237,65 +258,12 @@ class IngestionProcess:
                 ]))
             await asyncio.sleep(5)
 
-    async def _write_process_poll_loop(self):
-        self._write_process.start()
-        while True:
-            try:
-                await asyncio.sleep(1)
-            except:
-                self._write_process.kill()
-                self._write_process.join()
-                return
-            if self._write_process.is_alive():
-                pass
-            else:
-                self._write_process.join()
-                if self._write_process.exitcode == 0:
-                    return
-                else:
-                    raise Exception(
-                        f'write process unexpectedly terminated with exit code {self._write_process.exitcode}'
-                    )
-
     async def run(self):
         assert not self._running
         self._running = True
         ingest_task = create_child_task('ingest', self._ingest_loop())
-        write_monitor_task = create_child_task('write_monitor', self._write_process_poll_loop())
         report_task = create_child_task('report', self._report_loop())
-        try:
-            await monitor_pipeline([ingest_task, write_monitor_task], service_task=report_task, log=LOG)
-        finally:
-            self._write_process.close()
-            self._write_queue.close()
-
-
-def _write_loop(write_queue: mp.Queue, write_options: WriteOptions) -> None:
-    init_child_process()
-
-    writer = WriteService(write_options).block_writer()
-    bb = BatchBuilder()
-    prev_write: Optional[concurrent.futures.Future] = None
-
-    with concurrent.futures.ThreadPoolExecutor(
-            max_workers=1,
-            thread_name_prefix='block_writer'
-    ) as executor:
-        while True:
-            blocks: list[Block] = write_queue.get()
-            if not blocks:
-                if prev_write:
-                    prev_write.result()
-                return
-
-            for b in blocks:
-                bb.append(b)
-
-            if bb.buffered_bytes() > write_options.chunk_size * 1024 * 1024:
-                batch = bb.build()
-                if prev_write:
-                    prev_write.result()
-                prev_write = executor.submit(writer.write, batch)
+        await monitor_pipeline([ingest_task], service_task=report_task)
 
 
 if __name__ == '__main__':

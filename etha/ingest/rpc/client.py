@@ -11,6 +11,7 @@ from etha.ingest.rpc.connection import RpcConnection, RpcEndpoint, RpcEndpointMe
 
 
 LOG = logging.getLogger(__name__)
+# LOG.setLevel(logging.INFO)
 
 
 RpcBatchCallItem = tuple[str, Optional[list[Any]]]

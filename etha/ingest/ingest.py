@@ -28,7 +28,7 @@ class Ingest:
         self._end = to_block
         self._chain_height = 0
         self._strides = []
-        self._stride_size = 10
+        self._stride_size = 20
 
     async def loop(self) -> AsyncIterator[list[Block]]:
         while not self._is_finished() or len(self._strides):
