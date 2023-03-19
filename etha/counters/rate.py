@@ -28,7 +28,7 @@ class Rate:
     def get(self, current_time: Optional[float] = None) -> int:
         current_time = current_time or time.time()
         cutoff = self._cutoff_time(current_time)
-        return sum(s.counter for s in self._window if s.counter >= cutoff)
+        return sum(s.counter for s in self._window if s.time >= cutoff)
 
     def _remove_old(self, current_time: float):
         cutoff = self._cutoff_time(current_time)

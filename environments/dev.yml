@@ -21,5 +21,4 @@ dependencies:
   - uvicorn
   - uvloop
   - yappi
-  - py-evm
   - prometheus_client

@@ -38,13 +38,13 @@ ingest-eth:
 
 
 ingest-poly:
-	@$(PY) -m etha.ingest.main --dest data/poly \
+	@$(PY) -m etha.ingest.main --dest s3://s2-polygon-matic \
 		-e ${POLY_POKT} \
-		-c 20 \
+		-c 10 \
 		-m eth_getTransactionReceipt \
 		-e ${POLY_BLAST} \
 		-c 10 \
-		-r 500 \
+		-r 1000 \
 		--batch-limit 100 \
 		--first-block 40000000
 
