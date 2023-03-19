@@ -84,8 +84,9 @@ class RpcConnection:
                 read=endpoint.request_timeout
             ),
             limits=httpx.Limits(
-                max_connections=endpoint.capacity,
-                max_keepalive_connections=endpoint.capacity
+                max_connections=endpoint.capacity + 1,
+                max_keepalive_connections=endpoint.capacity + 1,
+                keepalive_expiry=60
             )
         )
         self._speed = Speed(window_size=100)
