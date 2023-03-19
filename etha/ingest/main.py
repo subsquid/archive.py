@@ -231,6 +231,8 @@ class IngestionProcess:
                 last_block = qty2int(blocks[-1]['number'])
                 extra = {'first_block': first_block, 'last_block': last_block}
 
+                LOG.debug('got stride', extra=extra)
+
                 for b in blocks:
                     bb.append(b)
 
