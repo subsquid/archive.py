@@ -19,11 +19,11 @@ class Rate:
 
     def inc(self, count: int = 1, current_time: Optional[float] = None) -> None:
         current_time = current_time or time.time()
+        self._remove_old(current_time)
         if not self._window or current_time > self._window[-1].time + self.slot_secs:
             self._window.append(_Slot(current_time, 1))
         else:
             self._window[-1].counter += count
-        self._remove_old(current_time)
 
     def get(self, current_time: Optional[float] = None) -> int:
         current_time = current_time or time.time()

@@ -123,25 +123,23 @@ class RpcConnection:
         else:
             return sys.maxsize
 
-    def can_handle(self, request: Union[RpcRequest, BatchRpcRequest]) -> bool:
-        if not self.endpoint.missing_methods:
-            return True
-        if isinstance(request, list):
-            return any(
-                req['method'] not in self.endpoint.missing_methods
-                for req in request
+    def request(
+            self,
+            req_id: Any,
+            request: Union[RpcRequest, BatchRpcRequest],
+            current_time: Optional[float] = None
+    ) -> asyncio.Task:
+        timer = _Timer(current_time=current_time)
 
-            )
-        else:
-            return request['method'] not in self.endpoint.missing_methods
-
-    async def request(self, req_id: Any, request: Union[RpcRequest, BatchRpcRequest]) -> Any:
-        timer = _Timer()
         if self._rate:
             size = len(request) if isinstance(request, list) else 1
             self._rate.inc(size, timer.beg)
 
         self._pending_requests += 1
+
+        return asyncio.create_task(self._handle_request(req_id, request, timer))
+
+    async def _handle_request(self, req_id, request: Union[RpcRequest, BatchRpcRequest], timer: _Timer) -> Any:
         try:
             res = await self._perform_request(req_id, request, timer)
             self._count_request(timer)

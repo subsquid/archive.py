@@ -21,7 +21,7 @@ RpcBatchCall = list[RpcBatchCallItem]
 @dataclass(order=True)
 class _ReqItem:
     priority: int
-    id: Any
+    id: int
     request: Union[RpcRequest, list[RpcRequest]]
     future: asyncio.Future
 
@@ -37,13 +37,6 @@ class _ReqItem:
             return len(self.request)
         else:
             return 1
-
-
-@dataclass
-class _ConInfo:
-    con: RpcConnection
-    cap: int
-    rps_cap: int
 
 
 class RpcClient:
@@ -91,6 +84,7 @@ class RpcClient:
 
         LOG.debug('rpc call', extra={
             'rpc_req': req_id,
+            'rpc_call_id': req_id,
             'rpc_priority': priority,
             'rpc_method': method,
             'rpc_params': params
@@ -110,11 +104,11 @@ class RpcClient:
 
         for batch in _split_list(calls, self._max_batch_size):
             request = []
-            req_id = self._id, self._id + len(batch)
-            self._id += len(batch)
+            req_id = self._id
 
             for i, (method, params) in enumerate(batch):
-                call_id = req_id[0] + i
+                call_id = self._id
+                self._id += 1
 
                 request.append({
                     'id': call_id,
@@ -125,6 +119,7 @@ class RpcClient:
 
                 LOG.debug('rpc call', extra={
                     'rpc_req': req_id,
+                    'rpc_call_id': call_id,
                     'rpc_priority': priority,
                     'rpc_method': method,
                     'rpc_params': params
@@ -174,31 +169,26 @@ class RpcClient:
         current_time = time.time()
         schedule_later = False
 
-        connections: list[_ConInfo] = []
+        connections = []
         for c in self._connections:
             if c.is_online() and c.get_capacity() > 0:
                 rpc_cap = c.get_rps_capacity(current_time)
                 if rpc_cap > 0:
-                    connections.append(_ConInfo(
-                        con=c,
-                        cap=c.get_capacity(),
-                        rps_cap=rpc_cap
-                    ))
+                    connections.append(c)
                 else:
                     schedule_later = True
 
         put_back: list[_ReqItem] = []
 
         while connections and (item := self._pop()):
-            connections.sort(key=lambda c: (c.con.in_queue, c.con.avg_response_time()))
+            connections.sort(key=lambda c: (c.in_queue, c.avg_response_time()))
             con_idx = None
             rpc_limit_hit = False
             for i, c in enumerate(connections):
-                if c.cap <= 0:
+                if not self._can_handle(c, item):
                     continue
-                if not self._can_handle(c.con, item):
-                    continue
-                if c.rps_cap < item.size():
+                rps_cap = c.get_rps_capacity(current_time)
+                if rps_cap < item.size():
                     rpc_limit_hit = True
                     continue
                 con_idx = i
@@ -210,15 +200,9 @@ class RpcClient:
                 self._reg_in_queue(item)
             else:
                 c = connections[con_idx]
-                c.cap -= 1
-                c.rps_cap -= item.size()
-
-                if c.cap == 0 or c.rps_cap == 0:
+                self._send(c, item, current_time)
+                if c.get_capacity() == 0 or c.get_rps_capacity(current_time) == 0:
                     del connections[con_idx]
-
-                # FIXME: if the task will not be started before the next scheduling round
-                #   we'll get incorrect connection capacity values
-                asyncio.create_task(self._send(c.con, item))
 
         for item in put_back:
             heapq.heappush(self._queue, item)
@@ -257,16 +241,20 @@ class RpcClient:
         else:
             return True
 
-    async def _send(self, con: RpcConnection, item: _ReqItem):
-        try:
-            result = await con.request(item.id, item.request)
-            item.future.set_result(result)
-        except RpcRetryException:
-            self._push(item)
-        except Exception as ex:
-            item.future.set_exception(ex)
-        finally:
+    def _send(self, con: RpcConnection, item: _ReqItem, current_time: float):
+        def callback(fut):
+            ex = fut.exception()
+            if ex is None:
+                result = fut.result()
+                item.future.set_result(result)
+            elif isinstance(ex, RpcRetryException):
+                self._push(item)
+            else:
+                item.future.set_exception(ex)
             self._schedule_soon()
+
+        future = con.request(item.id, item.request, current_time=current_time)
+        future.add_done_callback(callback)
 
 
 _T = TypeVar('_T')
