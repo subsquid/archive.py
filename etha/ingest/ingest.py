@@ -5,6 +5,7 @@ from typing import Optional, AsyncIterator
 
 from etha.ingest.model import Block, Log, Receipt, Trace
 from etha.ingest.rpc import RpcClient, RpcBatchCall
+from etha.ingest.block import calculate_hash
 
 
 LOG = logging.getLogger(__name__)
@@ -141,6 +142,8 @@ class Ingest:
         for i, block in enumerate(blocks):
             block_number = block['number']
             block_hash = block['hash']
+
+            assert calculate_hash(block) == block_hash
 
             block_logs = logs_by_block.get(block_number, [])
             for item in block_logs:
