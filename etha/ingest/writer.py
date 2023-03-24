@@ -76,14 +76,15 @@ class BlockWriter:
         block_numbers: pyarrow.ChunkedArray = blocks.column('number')
         first_block = block_numbers[0].as_py()
         last_block = block_numbers[-1].as_py()
+        last_hash = blocks.column('hash')[-1].as_py()
 
-        extra = {'first_block': first_block, 'last_block': last_block}
+        extra = {'first_block': first_block, 'last_block': last_block, 'last_hash': last_hash}
         LOG.debug('saving data chunk', extra=extra)
 
         transactions = transactions.sort_by([('to', 'ascending'), ('sighash', 'ascending')])
         logs = logs.sort_by([('address', 'ascending'), ('topic0', 'ascending')])
 
-        with self.chunk_writer.write(first_block, last_block) as loc:
+        with self.chunk_writer.write(first_block, last_block, last_hash[2:]) as loc:
             kwargs = {
                 'data_page_size': 32 * 1024,
                 'compression': 'zstd',
