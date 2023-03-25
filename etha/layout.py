@@ -153,6 +153,13 @@ class ChunkWriter:
         else:
             return self._top
 
+    @property
+    def last_hash(self) -> str | None:
+        if self._ranges:
+            return '0x' + self._ranges[-1][2]
+        else:
+            return None
+
     @contextmanager
     def write(self, first_block: int, last_block: int, last_hash: str) -> AbstractContextManager[Fs]:
         assert self.next_block <= first_block <= last_block <= self.last_block

@@ -13,18 +13,22 @@ LOG = logging.getLogger(__name__)
 
 class Ingest:
     def __init__(
-            self,
-            rpc: RpcClient,
-            finality_offset: int = 10,
-            from_block: int = 0,
-            to_block: Optional[int] = None,
-            with_receipts: bool = False,
-            with_traces: bool = False
+        self,
+        rpc: RpcClient,
+        finality_offset: int = 10,
+        first_block: int = 0,
+        from_block: int = 0,
+        to_block: Optional[int] = None,
+        last_hash: Optional[str] = None,
+        with_receipts: bool = False,
+        with_traces: bool = False
     ):
         self._rpc = rpc
         self._finality_offset = finality_offset
         self._with_receipts = with_receipts
         self._with_traces = with_traces
+        self._first_block = first_block
+        self._last_hash = last_hash
         self._height = from_block - 1
         self._end = to_block
         self._chain_height = 0
@@ -40,6 +44,7 @@ class Ingest:
                 self._schedule_strides()
             else:
                 blocks = await stride
+                self._validate_blocks(blocks)
                 self._schedule_strides()
                 yield blocks
 
@@ -163,3 +168,15 @@ class Ingest:
         LOG.debug('stride is ready', extra=extra)
 
         return blocks
+
+    def _validate_blocks(self, blocks: list[Block]):
+        for block in blocks:
+            if self._last_hash == block['parentHash'] or int(block['number'], 16) == self._first_block:
+                self._last_hash = block['hash']
+            else:
+                block_number = int(block['number'], 16)
+                raise InconsistencyError(f"block {block_number} doesn't match hash from the parent block: '{block['hash']}' != '{self._last_hash}'")
+
+
+class InconsistencyError(Exception):
+    pass
