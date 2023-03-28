@@ -12,7 +12,7 @@ def _format_block(block_number: int):
 
 
 def _parse_range(dirname: str) -> Optional[tuple[int, int, str]]:
-    m = re.match(r'^(\d{10})-(\d{10})-(\w{64})$', dirname)
+    m = re.match(r'^(\d{10})-(\d{10})-(\w{8})$', dirname)
     if m:
         beg = int(m[1])
         end = int(m[2])
@@ -156,7 +156,7 @@ class ChunkWriter:
     @property
     def last_hash(self) -> str | None:
         if self._ranges:
-            return '0x' + self._ranges[-1][2]
+            return self._ranges[-1][2]
         else:
             return None
 

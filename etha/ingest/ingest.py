@@ -5,6 +5,7 @@ from typing import Optional, AsyncIterator
 
 from etha.ingest.model import Block, Log, Receipt, Trace
 from etha.ingest.rpc import RpcClient, RpcBatchCall
+from etha.ingest.util import trim_hash, qty2int
 
 
 LOG = logging.getLogger(__name__)
@@ -168,11 +169,12 @@ class Ingest:
 
     def _validate_blocks(self, blocks: list[Block]):
         for block in blocks:
-            if self._last_hash == block['parentHash'] or int(block['number'], 16) == self._first_block:
-                self._last_hash = block['hash']
+            parent_hash = trim_hash(block['parentHash'])
+            if self._last_hash == parent_hash or qty2int(block['number']) == self._first_block:
+                self._last_hash = trim_hash(block['hash'])
             else:
-                block_number = int(block['number'], 16)
-                raise InconsistencyError(f"block {block_number} doesn't match hash from the parent block: '{block['hash']}' != '{self._last_hash}'")
+                block_number = qty2int(block['number'])
+                raise InconsistencyError(f"block {block_number} doesn't match hash from the parent block: '{parent_hash}' != '{self._last_hash}'")
 
 
 class InconsistencyError(Exception):

@@ -4,10 +4,11 @@ from typing import NamedTuple, Optional
 
 import pyarrow
 
-from .model import Block
-from .tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder, TraceTableBuilder
-from ..fs import create_fs
-from ..layout import ChunkWriter
+from etha.ingest.model import Block
+from etha.ingest.tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder, TraceTableBuilder
+from etha.ingest.util import trim_hash
+from etha.fs import create_fs
+from etha.layout import ChunkWriter
 
 
 LOG = logging.getLogger(__name__)
@@ -76,7 +77,7 @@ class BlockWriter:
         block_numbers: pyarrow.ChunkedArray = blocks.column('number')
         first_block = block_numbers[0].as_py()
         last_block = block_numbers[-1].as_py()
-        last_hash = blocks.column('hash')[-1].as_py()
+        last_hash = trim_hash(blocks.column('hash')[-1].as_py())
 
         extra = {'first_block': first_block, 'last_block': last_block, 'last_hash': last_hash}
         LOG.debug('saving data chunk', extra=extra)
@@ -84,7 +85,7 @@ class BlockWriter:
         transactions = transactions.sort_by([('to', 'ascending'), ('sighash', 'ascending')])
         logs = logs.sort_by([('address', 'ascending'), ('topic0', 'ascending')])
 
-        with self.chunk_writer.write(first_block, last_block, last_hash[2:]) as loc:
+        with self.chunk_writer.write(first_block, last_block, last_hash) as loc:
             kwargs = {
                 'data_page_size': 32 * 1024,
                 'compression': 'zstd',

@@ -1,9 +1,8 @@
-from typing import Optional
-
 import pyarrow
 
 from etha.ingest.column import Column
-from etha.ingest.model import Transaction, Log, Trace, Block, Qty
+from etha.ingest.model import Transaction, Log, Trace, Block
+from etha.ingest.util import qty2int
 
 
 def bignum():
@@ -264,7 +263,3 @@ class TraceTableBuilder(TableBuilderBase):
             self.reward_author.append(None)
             self.reward_value.append(None)
             self.reward_type.append(None)
-
-
-def qty2int(v: Qty) -> int:
-    return int(v, 16)
