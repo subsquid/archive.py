@@ -9,7 +9,8 @@ import uvicorn
 from etha.util import create_child_task, init_child_process, monitor_service_tasks, run_async_program
 from etha.worker.api import create_app
 from etha.worker.state.manager import StateManager
-
+from etha.worker.transport import HttpTransport
+from etha.worker.worker import Worker
 
 LOG = logging.getLogger('etha.worker')
 
@@ -75,16 +76,16 @@ async def main():
 
     args = program.parse_args()
 
-    sm = StateManager(
+    sm = StateManager(data_dir=args.data_dir or os.getcwd())
+    transport = HttpTransport(
         worker_id=args.worker_id,
         worker_url=args.worker_url,
-        data_dir=args.data_dir or os.getcwd(),
-        router_url=args.router
+        router_url=args.router,
     )
 
     with multiprocessing.Pool(processes=args.procs, initializer=init_child_process) as pool:
-        app = create_app(sm, pool)
-
+        worker = Worker(sm, pool, transport)
+        app = create_app(sm, worker)
         server_conf = uvicorn.Config(
             app,
             port=args.port,
@@ -97,7 +98,8 @@ async def main():
 
         await monitor_service_tasks([
             asyncio.create_task(server.run_server_task(), name='http_server'),
-            asyncio.create_task(sm.run(), name='state_manager')
+            asyncio.create_task(sm.run(), name='state_manager'),
+            asyncio.create_task(worker.run(), name='worker'),
         ], log=LOG)
 
 
