@@ -1,7 +1,8 @@
 import pyarrow
+import json
 
 from etha.ingest.column import Column
-from etha.ingest.model import Transaction, Log, Trace, Block
+from etha.ingest.model import Transaction, Log, Trace, Block, StateDiff
 from etha.ingest.util import qty2int
 
 
@@ -190,10 +191,10 @@ class TraceTableBuilder(TableBuilderBase):
         self.reward_type = Column(pyarrow.string())
 
     def append(self, trace: Trace):
-        self.block_number.append(trace['blockNumber'])
+        self.block_number.append(qty2int(trace['blockNumber_']))
         self.trace_address.append(trace['traceAddress'])
         self.subtraces.append(trace['subtraces'])
-        self.transaction_index.append(trace.get('transactionIndex'))
+        self.transaction_index.append(qty2int(trace['transactionIndex_']))
         self.type.append(trace['type'])
         self.error.append(trace.get('error'))
 
@@ -263,3 +264,24 @@ class TraceTableBuilder(TableBuilderBase):
             self.reward_author.append(None)
             self.reward_value.append(None)
             self.reward_type.append(None)
+
+
+class StateDiffTableBuilder(TableBuilderBase):
+    def __init__(self):
+        self.block_number = Column(pyarrow.int32())
+        self.transaction_index = Column(pyarrow.int32())
+        self.address = Column(pyarrow.string())
+        self.balance = Column(pyarrow.string())
+        self.code = Column(pyarrow.string())
+        self.nonce = Column(pyarrow.string())
+        self.storage = Column(pyarrow.map_(pyarrow.string(), pyarrow.string()))
+
+    def append(self, diff: StateDiff):
+        self.block_number.append(qty2int(diff['blockNumber_']))
+        self.transaction_index.append(qty2int(diff['transactionIndex_']))
+        self.address.append(diff['address_'])
+        self.balance.append(json.dumps(diff['balance']))
+        self.code.append(json.dumps(diff['code']))
+        self.nonce.append(json.dumps(diff['nonce']))
+        storage = [(k, json.dumps(v)) for k, v in diff['storage'].items()]
+        self.storage.append(storage)

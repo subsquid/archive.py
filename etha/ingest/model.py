@@ -33,6 +33,7 @@ class Block(TypedDict):
     transactions: list['Transaction']
     logs_: NotRequired[list['Log']]
     trace_: NotRequired[list['Trace']]
+    stateDiff_: NotRequired[list['StateDiff']]
 
 
 # Alternative syntax allows to use reserved keywords as keys
@@ -83,16 +84,14 @@ class _TraceBase(TypedDict):
     error: NotRequired[str]
     traceAddress: list[int]
     subtraces: int
-    blockNumber: int
-    blockHash: Hash32
+    blockNumber_: NotRequired[Qty]
+    transactionIndex_: NotRequired[Qty]
 
 
 class CreateTrace(_TraceBase):
     type: Literal['create']
     action: 'CreateTraceAction'
     result: NotRequired['CreateTraceActionResult']
-    transactionIndex: int
-    transactionHash: Hash32
 
 
 CreateTraceAction = TypedDict('CreateTraceAction', {
@@ -100,7 +99,7 @@ CreateTraceAction = TypedDict('CreateTraceAction', {
     'value': Qty,
     'gas': Qty,
     'init': Bytes,
-    'creation_method': NotRequired[Union[Literal['create'], Literal['create2']]]
+    'creation_method': NotRequired[Literal['create', 'create2']]
 })
 
 
@@ -114,8 +113,6 @@ class CallTrace(_TraceBase):
     type: Literal['call']
     action: 'CallTraceAction'
     result: 'CallTraceActionResult'
-    transactionIndex: int
-    transactionHash: Hash32
 
 
 CallTraceAction = TypedDict('CallTraceAction', {
@@ -124,7 +121,7 @@ CallTraceAction = TypedDict('CallTraceAction', {
     'value': Qty,
     'gas': Qty,
     'input': Bytes,
-    'callType': Optional[Union[Literal['call'], Literal['callcode'], Literal['delegatecall'], Literal['staticcall']]]
+    'callType': Optional[Literal['call', 'callcode', 'delegatecall', 'staticcall']]
 })
 
 
@@ -136,8 +133,6 @@ class CallTraceActionResult(TypedDict):
 class SuicideTrace(_TraceBase):
     type: Literal['suicide']
     action: 'SuicideTraceAction'
-    transactionIndex: int
-    transactionHash: Hash32
 
 
 class SuicideTraceAction(TypedDict):
@@ -146,6 +141,7 @@ class SuicideTraceAction(TypedDict):
     balance: Qty
 
 
+# is not supported for trace_replayBlockTransactions rpc call
 class RewardTrace(_TraceBase):
     type: Literal['reward']
     action: 'RewardTraceAction'
@@ -154,7 +150,47 @@ class RewardTrace(_TraceBase):
 class RewardTraceAction(TypedDict):
     author: Address20
     value: Qty
-    rewardType: Union[Literal['block'], Literal['uncle'], Literal['emptyStep'], Literal['external']]
+    rewardType: Literal['block', 'uncle', 'emptyStep', 'external']
 
 
 Trace = Union[CreateTrace, CallTrace, SuicideTrace, RewardTrace]
+
+
+AddDiff = TypedDict('AddDiff', {
+    '+': Bytes
+})
+
+
+ChangeValue = TypedDict('ChangeValue', {
+    'from': Bytes,
+    'to': Bytes,
+})
+
+
+ChangeDiff = TypedDict('ChangeDiff', {
+    '*': ChangeValue
+})
+
+
+DeleteDiff = TypedDict('DeleteDiff', {
+    '-': Bytes
+})
+
+
+Diff = Union[Literal['='], AddDiff, ChangeDiff, DeleteDiff]
+
+
+class StateDiff(TypedDict):
+    balance: Diff
+    code: Diff
+    nonce: Diff
+    storage: dict[Address20, Diff]
+    address_: Address20
+    blockNumber_: NotRequired[Qty]
+    transactionIndex_: NotRequired[Qty]
+
+
+class TransactionReplay(TypedDict):
+    stateDiff: dict[Address20, StateDiff]
+    trace: list[Trace]
+    transactionHash: Hash32

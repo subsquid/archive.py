@@ -5,7 +5,7 @@ from typing import NamedTuple, Optional
 import pyarrow
 
 from etha.ingest.model import Block
-from etha.ingest.tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder, TraceTableBuilder
+from etha.ingest.tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder, TraceTableBuilder, StateDiffTableBuilder
 from etha.ingest.util import trim_hash
 from etha.fs import create_fs
 from etha.layout import ChunkWriter
@@ -19,6 +19,7 @@ class DataBatch(NamedTuple):
     transactions: pyarrow.Table
     logs: pyarrow.Table
     traces: pyarrow.Table
+    statediffs: pyarrow.Table
     bytesize: int
 
 
@@ -31,12 +32,14 @@ class BatchBuilder:
         self.tx_table = TxTableBuilder()
         self.log_table = LogTableBuilder()
         self.trace_table = TraceTableBuilder()
+        self.statediff_table = StateDiffTableBuilder()
 
     def buffered_bytes(self) -> int:
         return self.block_table.bytesize() \
             + self.tx_table.bytesize() \
             + self.log_table.bytesize() \
-            + round(self.trace_table.bytesize() / 3)
+            + round(self.trace_table.bytesize() / 3) \
+            + round(self.statediff_table.bytesize() / 3)
 
     def append(self, block: Block):
         self.block_table.append(block)
@@ -50,6 +53,9 @@ class BatchBuilder:
         for trace in block.get('trace_', []):
             self.trace_table.append(trace)
 
+        for diff in block.get('stateDiff_', []):
+            self.statediff_table.append(diff)
+
     def build(self) -> DataBatch:
         bytesize = self.buffered_bytes()
         batch = DataBatch(
@@ -57,6 +63,7 @@ class BatchBuilder:
             transactions=self.tx_table.to_table(),
             logs=self.log_table.to_table(),
             traces=self.trace_table.to_table(),
+            statediffs=self.statediff_table.to_table(),
             bytesize=bytesize
         )
         self._init()
@@ -73,6 +80,7 @@ class BlockWriter:
         transactions = batch.transactions
         logs = batch.logs
         traces = batch.traces
+        statediffs = batch.statediffs
 
         block_numbers: pyarrow.ChunkedArray = blocks.column('number')
         first_block = block_numbers[0].as_py()
@@ -130,6 +138,16 @@ class BlockWriter:
                 )
 
                 LOG.debug('wrote %s', loc.abs('traces.parquet'))
+
+                loc.write_parquet(
+                    'statediffs.parquet',
+                    statediffs,
+                    use_dictionary=['address'],
+                    row_group_size=15000,
+                    **kwargs
+                )
+
+                LOG.debug('wrote %s', loc.abs('statediffs.parquet'))
 
             loc.write_parquet(
                 'blocks.parquet',

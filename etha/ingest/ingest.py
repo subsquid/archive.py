@@ -3,7 +3,7 @@ import logging
 from itertools import groupby
 from typing import Optional, AsyncIterator
 
-from etha.ingest.model import Block, Log, Receipt, Trace
+from etha.ingest.model import Block, Log, Receipt, TransactionReplay
 from etha.ingest.rpc import RpcClient, RpcBatchCall
 from etha.ingest.util import trim_hash, qty2int
 
@@ -108,7 +108,7 @@ class Ingest:
 
         if self._with_traces:
             trace_batch = [
-                ('trace_block', [hex(i)])
+                ('trace_replayBlockTransactions', [hex(i), ['trace', 'stateDiff']])
                 for i in range(from_block, to_block + 1)
             ]
         else:
@@ -137,7 +137,7 @@ class Ingest:
             receipts = []
             logs = block_batch_response[-1]
 
-        traces: list[list[Trace]] = await trace_future
+        replays: list[list[TransactionReplay]] = await trace_future
 
         logs.sort(key=lambda rec: rec['blockNumber'])
         logs_by_block = {k: list(it) for k, it in groupby(logs, key=lambda b: b['blockNumber'])}
@@ -154,10 +154,27 @@ class Ingest:
             block['logs_'] = block_logs
 
             if self._with_traces:
-                block_traces = traces[i]
-                for item in block_traces:
-                    assert item['blockHash'] == block_hash
+                tx_by_hash = {tx['hash']: tx for tx in block['transactions']}
+                block_traces = []
+                block_diffs = []
+
+                block_replays = replays[i]
+                for replay in block_replays:
+                    tx = tx_by_hash[replay['transactionHash']]
+
+                    for trace in replay['trace']:
+                        trace['blockNumber_'] = block_number
+                        trace['transactionIndex_'] = tx['transactionIndex']
+                        block_traces.append(trace)
+
+                    for address, diff in replay['stateDiff'].items():
+                        diff['address_'] = address
+                        diff['blockNumber_'] = block_number
+                        diff['transactionIndex_'] = tx['transactionIndex']
+                        block_diffs.append(diff)
+
                 block['trace_'] = block_traces
+                block['stateDiff_'] = block_diffs
 
             if self._with_receipts:
                 for tx in block['transactions']:
