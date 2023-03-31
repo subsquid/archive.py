@@ -22,13 +22,14 @@ class Block(TypedDict):
     sha3Uncles: Hash32
     extraData: Bytes
     miner: Address20
-    nonce: Bytes8
-    mixHash: Bytes
+    nonce: NotRequired[Bytes8]
+    mixHash: NotRequired[Bytes]
     size: Qty
     gasLimit: Qty
     gasUsed: Qty
-    difficulty: Qty
-    totalDifficulty: Qty
+    difficulty: NotRequired[Qty]
+    totalDifficulty: NotRequired[Qty]
+    baseFeePerGas: NotRequired[Qty]
     uncles: list[Hash32]
     transactions: list['Transaction']
     logs_: NotRequired[list['Log']]
@@ -49,9 +50,13 @@ Transaction = TypedDict('Transaction', {
     'value': Qty,
     'gas': Qty,
     'gasPrice': Qty,
-    'v': Qty,
-    'r': Bytes32,
-    's': Bytes32,
+    'maxFeePerGas': NotRequired[Qty],
+    'maxPriorityFeePerGas': NotRequired[Qty],
+    'v': NotRequired[Qty],
+    'r': NotRequired[Bytes32],
+    's': NotRequired[Bytes32],
+    'yParity': NotRequired[Qty],
+    'chainId': NotRequired[Qty],
     'receipt_': NotRequired['Receipt']
 })
 
