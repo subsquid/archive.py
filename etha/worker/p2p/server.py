@@ -3,17 +3,19 @@ import asyncio
 import logging
 import multiprocessing
 import os
-from typing import AsyncIterator, TypedDict, Any
+from typing import AsyncIterator
 
 import aiofiles
 import grpc.aio
-import msgpack
 
+from etha.query.model import query_schema
 from etha.util import create_child_task, monitor_service_tasks, init_child_process, run_async_program
+from etha.worker.p2p import messages_pb2 as msg_pb
 from etha.worker.p2p.p2p_transport_pb2 import Message, Empty
 from etha.worker.p2p.p2p_transport_pb2_grpc import P2PTransportStub
-from etha.worker.query import QueryResult, Query
+from etha.worker.query import QueryResult
 from etha.worker.state.controller import State
+from etha.worker.state.intervals import to_range_set
 from etha.worker.state.manager import StateManager
 from etha.worker.transport import Transport
 from etha.worker.worker import Worker
@@ -21,22 +23,21 @@ from etha.worker.worker import Worker
 LOG = logging.getLogger(__name__)
 
 
-PING = 1
-STATE_UPDATE = 2
-QUERY = 3
-QUERY_RESULT = 4
-QUERY_ERROR = 5
+def state_to_proto(state: State) -> msg_pb.WorkerState:
+    return msg_pb.WorkerState(datasets={
+        ds: msg_pb.RangeSet(ranges=[
+            msg_pb.Range(begin=begin, end=end)
+            for begin, end in range_set
+        ])
+        for ds, range_set in state.items()
+    })
 
 
-class MsgEnvelope(TypedDict):
-    msg_type: int
-    msg: dict
-
-
-class QueryTask(TypedDict):
-    query_id: str
-    data_set: str
-    query: Query
+def state_from_proto(state: msg_pb.WorkerState) -> State:
+    return {
+        ds: to_range_set((r.begin, r.end) for r in range_set.ranges)
+        for ds, range_set in state.datasets.items()
+    }
 
 
 class P2PTransport(Transport):
@@ -52,37 +53,37 @@ class P2PTransport(Transport):
 
     async def _receive_loop(self) -> None:
         async for msg in self._transport.GetMessages(Empty()):
+            assert isinstance(msg, Message)
             if msg.peer_id != self._router_id:
                 LOG.error(f"Wrong message origin: {msg.peer_id}")
                 continue
-            envelope: MsgEnvelope = msgpack.unpackb(msg.content)
+            envelope = msg_pb.Envelope.FromString(msg.content)
+            msg_type = envelope.WhichOneof('msg')
 
-            if envelope['msg_type'] == STATE_UPDATE:
-                await self._state_updates.put(envelope['msg'])
-            elif envelope['msg_type'] == QUERY:
-                await self._query_tasks.put(envelope['msg'])
+            if msg_type == 'state_update':
+                await self._state_updates.put(envelope.state_update)
+            elif msg_type == 'query':
+                await self._query_tasks.put(envelope.query)
             else:
-                LOG.error(f"Unexpected message type received: {envelope['msg_type']}")
+                LOG.error(f"Unexpected message type received: {msg_type}")
 
-    async def _send(self, msg_content: Any) -> None:
+    async def _send(self, envelope: msg_pb.Envelope) -> None:
         msg = Message(
             peer_id=self._router_id,
-            content=msgpack.packb(msg_content)
+            content=envelope.SerializeToString()
         )
         await self._transport.SendMessage(msg)
 
     async def send_ping(self, state: State, pause=False) -> None:
-        envelope: MsgEnvelope = {
-            'msg_type': PING,
-            'msg': state
-        }
+        envelope = msg_pb.Envelope(ping=msg_pb.Ping(state=state_to_proto(state)))
         await self._send(envelope)
 
     async def state_updates(self) -> AsyncIterator[State]:
         while True:
-            yield await self._state_updates.get()
+            state = await self._state_updates.get()
+            yield state_from_proto(state)
 
-    async def query_tasks(self) -> AsyncIterator[QueryTask]:
+    async def query_tasks(self) -> AsyncIterator[msg_pb.Query]:
         while True:
             yield await self._query_tasks.get()
 
@@ -96,25 +97,23 @@ class P2PTransport(Transport):
         else:
             data = None
 
-        envelope: MsgEnvelope = {
-            'msg_type': QUERY_RESULT,
-            'msg': {
-                'query_id': query_id,
-                'last_processed_block': result.last_processed_block,
-                'size': result.size,
-                'data': data
-            }
-        }
+        envelope = msg_pb.Envelope(
+            query_result=msg_pb.QueryResult(
+                query_id=query_id,
+                last_processed_block=result.last_processed_block,
+                size=result.size,
+                data=data
+            )
+        )
         await self._send(envelope)
 
     async def send_query_error(self, query_id: str, error: Exception) -> None:
-        envelope: MsgEnvelope = {
-            'msg_type': QUERY_ERROR,
-            'msg': {
-                'query_id': query_id,
-                'error': str(error),
-            }
-        }
+        envelope = msg_pb.Envelope(
+            query_error=msg_pb.QueryError(
+                query_id=query_id,
+                error=str(error)
+            )
+        )
         await self._send(envelope)
 
 
@@ -122,12 +121,13 @@ async def run_queries(transport: P2PTransport, worker: Worker):
     async for query_task in transport.query_tasks():
         async def task():
             try:
-                result = await worker.execute_query(query_task['query'], query_task['data_set'])
-                LOG.info(f"Query {query_task['query_id']} success")
-                await transport.send_query_result(query_task['query_id'], result)
+                query = query_schema.loads(query_task.query)
+                result = await worker.execute_query(query, query_task.dataset)
+                LOG.info(f"Query {query_task.query_id} success")
+                await transport.send_query_result(query_task.query_id, result)
             except Exception as e:
-                LOG.exception(f"Query {query_task['query_id']} execution failed")
-                await transport.send_query_error(query_task['query_id'], e)
+                LOG.exception(f"Query {query_task.query_id} execution failed")
+                await transport.send_query_error(query_task.query_id, e)
         asyncio.create_task(task())
 
 
@@ -167,6 +167,7 @@ async def main():
             worker = Worker(sm, pool, transport)
 
             await monitor_service_tasks([
+                asyncio.create_task(transport.run(), name='p2p_transport'),
                 asyncio.create_task(sm.run(), name='state_manager'),
                 asyncio.create_task(worker.run(), name='worker'),
                 asyncio.create_task(run_queries(transport, worker), name='run_queries')
