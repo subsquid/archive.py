@@ -200,11 +200,11 @@ class TraceTableBuilder(TableBuilderBase):
         self.reward_value = Column(bignum())
         self.reward_type = Column(pyarrow.string())
 
-    def append(self, trace: Trace):
-        self.block_number.append(qty2int(trace['blockNumber_']))
+    def append(self, block_number: Qty, transaction_index: Qty, trace: Trace):
+        self.block_number.append(qty2int(block_number))
         self.trace_address.append(trace['traceAddress'])
         self.subtraces.append(trace['subtraces'])
-        self.transaction_index.append(qty2int(trace['transactionIndex_']))
+        self.transaction_index.append(qty2int(transaction_index))
         self.type.append(trace['type'])
         self.error.append(trace.get('error'))
 
@@ -286,13 +286,13 @@ class StateDiffTableBuilder(TableBuilderBase):
         self.prev = Column(pyarrow.string())
         self.next = Column(pyarrow.string())
 
-    def append(self,
-               block_number: Qty,
-               transaction_index: Qty,
-               address: Address20,
-               diff: StateDiff
-               ):
-
+    def append(
+        self,
+        block_number: Qty,
+        transaction_index: Qty,
+        address: Address20,
+        diff: StateDiff
+    ):
         bn = qty2int(block_number)
         tix = qty2int(transaction_index)
         self._append(bn, tix, address, 'balance', diff['balance'])
@@ -301,7 +301,34 @@ class StateDiffTableBuilder(TableBuilderBase):
         for slot, d in diff['storage'].items():
             self._append(bn, tix, address, slot, d)
 
-    def _append(self, block_number: int, transaction_index: int, address: Address20, key: str, diff: Diff):
+    def _append(
+        self,
+        block_number: int,
+        transaction_index: int,
+        address: Address20,
+        key: str,
+        diff: Diff
+    ):
         self.block_number.append(block_number)
-        # ...
+        self.transaction_index.append(transaction_index)
+        self.address.append(address)
+        self.key.append(key)
 
+        if diff == '=':
+            self.kind.append('=')
+            self.prev.append(None)
+            self.next.append(None)
+        elif '+' in diff:
+            self.kind.append('+')
+            self.prev.append(None)
+            self.next.append(diff['+'])
+        elif '*' in diff:
+            self.kind.append('*')
+            self.prev.append(diff['*']['from'])
+            self.prev.append(diff['*']['to'])
+        elif '-' in diff:
+            self.kind.append('-')
+            self.prev.append(diff['-'])
+            self.next.append(None)
+        else:
+            raise ValueError(f'unsupported state diff kind - {diff}')

@@ -46,15 +46,15 @@ class BatchBuilder:
 
         for tx in block['transactions']:
             self.tx_table.append(tx)
+            for replay in tx.get('replay_', []):
+                for trace in replay['trace']:
+                    self.trace_table.append(tx['blockNumber'], tx['transactionIndex'], trace)
+
+                for address, diff in replay['stateDiff'].items():
+                    self.statediff_table.append(tx['blockNumber'], tx['transactionIndex'], address, diff)
 
         for log in block.get('logs_', []):
             self.log_table.append(log)
-
-        for trace in block.get('trace_', []):
-            self.trace_table.append(trace)
-
-        for diff in block.get('stateDiff_', []):
-            self.statediff_table.append(diff)
 
     def build(self) -> DataBatch:
         bytesize = self.buffered_bytes()
