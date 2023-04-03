@@ -46,7 +46,7 @@ class BatchBuilder:
 
         for tx in block['transactions']:
             self.tx_table.append(tx)
-            for replay in tx.get('replay_', []):
+            if replay := tx.get('replay_'):
                 for trace in replay['trace']:
                     self.trace_table.append(tx['blockNumber'], tx['transactionIndex'], trace)
 

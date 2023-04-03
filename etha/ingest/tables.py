@@ -325,7 +325,7 @@ class StateDiffTableBuilder(TableBuilderBase):
         elif '*' in diff:
             self.kind.append('*')
             self.prev.append(diff['*']['from'])
-            self.prev.append(diff['*']['to'])
+            self.next.append(diff['*']['to'])
         elif '-' in diff:
             self.kind.append('-')
             self.prev.append(diff['-'])
