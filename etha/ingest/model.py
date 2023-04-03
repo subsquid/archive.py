@@ -33,8 +33,6 @@ class Block(TypedDict):
     uncles: list[Hash32]
     transactions: list['Transaction']
     logs_: NotRequired[list['Log']]
-    trace_: NotRequired[list['Trace']]
-    stateDiff_: NotRequired[list['StateDiff']]
 
 
 # Alternative syntax allows to use reserved keywords as keys
@@ -57,7 +55,8 @@ Transaction = TypedDict('Transaction', {
     's': NotRequired[Bytes32],
     'yParity': NotRequired[Qty],
     'chainId': NotRequired[Qty],
-    'receipt_': NotRequired['Receipt']
+    'receipt_': NotRequired['Receipt'],
+    'replay_': NotRequired['TransactionReplay'],
 })
 
 
@@ -89,8 +88,6 @@ class _TraceBase(TypedDict):
     error: NotRequired[str]
     traceAddress: list[int]
     subtraces: int
-    blockNumber_: NotRequired[Qty]
-    transactionIndex_: NotRequired[Qty]
 
 
 class CreateTrace(_TraceBase):
@@ -189,10 +186,7 @@ class StateDiff(TypedDict):
     balance: Diff
     code: Diff
     nonce: Diff
-    storage: dict[Address20, Diff]
-    address_: Address20
-    blockNumber_: NotRequired[Qty]
-    transactionIndex_: NotRequired[Qty]
+    storage: dict[Bytes32, Diff]
 
 
 class TransactionReplay(TypedDict):

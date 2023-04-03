@@ -2,7 +2,7 @@ import pyarrow
 import json
 
 from etha.ingest.column import Column
-from etha.ingest.model import Transaction, Log, Trace, Block, StateDiff
+from etha.ingest.model import Transaction, Log, Trace, Block, StateDiff, Address20, Qty, Diff, Bytes32
 from etha.ingest.util import qty2int
 
 
@@ -281,17 +281,27 @@ class StateDiffTableBuilder(TableBuilderBase):
         self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
         self.address = Column(pyarrow.string())
-        self.balance = Column(pyarrow.string())
-        self.code = Column(pyarrow.string())
-        self.nonce = Column(pyarrow.string())
-        self.storage = Column(pyarrow.map_(pyarrow.string(), pyarrow.string()))
+        self.key = Column(pyarrow.string())  # 'balance', 'code', 'nonce', '0x00000023420387'
+        self.kind = Column(pyarrow.string())  # =, +, *, - (DIC)
+        self.prev = Column(pyarrow.string())
+        self.next = Column(pyarrow.string())
 
-    def append(self, diff: StateDiff):
-        self.block_number.append(qty2int(diff['blockNumber_']))
-        self.transaction_index.append(qty2int(diff['transactionIndex_']))
-        self.address.append(diff['address_'])
-        self.balance.append(json.dumps(diff['balance']))
-        self.code.append(json.dumps(diff['code']))
-        self.nonce.append(json.dumps(diff['nonce']))
-        storage = [(k, json.dumps(v)) for k, v in diff['storage'].items()]
-        self.storage.append(storage)
+    def append(self,
+               block_number: Qty,
+               transaction_index: Qty,
+               address: Address20,
+               diff: StateDiff
+               ):
+
+        bn = qty2int(block_number)
+        tix = qty2int(transaction_index)
+        self._append(bn, tix, address, 'balance', diff['balance'])
+        self._append(bn, tix, address, 'code', diff['code'])
+        self._append(bn, tix, address, 'nonce', diff['nonce'])
+        for slot, d in diff['storage'].items():
+            self._append(bn, tix, address, slot, d)
+
+    def _append(self, block_number: int, transaction_index: int, address: Address20, key: str, diff: Diff):
+        self.block_number.append(block_number)
+        # ...
+
