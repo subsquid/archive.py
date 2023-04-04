@@ -4,10 +4,11 @@ from typing import NamedTuple, Optional
 
 import pyarrow
 
-from etha.ingest.model import Block
-from etha.ingest.tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder, TraceTableBuilder, StateDiffTableBuilder
-from etha.ingest.util import trim_hash
 from etha.fs import create_fs
+from etha.ingest.model import Block
+from etha.ingest.tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder, TraceTableBuilder, \
+    StateDiffTableBuilder
+from etha.ingest.util import trim_hash
 from etha.layout import ChunkWriter
 
 
@@ -38,8 +39,8 @@ class BatchBuilder:
         return self.block_table.bytesize() \
             + self.tx_table.bytesize() \
             + self.log_table.bytesize() \
-            + round(self.trace_table.bytesize() / 3) \
-            + round(self.statediff_table.bytesize() / 3)
+            + self.trace_table.bytesize() \
+            + self.statediff_table.bytesize()
 
     def append(self, block: Block):
         self.block_table.append(block)
@@ -90,8 +91,15 @@ class BlockWriter:
         extra = {'first_block': first_block, 'last_block': last_block, 'last_hash': last_hash}
         LOG.debug('saving data chunk', extra=extra)
 
-        transactions = transactions.sort_by([('to', 'ascending'), ('sighash', 'ascending')])
-        logs = logs.sort_by([('address', 'ascending'), ('topic0', 'ascending')])
+        transactions = transactions.sort_by([
+            ('to', 'ascending'),
+            ('sighash', 'ascending')
+        ])
+
+        logs = logs.sort_by([
+            ('address', 'ascending'),
+            ('topic0', 'ascending')
+        ])
 
         with self.chunk_writer.write(first_block, last_block, last_hash) as loc:
             kwargs = {
@@ -126,12 +134,9 @@ class BlockWriter:
                     traces,
                     use_dictionary=[
                         'type',
-                        'create_from',
                         'call_from',
                         'call_to',
-                        'call_type',
-                        'reward_author',
-                        'reward_type'
+                        'call_type'
                     ],
                     row_group_size=15000,
                     **kwargs
@@ -142,7 +147,10 @@ class BlockWriter:
                 loc.write_parquet(
                     'statediffs.parquet',
                     statediffs,
-                    use_dictionary=['address'],
+                    use_dictionary=[
+                        'address',
+                        'kind'
+                    ],
                     row_group_size=15000,
                     **kwargs
                 )

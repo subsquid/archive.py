@@ -26,14 +26,14 @@ ingest-eth:
 	@$(PY) -m etha.ingest.main --dest data/mainnet \
 		-e ${ETH_NODE} \
 		-c 10 \
-		-m trace_block \
-		-m eth_getTransactionReceipt \
+		-m trace_replayBlockTransactions \
 		-e ${ETH_BLAST} \
 		-c 10 \
 		-r 500 \
 		--batch-limit 100 \
 		--with-receipts \
 		--with-traces \
+		--write-chunk-size 2048 \
 		--first-block 15000000
 
 

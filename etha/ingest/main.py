@@ -198,7 +198,6 @@ async def main(args):
     ingest = Ingest(
         rpc=rpc,
         finality_offset=args.best_block_offset,
-        first_block=args.first_block,
         from_block=chunk_writer.next_block,
         to_block=args.last_block,
         last_hash=chunk_writer.last_hash,

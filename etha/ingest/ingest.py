@@ -16,7 +16,6 @@ class Ingest:
         self,
         rpc: RpcClient,
         finality_offset: int = 10,
-        first_block: int = 0,
         from_block: int = 0,
         to_block: Optional[int] = None,
         last_hash: Optional[str] = None,
@@ -27,7 +26,6 @@ class Ingest:
         self._finality_offset = finality_offset
         self._with_receipts = with_receipts
         self._with_traces = with_traces
-        self._first_block = first_block
         self._last_hash = last_hash
         self._height = from_block - 1
         self._end = to_block
@@ -168,13 +166,10 @@ class Ingest:
 
     def _validate_blocks(self, blocks: list[Block]):
         for block in blocks:
-            parent_hash = trim_hash(block['parentHash'])
-            if self._last_hash == parent_hash or qty2int(block['number']) == self._first_block:
-                self._last_hash = trim_hash(block['hash'])
-            else:
-                block_number = qty2int(block['number'])
-                raise InconsistencyError(f"block {block_number} doesn't match hash from the parent block: '{parent_hash}' != '{self._last_hash}'")
+            block_parent_hash = trim_hash(block['parentHash'])
+            block_hash = trim_hash(block['hash'])
 
+            if self._last_hash and self._last_hash != block_parent_hash:
+                raise Exception(f'broken chain: block {block_hash} is not a direct child of {self._last_hash}')
 
-class InconsistencyError(Exception):
-    pass
+            self._last_hash = block_hash

@@ -1,13 +1,12 @@
 import pyarrow
-import json
 
 from etha.ingest.column import Column
-from etha.ingest.model import Transaction, Log, Trace, Block, StateDiff, Address20, Qty, Diff, Bytes32
+from etha.ingest.model import Transaction, Log, Trace, Block, StateDiff, Address20, Qty, Diff
 from etha.ingest.util import qty2int
 
 
 def bignum():
-    return pyarrow.decimal128(38)
+    return pyarrow.decimal256(76)
 
 
 class TableBuilderBase:
