@@ -5,7 +5,7 @@ from typing import Optional, AsyncIterator
 
 from etha.ingest.model import Block, Log, Receipt, TransactionReplay
 from etha.ingest.rpc import RpcClient, RpcBatchCall
-from etha.ingest.util import trim_hash, qty2int
+from etha.ingest.util import trim_hash
 
 
 LOG = logging.getLogger(__name__)
@@ -109,6 +109,9 @@ class Ingest:
                 ('trace_replayBlockTransactions', [hex(i), ['trace', 'stateDiff']])
                 for i in range(from_block, to_block + 1)
             ]
+            if from_block == 0:
+                # skip replay if genesis
+                del trace_batch[0]
         else:
             trace_batch = []
 
@@ -136,6 +139,9 @@ class Ingest:
             logs = block_batch_response[-1]
 
         replays: list[list[TransactionReplay]] = await trace_future
+        if from_block == 0:
+            # mock replay if genesis
+            replays.insert(0, [])
 
         logs.sort(key=lambda rec: rec['blockNumber'])
         logs_by_block = {k: list(it) for k, it in groupby(logs, key=lambda b: b['blockNumber'])}
