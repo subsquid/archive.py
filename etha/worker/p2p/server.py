@@ -3,7 +3,7 @@ import asyncio
 import logging
 import multiprocessing
 import os
-from typing import AsyncIterator
+from typing import AsyncIterator, Optional
 
 import aiofiles
 import grpc.aio
@@ -46,6 +46,11 @@ class P2PTransport(Transport):
         self._router_id = router_id
         self._state_updates = asyncio.Queue(maxsize=100)
         self._query_tasks = asyncio.Queue(maxsize=100)
+        self._local_peer_id: 'Optional[str]' = None
+
+    async def initialize(self) -> None:
+        self._local_peer_id = (await self._transport.LocalPeerId(Empty())).peer_id
+        LOG.info(f"Local peer ID: {self._local_peer_id}")
 
     async def run(self):
         receive_task = create_child_task('p2p_receive', self._receive_loop())
@@ -75,7 +80,12 @@ class P2PTransport(Transport):
         await self._transport.SendMessage(msg)
 
     async def send_ping(self, state: State, pause=False) -> None:
-        envelope = msg_pb.Envelope(ping=msg_pb.Ping(state=state_to_proto(state)))
+        if self._local_peer_id is None:
+            await self.initialize()
+        envelope = msg_pb.Envelope(ping=msg_pb.Ping(
+            worker_id=self._local_peer_id,
+            state=state_to_proto(state)
+        ))
         await self._send(envelope)
 
     async def state_updates(self) -> AsyncIterator[State]:

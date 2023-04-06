@@ -6,18 +6,42 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Map
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Envelope(_message.Message):
-    __slots__ = ["ping", "query", "query_error", "query_result", "state_update"]
+    __slots__ = ["get_worker", "get_worker_error", "get_worker_result", "ping", "query", "query_error", "query_result", "state_update"]
+    GET_WORKER_ERROR_FIELD_NUMBER: _ClassVar[int]
+    GET_WORKER_FIELD_NUMBER: _ClassVar[int]
+    GET_WORKER_RESULT_FIELD_NUMBER: _ClassVar[int]
     PING_FIELD_NUMBER: _ClassVar[int]
     QUERY_ERROR_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
     QUERY_RESULT_FIELD_NUMBER: _ClassVar[int]
     STATE_UPDATE_FIELD_NUMBER: _ClassVar[int]
+    get_worker: GetWorker
+    get_worker_error: QueryError
+    get_worker_result: GetWorkerResult
     ping: Ping
     query: Query
     query_error: QueryError
     query_result: QueryResult
     state_update: WorkerState
-    def __init__(self, ping: _Optional[_Union[Ping, _Mapping]] = ..., state_update: _Optional[_Union[WorkerState, _Mapping]] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_result: _Optional[_Union[QueryResult, _Mapping]] = ..., query_error: _Optional[_Union[QueryError, _Mapping]] = ...) -> None: ...
+    def __init__(self, ping: _Optional[_Union[Ping, _Mapping]] = ..., state_update: _Optional[_Union[WorkerState, _Mapping]] = ..., get_worker: _Optional[_Union[GetWorker, _Mapping]] = ..., get_worker_result: _Optional[_Union[GetWorkerResult, _Mapping]] = ..., get_worker_error: _Optional[_Union[QueryError, _Mapping]] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_result: _Optional[_Union[QueryResult, _Mapping]] = ..., query_error: _Optional[_Union[QueryError, _Mapping]] = ...) -> None: ...
+
+class GetWorker(_message.Message):
+    __slots__ = ["dataset", "query_id", "start_block"]
+    DATASET_FIELD_NUMBER: _ClassVar[int]
+    QUERY_ID_FIELD_NUMBER: _ClassVar[int]
+    START_BLOCK_FIELD_NUMBER: _ClassVar[int]
+    dataset: str
+    query_id: str
+    start_block: int
+    def __init__(self, query_id: _Optional[str] = ..., dataset: _Optional[str] = ..., start_block: _Optional[int] = ...) -> None: ...
+
+class GetWorkerResult(_message.Message):
+    __slots__ = ["query_id", "worker_id"]
+    QUERY_ID_FIELD_NUMBER: _ClassVar[int]
+    WORKER_ID_FIELD_NUMBER: _ClassVar[int]
+    query_id: str
+    worker_id: str
+    def __init__(self, query_id: _Optional[str] = ..., worker_id: _Optional[str] = ...) -> None: ...
 
 class Ping(_message.Message):
     __slots__ = ["pause", "state", "worker_id", "worker_url"]
