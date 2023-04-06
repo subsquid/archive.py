@@ -129,7 +129,7 @@ class TxTableBuilder(TableBuilderBase):
             self.cumulative_gas_used.append(qty2int(receipt['cumulativeGasUsed']))
             self.effective_gas_price.append(qty2int(receipt['effectiveGasPrice']))
             self.type.append(qty2int(receipt['type']))
-            self.status.append(qty2int(receipt['status']))
+            self.status.append(receipt.get('status') and qty2int(receipt['status']))
         else:
             self.gas_used.append(None)
             self.cumulative_gas_used.append(None)

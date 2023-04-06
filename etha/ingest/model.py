@@ -80,7 +80,7 @@ class Receipt(TypedDict):
     gasUsed: Qty
     logs: list[Log]
     type: Qty
-    status: Qty
+    status: NotRequired[Qty]
 
 
 # https://github.com/openethereum/parity-ethereum/blob/55c90d4016505317034e3e98f699af07f5404b63/rpc/src/v1/types/trace.rs#L482
