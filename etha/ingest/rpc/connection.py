@@ -219,7 +219,7 @@ class RpcConnection:
 
 def _is_retryable_error(e: Exception) -> bool:
     if isinstance(e, httpx.HTTPStatusError):
-        return e.response.status_code in (429, 502, 503, 504)
+        return e.response.status_code in (429, 502, 503, 504, 530)
     elif isinstance(e, httpx.ConnectError) or isinstance(e, httpx.TimeoutException):
         return True
     elif isinstance(e, RpcError) and isinstance(e.info, dict) and e.info.get('code') == 429:
