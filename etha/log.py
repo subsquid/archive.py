@@ -1,6 +1,8 @@
 import logging
 import sys
 import traceback
+import os
+import re
 from datetime import datetime
 from io import StringIO
 from typing import Any, NamedTuple
@@ -98,6 +100,67 @@ class TextFormatter:
         return f'{time} {level} {s.log_name}{rec.name}{s.reset} {rec.getMessage()}{kvs}{exc_info}'
 
 
+def compile_level_config(config: str):
+    variants = []
+    for ns in config.split(','):
+        ns = ns.strip()
+        pattern = f'^{"(.*)".join(ns.split("*"))}(:.*)?$'
+        regex = re.compile(pattern)
+
+        def match(ns: str):
+            m = regex.match(ns)
+            if m is None:
+                return 0
+
+            specificity = len(ns) + 1
+            for group in m.groups():
+                if group is not None:
+                    specificity -= len(group)
+            return specificity
+
+        variants.append(match)
+
+    def matcher(ns: str):
+        specificity = 0
+        for variant in variants:
+            specificity = max(specificity, variant(ns))
+        return specificity
+
+    return matcher
+
+
+def no_match(ns: str) -> int:
+    return 0
+
+
+class NamespaceFilter(logging.Filter):
+    levels = [no_match, no_match, no_match, no_match, no_match, no_match]
+
+    def __init__(self, root_ns: str | None):
+        self.root_ns = root_ns
+
+    def configure(self, level: int, config: str):
+        self.levels[level] = compile_level_config(config)
+
+    def ns_level(self, ns: str) -> int | None:
+        specificity = 0
+        level = logging.INFO if self.is_root_ns(ns) else None
+        for i, matcher in enumerate(self.levels):
+            s = matcher(ns)
+            if s > specificity:
+                level = i * 10
+                specificity = s
+        return level
+
+    def is_root_ns(self, ns: str):
+        return self.root_ns is not None and self.root_ns in ns
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if level := self.ns_level(record.name):
+            return record.levelno >= level
+        return False
+
+
 def _print_exception(exc_info) -> str:
     sio = StringIO()
     traceback.print_exception(exc_info[0], exc_info[1], exc_info[2], None, sio)
@@ -108,12 +171,26 @@ def _print_exception(exc_info) -> str:
     return s
 
 
-def init_logging():
+def init_logging(root_ns: str | None):
+    ns_filter = NamespaceFilter(root_ns)
+    min_level = None
+
+    levels = ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL']
+    for level, name in enumerate(levels):
+        if env := os.getenv(f'SQD_{name}'):
+            ns_filter.configure(level, env)
+            if min_level is None:
+                min_level = level * 10
+
+    if min_level is None:
+        min_level = logging.INFO
+
     style = COLORFUL if sys.stderr.isatty() else PLAIN
     f: Any = TextFormatter(style)
     h = logging.StreamHandler(sys.stderr)
     h.setFormatter(f)
+    h.addFilter(ns_filter)
     logging.basicConfig(
-        level=logging.INFO,
+        level=min_level,
         handlers=[h]
     )

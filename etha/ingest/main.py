@@ -270,4 +270,4 @@ class IngestionProcess:
 
 
 if __name__ == '__main__':
-    run_async_program(main, parse_cli_arguments(), log=LOG)
+    run_async_program(main, parse_cli_arguments(), log=LOG, root_ns='etha.ingest')
