@@ -1,37 +1,36 @@
 ### Worker status
 GET http://localhost:8000/status
 
-### Query
+### Query USDC transfers
 POST http://localhost:8000/query/czM6Ly9ldGhhLW1haW5uZXQtc2lh
 Content-Type: application/json
+Accept-Encoding: gzip
 
 {
-        "fromBlock": 16143005,
-        "logs": [
-            {
-                "address": ["0x1f98431c8ad98523631ae4a59f267346ea31f984"]
-            }
-        ],
-        "transactions": [],
-        "fields": {
-            "block": {
-                "number": true,
-                "hash": true,
-                "parentHash": true,
-                "nonce": true
-            },
-            "log": {
-                "address": true,
-                "topics": true,
-                "data": true,
-                "transaction": true
-            },
-            "transaction": {
-                "to": true,
-                "gas": true
-            }
-        }
+  "fromBlock": 16143005,
+  "fields": {
+    "block": {
+      "number": true,
+      "hash": true,
+      "parentHash": true
+    },
+    "log": {
+      "data": true,
+      "topics": true,
+      "transaction": true
+    },
+    "transaction": {
+      "from": true,
+      "sighash": true
     }
+  },
+  "logs": [
+    {
+      "address": ["0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"],
+      "topic0": ["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"]
+    }
+  ]
+}
 
 
 ### Deployed status 0

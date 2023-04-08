@@ -15,7 +15,7 @@ dependencies:
   - numpy
   - pandas
   - pyarrow
-  - python-duckdb
+  - python-duckdb=0.7.1
   - python=3.11
   - s3fs>=2021.8.0
   - uvicorn

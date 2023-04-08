@@ -5,3 +5,5 @@ __pycache__
 /.envrc
 /data
 /.vscode
+
+*.temp.*

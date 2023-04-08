@@ -5,7 +5,6 @@ Accept-Encoding: gzip
 
 {
     "fromBlock": 15000000,
-    "toBlock": 15050000,
     "logs": [
         {
             "address": ["0x1f98431c8ad98523631ae4a59f267346ea31f984"],
@@ -106,28 +105,42 @@ Accept-Encoding: gzip
   ]
 }
 
-### Easy tx
-POST https://eth-test.archive.subsquid.io/query
+### USDC transfers
+POST https://eth.archive.subsquid.io/query
 Content-Type: application/json
 Accept-Encoding: gzip
 
 {
-    "fromBlock": 15000000,
-    "toBlock": 15040000,
-    "transactions": [
-      {
-        "address": ["0x9cb7712c6a91506e69e8751fcb08e72e1256477d"],
-        "sighash": "0x8ca887ca",
-        "fieldSelection": {
-          "block": {
-            "number": true,
-            "hash": true,
-            "parentHash": true,
-            "nonce": true
-          },
-          "transaction": {"hash": true, "gasPrice": true, "gas": true, "from": true, "to": true, "index": true, "sighash": true}
+  "fromBlock": 16143005,
+  "transactions": [],
+  "logs": [
+    {
+      "address": [
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+      ],
+      "topics": [
+        [
+          "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+        ]
+      ],
+      "fieldSelection": {
+        "block": {
+          "number": true,
+          "hash": true,
+          "parentHash": true
+        },
+        "log": {
+          "topics": true,
+          "data": true,
+          "index": true,
+          "transactionIndex": true
+        },
+        "transaction": {
+          "index": true,
+          "hash": true,
+          "from": true
         }
       }
-    ],
-  "logs": []
+    }
+  ]
 }

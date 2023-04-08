@@ -4,13 +4,62 @@ import marshmallow as mm
 import marshmallow.validate
 
 
-FieldMap = dict[str, bool]
+class BlockFieldSelection(TypedDict, total=False):
+    number: bool
+    hash: bool
+    parentHash: bool
+    timestamp: bool
+    transactionsRoot: bool
+    receiptsRoot: bool
+    stateRoot: bool
+    logsBloom: bool
+    sha3Uncles: bool
+    extraData: bool
+    miner: bool
+    nonce: bool
+    mixHash: bool
+    size: bool
+    gasLimit: bool
+    gasUsed: bool
+    difficulty: bool
+    totalDifficulty: bool
+    baseFeePerGas: bool
+
+
+TxFieldSelection = TypedDict('TxFieldSelection', {
+    'transactionIndex': bool,
+    'hash': bool,
+    'nonce': bool,
+    'from': bool,
+    'to': bool,
+    'input': bool,
+    'value': bool,
+    'gas': bool,
+    'gasPrice': bool,
+    'maxFeePerGas': bool,
+    'maxPriorityFeePerGas': bool,
+    'v': bool,
+    'r': bool,
+    's': bool,
+    'yParity': bool,
+    'chainId': bool,
+    'sighash': bool
+}, total=False)
+
+
+class LogFieldSelection(TypedDict, total=False):
+    logIndex: bool
+    transactionIndex: bool
+    address: bool
+    data: bool
+    topics: bool
+    transaction: bool
 
 
 class FieldSelection(TypedDict):
-    block: NotRequired[FieldMap]
-    transaction: NotRequired[FieldMap]
-    log: NotRequired[FieldMap]
+    block: NotRequired[BlockFieldSelection]
+    transaction: NotRequired[TxFieldSelection]
+    log: NotRequired[LogFieldSelection]
 
 
 class LogFilter(TypedDict):
@@ -26,15 +75,24 @@ class TxFilter(TypedDict):
 class Query(TypedDict):
     fromBlock: int
     toBlock: NotRequired[int]
+    includeAllBlocks: NotRequired[bool]
     fields: NotRequired[FieldSelection]
     logs: NotRequired[list[LogFilter]]
     transactions: NotRequired[list[TxFilter]]
 
 
+def _field_map(typed_dict):
+    return mm.fields.Dict(
+        mm.fields.Str(validate=lambda k: k in typed_dict.__optional_keys__),
+        mm.fields.Boolean(),
+        required=False
+    )
+
+
 class FieldSelectionSchema(marshmallow.Schema):
-    block = mm.fields.Dict(mm.fields.Str(), mm.fields.Boolean())
-    transaction = mm.fields.Dict(mm.fields.Str(), mm.fields.Boolean())
-    log = mm.fields.Dict(mm.fields.Str(), mm.fields.Boolean())
+    block = _field_map(BlockFieldSelection)
+    transaction = _field_map(TxFieldSelection)
+    log = _field_map(LogFieldSelection)
 
 
 class LogFilterSchema(mm.Schema):
@@ -59,6 +117,8 @@ class QuerySchema(mm.Schema):
         strict=True,
         validate=mm.validate.Range(min=0, min_inclusive=True)
     )
+
+    includeAllBlocks = mm.fields.Boolean(required=False)
 
     fields = mm.fields.Nested(FieldSelectionSchema())
 

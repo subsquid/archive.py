@@ -1,15 +1,14 @@
 import asyncio
 import multiprocessing.pool as mpl
-from typing import Optional
+from typing import Optional, Iterable
 
-import aiofiles
-import aiofiles.os
 import falcon
 import falcon.asgi as fa
 import marshmallow as mm
+import pyarrow
 
 from etha.query.model import Query, query_schema
-from etha.worker.query import execute_query, QueryResult
+from etha.worker.query import execute_query
 from etha.worker.state.dataset import dataset_decode, Dataset
 from etha.worker.state.intervals import Range
 from etha.worker.state.manager import StateManager
@@ -79,23 +78,12 @@ class QueryResource:
             raise falcon.HTTPBadRequest(description=f'data for block {first_block} is not available')
 
         with data_range_lock as data_range:
-            result: QueryResult = await self.execute_query(q, dataset, data_range)
+            res.text = await self.execute_query(dataset, data_range, q)
 
-        if isinstance(result.data, str):
-            stream = await aiofiles.open(result.data, 'rb')
-            await aiofiles.os.unlink(result.data)
-            res.set_header('content-type', 'application/zip')
-            res.set_stream(stream, result.size)
-        elif isinstance(result.data, bytes):
-            res.set_header('content-type', 'application/zip')
-            res.data = result.data
-        else:
-            res.status = 204
+        res.content_type = 'application/json'
 
-        res.set_header('x-sqd-last-processed-block', str(result.last_processed_block))
-
-    def execute_query(self, q: Query, dataset: Dataset, data_range: Range):
-        args = self.sm.get_temp_dir(), self.sm.get_dataset_dir(dataset), data_range, q
+    def execute_query(self, dataset: Dataset, data_range: Range, q: Query) -> asyncio.Future[str]:
+        args = self.sm.get_dataset_dir(dataset), data_range, q
         loop = asyncio.get_event_loop()
         future = loop.create_future()
 
