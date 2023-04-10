@@ -119,8 +119,8 @@ def wait_for_term_signal():
     return future
 
 
-def run_async_program(main, *args, log=LOG, root_ns=None):
-    init_logging(root_ns)
+def run_async_program(main, *args, log=LOG):
+    init_logging()
 
     async def run():
         signal_future = wait_for_term_signal()

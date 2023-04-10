@@ -3,6 +3,7 @@ import sys
 import traceback
 import os
 import re
+from functools import cache
 from datetime import datetime
 from io import StringIO
 from typing import Any, NamedTuple
@@ -133,32 +134,32 @@ def no_match(ns: str) -> int:
     return 0
 
 
-class NamespaceFilter(logging.Filter):
-    levels = [no_match, no_match, no_match, no_match, no_match, no_match]
+@cache
+def load_matchers():
+    matchers = []
+    for level in ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL']:
+        if env := os.getenv(f'SQD_{level}'):
+            matcher = compile_level_config(env)
+        else:
+            matcher = no_match
+        matchers.append(matcher)
+    return matchers
 
-    def __init__(self, root_ns: str | None):
-        self.root_ns = root_ns
 
-    def configure(self, level: int, config: str):
-        self.levels[level] = compile_level_config(config)
-
-    def ns_level(self, ns: str) -> int | None:
+class Logger(logging.Logger):
+    def getEffectiveLevel(self) -> int:
         specificity = 0
-        level = logging.INFO if self.is_root_ns(ns) else None
-        for i, matcher in enumerate(self.levels):
-            s = matcher(ns)
+        level = logging.INFO if self.is_root_ns(self.name) else logging.WARN
+        matchers = load_matchers()
+        for index, matcher in enumerate(matchers):
+            s = matcher(self.name)
             if s > specificity:
-                level = i * 10
+                level = index * 10
                 specificity = s
         return level
 
     def is_root_ns(self, ns: str):
-        return self.root_ns is not None and self.root_ns in ns
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        if level := self.ns_level(record.name):
-            return record.levelno >= level
-        return False
+        return ns.startswith('etha')
 
 
 def _print_exception(exc_info) -> str:
@@ -171,26 +172,11 @@ def _print_exception(exc_info) -> str:
     return s
 
 
-def init_logging(root_ns: str | None):
-    ns_filter = NamespaceFilter(root_ns)
-    min_level = None
-
-    levels = ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL']
-    for level, name in enumerate(levels):
-        if env := os.getenv(f'SQD_{name}'):
-            ns_filter.configure(level, env)
-            if min_level is None:
-                min_level = level * 10
-
-    if min_level is None:
-        min_level = logging.INFO
-
+def init_logging():
     style = COLORFUL if sys.stderr.isatty() else PLAIN
     f: Any = TextFormatter(style)
     h = logging.StreamHandler(sys.stderr)
     h.setFormatter(f)
-    h.addFilter(ns_filter)
     logging.basicConfig(
-        level=min_level,
         handlers=[h]
     )

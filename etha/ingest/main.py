@@ -1,7 +1,11 @@
+import logging
+from etha.log import Logger
+
+logging.setLoggerClass(Logger)
+
 import argparse
 import asyncio
 import concurrent.futures
-import logging
 import os
 from typing import Optional
 
@@ -270,4 +274,4 @@ class IngestionProcess:
 
 
 if __name__ == '__main__':
-    run_async_program(main, parse_cli_arguments(), log=LOG, root_ns='etha.ingest')
+    run_async_program(main, parse_cli_arguments(), log=LOG)
