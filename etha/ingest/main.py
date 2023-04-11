@@ -1,7 +1,11 @@
+import logging
+from etha.log import Logger
+
+logging.setLoggerClass(Logger)
+
 import argparse
 import asyncio
 import concurrent.futures
-import logging
 import os
 from typing import Optional
 
