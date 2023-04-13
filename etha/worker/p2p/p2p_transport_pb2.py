@@ -13,7 +13,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13p2p_transport.proto\x12\rp2p_transport\"\x07\n\x05\x45mpty\"\x19\n\x06PeerId\x12\x0f\n\x07peer_id\x18\x01 \x01(\t\"+\n\x07Message\x12\x0f\n\x07peer_id\x18\x01 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x02 \x01(\x0c\x32\xc6\x01\n\x0cP2PTransport\x12:\n\x0bLocalPeerId\x12\x14.p2p_transport.Empty\x1a\x15.p2p_transport.PeerId\x12=\n\x0bGetMessages\x12\x14.p2p_transport.Empty\x1a\x16.p2p_transport.Message0\x01\x12;\n\x0bSendMessage\x12\x16.p2p_transport.Message\x1a\x14.p2p_transport.Emptyb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13p2p_transport.proto\x12\rp2p_transport\"\x07\n\x05\x45mpty\"\x19\n\x06PeerId\x12\x0f\n\x07peer_id\x18\x01 \x01(\t\"Z\n\x07Message\x12\x14\n\x07peer_id\x18\x01 \x01(\tH\x00\x88\x01\x01\x12\x12\n\x05topic\x18\x02 \x01(\tH\x01\x88\x01\x01\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\x0c\x42\n\n\x08_peer_idB\x08\n\x06_topic\"1\n\x0cSubscription\x12\r\n\x05topic\x18\x01 \x01(\t\x12\x12\n\nsubscribed\x18\x02 \x01(\x08\x32\x8f\x02\n\x0cP2PTransport\x12:\n\x0bLocalPeerId\x12\x14.p2p_transport.Empty\x1a\x15.p2p_transport.PeerId\x12=\n\x0bGetMessages\x12\x14.p2p_transport.Empty\x1a\x16.p2p_transport.Message0\x01\x12;\n\x0bSendMessage\x12\x16.p2p_transport.Message\x1a\x14.p2p_transport.Empty\x12G\n\x12ToggleSubscription\x12\x1b.p2p_transport.Subscription\x1a\x14.p2p_transport.Emptyb\x06proto3')
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'p2p_transport_pb2', globals())
@@ -25,7 +25,9 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _PEERID._serialized_start=47
   _PEERID._serialized_end=72
   _MESSAGE._serialized_start=74
-  _MESSAGE._serialized_end=117
-  _P2PTRANSPORT._serialized_start=120
-  _P2PTRANSPORT._serialized_end=318
+  _MESSAGE._serialized_end=164
+  _SUBSCRIPTION._serialized_start=166
+  _SUBSCRIPTION._serialized_end=215
+  _P2PTRANSPORT._serialized_start=218
+  _P2PTRANSPORT._serialized_end=489
 # @@protoc_insertion_point(module_scope)

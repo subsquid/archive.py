@@ -3,7 +3,7 @@ import asyncio
 import logging
 import multiprocessing
 import os
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Optional, Dict
 
 import aiofiles
 import grpc.aio
@@ -46,6 +46,7 @@ class P2PTransport(Transport):
         self._router_id = router_id
         self._state_updates = asyncio.Queue(maxsize=100)
         self._query_tasks = asyncio.Queue(maxsize=100)
+        self._query_peers: 'Dict[str, str]' = {}
         self._local_peer_id: 'Optional[str]' = None
 
     async def initialize(self) -> None:
@@ -59,22 +60,23 @@ class P2PTransport(Transport):
     async def _receive_loop(self) -> None:
         async for msg in self._transport.GetMessages(Empty()):
             assert isinstance(msg, Message)
-            if msg.peer_id != self._router_id:
-                LOG.error(f"Wrong message origin: {msg.peer_id}")
-                continue
             envelope = msg_pb.Envelope.FromString(msg.content)
             msg_type = envelope.WhichOneof('msg')
 
             if msg_type == 'state_update':
+                if msg.peer_id != self._router_id:
+                    LOG.error(f"Wrong message origin: {msg.peer_id}")
+                    continue
                 await self._state_updates.put(envelope.state_update)
             elif msg_type == 'query':
+                self._query_peers[envelope.query.query_id] = msg.peer_id
                 await self._query_tasks.put(envelope.query)
             else:
                 LOG.error(f"Unexpected message type received: {msg_type}")
 
-    async def _send(self, envelope: msg_pb.Envelope) -> None:
+    async def _send(self, peer_id: str, envelope: msg_pb.Envelope) -> None:
         msg = Message(
-            peer_id=self._router_id,
+            peer_id=peer_id,
             content=envelope.SerializeToString()
         )
         await self._transport.SendMessage(msg)
@@ -86,7 +88,7 @@ class P2PTransport(Transport):
             worker_id=self._local_peer_id,
             state=state_to_proto(state)
         ))
-        await self._send(envelope)
+        await self._send(self._router_id, envelope)
 
     async def state_updates(self) -> AsyncIterator[State]:
         while True:
@@ -107,6 +109,12 @@ class P2PTransport(Transport):
         else:
             data = None
 
+        try:
+            peer_id = self._query_peers.pop(query_id)
+        except KeyError:
+            LOG.error(f"Unknown query: {query_id}")
+            return
+
         envelope = msg_pb.Envelope(
             query_result=msg_pb.QueryResult(
                 query_id=query_id,
@@ -115,16 +123,22 @@ class P2PTransport(Transport):
                 data=data
             )
         )
-        await self._send(envelope)
+        await self._send(peer_id, envelope)
 
     async def send_query_error(self, query_id: str, error: Exception) -> None:
+        try:
+            peer_id = self._query_peers.pop(query_id)
+        except KeyError:
+            LOG.error(f"Unknown query: {query_id}")
+            return
+
         envelope = msg_pb.Envelope(
             query_error=msg_pb.QueryError(
                 query_id=query_id,
                 error=str(error)
             )
         )
-        await self._send(envelope)
+        await self._send(peer_id, envelope)
 
 
 async def run_queries(transport: P2PTransport, worker: Worker):

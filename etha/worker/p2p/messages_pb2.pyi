@@ -36,12 +36,14 @@ class GetWorker(_message.Message):
     def __init__(self, query_id: _Optional[str] = ..., dataset: _Optional[str] = ..., start_block: _Optional[int] = ...) -> None: ...
 
 class GetWorkerResult(_message.Message):
-    __slots__ = ["query_id", "worker_id"]
+    __slots__ = ["encoded_dataset", "query_id", "worker_id"]
+    ENCODED_DATASET_FIELD_NUMBER: _ClassVar[int]
     QUERY_ID_FIELD_NUMBER: _ClassVar[int]
     WORKER_ID_FIELD_NUMBER: _ClassVar[int]
+    encoded_dataset: str
     query_id: str
     worker_id: str
-    def __init__(self, query_id: _Optional[str] = ..., worker_id: _Optional[str] = ...) -> None: ...
+    def __init__(self, query_id: _Optional[str] = ..., worker_id: _Optional[str] = ..., encoded_dataset: _Optional[str] = ...) -> None: ...
 
 class Ping(_message.Message):
     __slots__ = ["pause", "state", "worker_id", "worker_url"]
