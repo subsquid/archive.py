@@ -2,12 +2,12 @@
 GET http://localhost:8000/status
 
 ### Query USDC transfers
-POST http://localhost:8000/query/czM6Ly9ldGhhLW1haW5uZXQtc2lh
+POST http://localhost:8000/query/czM6Ly9ldGhhLW1haW5uZXQ=
 Content-Type: application/json
 Accept-Encoding: gzip
 
 {
-  "fromBlock": 16143005,
+  "fromBlock": 5947000,
   "fields": {
     "block": {
       "number": true,

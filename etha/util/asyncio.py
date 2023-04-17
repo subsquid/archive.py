@@ -2,27 +2,10 @@ import asyncio
 import logging
 import signal
 import sys
-from typing import Optional, Iterable
-
-from etha.log import init_logging
+from typing import Iterable, Optional
 
 
 LOG = logging.getLogger(__name__)
-
-
-def add_temp_prefix(path: str) -> str:
-    import datetime
-    import os.path
-    now = datetime.datetime.now()
-    ts = round(now.timestamp() * 1000)
-    name = os.path.basename(path)
-    parent = os.path.dirname(path)
-    return os.path.join(parent, f'temp-{ts}-{name}')
-
-
-def init_child_process() -> None:
-    init_logging()
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
 def create_child_task(name: str, coro) -> asyncio.Task:
@@ -120,7 +103,6 @@ def wait_for_term_signal():
 
 
 def run_async_program(main, *args, log=LOG):
-    init_logging()
 
     async def run():
         signal_future = wait_for_term_signal()

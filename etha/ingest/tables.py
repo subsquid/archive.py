@@ -5,8 +5,8 @@ from etha.ingest.model import Transaction, Log, Trace, Block, StateDiff, Address
 from etha.ingest.util import qty2int
 
 
-def bignum():
-    return pyarrow.decimal256(76)
+def qty():
+    return pyarrow.string()
 
 
 class TableBuilderBase:
@@ -40,14 +40,14 @@ class BlockTableBuilder(TableBuilderBase):
         self.receipts_root = Column(pyarrow.string())
         self.mix_hash = Column(pyarrow.string())
         self.miner = Column(pyarrow.string())
-        self.difficulty = Column(bignum())
-        self.total_difficulty = Column(bignum())
+        self.difficulty = Column(qty())
+        self.total_difficulty = Column(qty())
         self.extra_data = Column(pyarrow.string())
         self.size = Column(pyarrow.int32())
-        self.gas_limit = Column(bignum())
-        self.gas_used = Column(bignum())
+        self.gas_limit = Column(qty())
+        self.gas_used = Column(qty())
         self.timestamp = Column(pyarrow.timestamp('s'))
-        self.base_fee_per_gas = Column(bignum())
+        self.base_fee_per_gas = Column(qty())
 
     def append(self, block: Block) -> None:
         self.number.append(qty2int(block['number']))
@@ -75,25 +75,25 @@ class TxTableBuilder(TableBuilderBase):
     def __init__(self):
         self.block_number = Column(pyarrow.int32())
         self.__dict__['from'] = Column(pyarrow.string())
-        self.gas = Column(bignum())
-        self.gas_price = Column(bignum())
-        self.max_fee_per_gas = Column(bignum())
-        self.max_priority_fee_per_gas = Column(bignum())
+        self.gas = Column(qty())
+        self.gas_price = Column(qty())
+        self.max_fee_per_gas = Column(qty())
+        self.max_priority_fee_per_gas = Column(qty())
         self.hash = Column(pyarrow.string())
         self.input = Column(pyarrow.string())
         self.nonce = Column(pyarrow.int64())
         self.to = Column(pyarrow.string())
         self.transaction_index = Column(pyarrow.int32())
-        self.value = Column(bignum())
+        self.value = Column(qty())
         self.v = Column(pyarrow.string())
         self.r = Column(pyarrow.string())
         self.s = Column(pyarrow.string())
         self.y_parity = Column(pyarrow.int8())
         self.chain_id = Column(pyarrow.int32())
         self.sighash = Column(pyarrow.string())
-        self.gas_used = Column(bignum())
-        self.cumulative_gas_used = Column(bignum())
-        self.effective_gas_price = Column(bignum())
+        self.gas_used = Column(qty())
+        self.cumulative_gas_used = Column(qty())
+        self.effective_gas_price = Column(qty())
         self.type = Column(pyarrow.int8())
         self.status = Column(pyarrow.int8())
         self._id = Column(pyarrow.int64())
@@ -175,28 +175,28 @@ class TraceTableBuilder(TableBuilderBase):
         self.error = Column(pyarrow.string())
 
         self.create_from = Column(pyarrow.string())
-        self.create_value = Column(bignum())
-        self.create_gas = Column(bignum())
+        self.create_value = Column(qty())
+        self.create_gas = Column(qty())
         self.create_init = Column(pyarrow.string())
-        self.create_result_gas_used = Column(bignum())
+        self.create_result_gas_used = Column(qty())
         self.create_result_code = Column(pyarrow.string())
         self.create_result_address = Column(pyarrow.string())
 
         self.call_from = Column(pyarrow.string())
         self.call_to = Column(pyarrow.string())
-        self.call_value = Column(bignum())
-        self.call_gas = Column(bignum())
+        self.call_value = Column(qty())
+        self.call_gas = Column(qty())
         self.call_input = Column(pyarrow.string())
         self.call_type = Column(pyarrow.string())
-        self.call_result_gas_used = Column(bignum())
+        self.call_result_gas_used = Column(qty())
         self.call_result_output = Column(pyarrow.string())
 
         self.suicide_address = Column(pyarrow.string())
         self.suicide_refund_address = Column(pyarrow.string())
-        self.suicide_balance = Column(bignum())
+        self.suicide_balance = Column(qty())
 
         self.reward_author = Column(pyarrow.string())
-        self.reward_value = Column(bignum())
+        self.reward_value = Column(qty())
         self.reward_type = Column(pyarrow.string())
 
     def append(self, block_number: Qty, transaction_index: Qty, trace: Trace):

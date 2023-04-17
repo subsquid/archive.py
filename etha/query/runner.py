@@ -1,5 +1,3 @@
-from typing import Iterable
-
 import duckdb
 import pyarrow
 

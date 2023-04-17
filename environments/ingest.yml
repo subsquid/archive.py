@@ -5,8 +5,8 @@ channels:
 
 dependencies:
   - fsspec
+  - httpx
+  - prometheus_client
   - pyarrow
   - python=3.11
   - s3fs>=2021.8.0
-  - prometheus_client
-  - httpx

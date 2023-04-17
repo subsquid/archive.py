@@ -1,17 +1,14 @@
 import argparse
 import asyncio
-import logging
 import multiprocessing
 import os
 
 import uvicorn
 
-from etha.util import create_child_task, init_child_process, monitor_service_tasks, run_async_program
+from etha.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
+from etha.util.child_proc import init_child_process
 from etha.worker.api import create_app
 from etha.worker.state.manager import StateManager
-
-
-LOG = logging.getLogger('etha.worker')
 
 
 class Server(uvicorn.Server):
@@ -64,19 +61,21 @@ def parse_cli_args():
         '--port',
         type=int,
         default=8000,
+        metavar='N',
         help='port to listen on (defaults to 8000)'
     )
 
     program.add_argument(
         '--procs',
         type=int,
+        metavar='N',
         help='number of processes to use to execute data queries'
     )
 
     return program.parse_args()
 
 
-async def main(args):
+async def serve(args):
     sm = StateManager(
         worker_id=args.worker_id,
         worker_url=args.worker_url,
@@ -100,8 +99,8 @@ async def main(args):
         await monitor_service_tasks([
             asyncio.create_task(server.run_server_task(), name='http_server'),
             asyncio.create_task(sm.run(), name='state_manager')
-        ], log=LOG)
+        ])
 
 
-if __name__ == '__main__':
-    run_async_program(main, parse_cli_args(), log=LOG)
+def cli():
+    run_async_program(serve, parse_cli_args())

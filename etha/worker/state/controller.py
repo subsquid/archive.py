@@ -172,8 +172,11 @@ class StateController:
 
                 track.is_live = False
                 if not track.is_used():
-                    del self._track[dataset]
                     upd[dataset] = False
+
+        for dataset, live in upd.items():
+            if live is False:
+                del self._track[dataset]
 
         if upd:
             self._sync.send_update(upd)

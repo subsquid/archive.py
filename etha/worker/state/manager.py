@@ -5,7 +5,7 @@ from typing import Optional
 
 import httpx
 
-from etha.util import create_child_task, monitor_service_tasks
+from etha.util.asyncio import create_child_task, monitor_service_tasks
 from etha.worker.state.controller import RangeLock, StateController
 from etha.worker.state.dataset import Dataset, dataset_encode
 from etha.worker.state.intervals import to_range_set

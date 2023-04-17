@@ -1,11 +1,10 @@
 import asyncio
 import multiprocessing.pool as mpl
-from typing import Optional, Iterable
+from typing import Optional
 
 import falcon
 import falcon.asgi as fa
 import marshmallow as mm
-import pyarrow
 
 from etha.query.model import Query, query_schema
 from etha.worker.query import execute_query

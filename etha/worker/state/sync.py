@@ -1,15 +1,13 @@
 import asyncio
-import logging
 import multiprocessing as mp
 from itertools import groupby
 from queue import Empty
 from typing import Callable
 
+from etha.worker.state.sync_loop import sync_loop
 from etha.worker.state.controller import State, StateUpdate
 from etha.worker.state.folder import StateFolder
 from etha.worker.state.intervals import to_range_set
-
-LOG = logging.getLogger(__name__)
 
 
 class _SyncProc:
@@ -17,7 +15,7 @@ class _SyncProc:
         self.update_queue = mp.Queue(100)
         self.new_chunks_queue = mp.Queue(1000)
         self.proc = mp.Process(
-            target=_sync_loop,
+            target=sync_loop,
             args=(data_dir, self.update_queue, self.new_chunks_queue),
             name='sm:data_sync'
         )
@@ -53,17 +51,6 @@ class _SyncProc:
 
     def start(self):
         self.proc.start()
-
-
-def _sync_loop(data_dir: str, updates_queue: mp.Queue, new_chunks_queue: mp.Queue):
-    from etha.util import init_child_process
-    init_child_process()
-    while True:
-        upd = updates_queue.get()
-        StateFolder(data_dir).apply_update(
-            upd,
-            on_downloaded_chunk=lambda ds, chunk: new_chunks_queue.put((ds, chunk))
-        )
 
 
 class SyncProcess:

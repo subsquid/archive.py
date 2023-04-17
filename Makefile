@@ -51,7 +51,7 @@ router:
 
 
 worker:
-	@$(PY) -m etha.worker.server \
+	@$(PY) -m etha.worker \
 		--router http://localhost:5555 \
 		--worker-id 1 \
 		--worker-url http://localhost:8000 \
@@ -59,4 +59,4 @@ worker:
 		--procs 2
 
 
-.PHONY: init dbuild-ingest write ingest-eth ingest-poly router worker
+.PHONY: init build-ingest write ingest-eth ingest-poly router worker

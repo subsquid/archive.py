@@ -1,23 +1,19 @@
-import logging
-from etha.log import Logger
-
-logging.setLoggerClass(Logger)
-
 import argparse
 import asyncio
 import concurrent.futures
+import logging
 import os
 from typing import Optional
 
-from etha.counters import Progress
+from etha.util.asyncio import create_child_task, monitor_pipeline, run_async_program
+from etha.util.counters import Progress
 from etha.ingest.ingest import Ingest
 from etha.ingest.rpc import RpcClient, RpcEndpoint
 from etha.ingest.tables import qty2int
 from etha.ingest.writer import BatchBuilder, WriteOptions, WriteService
-from etha.util import run_async_program, create_child_task, monitor_pipeline
 
 
-LOG = logging.getLogger('etha.ingest.main')
+LOG = logging.getLogger(__name__)
 
 
 class EndpointAction(argparse.Action):
@@ -171,7 +167,7 @@ def parse_cli_arguments():
     return program.parse_args()
 
 
-async def main(args):
+async def ingest(args):
     endpoints = [RpcEndpoint(**e) for e in args.endpoints]
 
     rpc = RpcClient(
@@ -273,5 +269,5 @@ class IngestionProcess:
         await monitor_pipeline([ingest_task], service_task=report_task)
 
 
-if __name__ == '__main__':
-    run_async_program(main, parse_cli_arguments(), log=LOG)
+def cli():
+    run_async_program(cli, parse_cli_arguments())

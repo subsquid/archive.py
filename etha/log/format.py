@@ -1,12 +1,8 @@
 import logging
-import sys
 import traceback
-import os
-import re
-from functools import cache
 from datetime import datetime
 from io import StringIO
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 
 class Style(NamedTuple):
@@ -101,67 +97,6 @@ class TextFormatter:
         return f'{time} {level} {s.log_name}{rec.name}{s.reset} {rec.getMessage()}{kvs}{exc_info}'
 
 
-def compile_level_config(config: str):
-    variants = []
-    for ns in config.split(','):
-        ns = ns.strip()
-        pattern = f'^{"(.*)".join(ns.split("*"))}(:.*)?$'
-        regex = re.compile(pattern)
-
-        def match(ns: str):
-            m = regex.match(ns)
-            if m is None:
-                return 0
-
-            specificity = len(ns) + 1
-            for group in m.groups():
-                if group is not None:
-                    specificity -= len(group)
-            return specificity
-
-        variants.append(match)
-
-    def matcher(ns: str):
-        specificity = 0
-        for variant in variants:
-            specificity = max(specificity, variant(ns))
-        return specificity
-
-    return matcher
-
-
-def no_match(ns: str) -> int:
-    return 0
-
-
-@cache
-def load_matchers():
-    matchers = []
-    for level in ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL']:
-        if env := os.getenv(f'SQD_{level}'):
-            matcher = compile_level_config(env)
-        else:
-            matcher = no_match
-        matchers.append(matcher)
-    return matchers
-
-
-class Logger(logging.Logger):
-    def getEffectiveLevel(self) -> int:
-        specificity = 0
-        level = logging.INFO if self.is_root_ns(self.name) else logging.WARN
-        matchers = load_matchers()
-        for index, matcher in enumerate(matchers):
-            s = matcher(self.name)
-            if s > specificity:
-                level = index * 10
-                specificity = s
-        return level
-
-    def is_root_ns(self, ns: str):
-        return ns.startswith('etha')
-
-
 def _print_exception(exc_info) -> str:
     sio = StringIO()
     traceback.print_exception(exc_info[0], exc_info[1], exc_info[2], None, sio)
@@ -170,13 +105,3 @@ def _print_exception(exc_info) -> str:
     if s[-1:] == '\n':
         s = s[:-1]
     return s
-
-
-def init_logging():
-    style = COLORFUL if sys.stderr.isatty() else PLAIN
-    f: Any = TextFormatter(style)
-    h = logging.StreamHandler(sys.stderr)
-    h.setFormatter(f)
-    logging.basicConfig(
-        handlers=[h]
-    )

@@ -61,7 +61,9 @@ class LocalFs(Fs):
     def delete(self, loc: str):
         path = self.abs(loc)
         if os.path.isdir(path):
-            shutil.rmtree(path)
+            temp_dir = add_temp_prefix(path)
+            os.rename(path, temp_dir)
+            shutil.rmtree(temp_dir)
         else:
             try:
                 os.remove(path)

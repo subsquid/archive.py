@@ -6,7 +6,7 @@ from typing import Optional, NamedTuple, Any, TypedDict, Literal, Callable, Unio
 
 import httpx
 
-from etha.counters import Speed, Rate
+from etha.util.counters import Speed, Rate
 
 
 LOG = logging.getLogger(__name__)

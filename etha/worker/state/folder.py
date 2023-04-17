@@ -50,10 +50,10 @@ class StateFolder:
                 for chunk in get_chunks(rfs, first_block=new[0], last_block=new[1]):
                     dest = fs.abs(chunk.path())
                     with fs.transact(dest) as d:
-                        for f in ['transactions', 'logs', 'blocks']:
-                            src = f'{chunk.path()}/{f}.parquet'
-                            log.info(f'downloading {rfs.abs(src)}')
-                            rfs.download(src, d.abs(f'{f}.parquet'))
+                        src = chunk.path()
+                        log.info(f'downloading {rfs.abs(src)}')
+                        # FIXME: we can potentially miss files here
+                        rfs.download(src, d.abs())
                     log.info('saved %s', dest)
                     on_downloaded_chunk(ds, chunk)
 
