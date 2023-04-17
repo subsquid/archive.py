@@ -194,6 +194,8 @@ class RpcConnection:
         assert request['id'] == result['id']
         if 'error' in result:
             raise RpcError(result['error'], request, self.endpoint.url)
+        elif result['result'] is None:
+            raise RpcResultIsNull(request, self.endpoint.url)
         else:
             return result['result']
 
@@ -222,7 +224,16 @@ def _is_retryable_error(e: Exception) -> bool:
         return e.response.status_code in (429, 502, 503, 504, 530)
     elif isinstance(e, httpx.ConnectError) or isinstance(e, httpx.TimeoutException):
         return True
+    elif isinstance(e, RpcResultIsNull):
+        return True
     elif isinstance(e, RpcError) and isinstance(e.info, dict) and e.info.get('code') == 429:
         return True
     else:
         return False
+
+
+class RpcResultIsNull(Exception):
+    def __init__(self, request: Union[RpcRequest, BatchRpcRequest], url: str):
+        self.message = 'rpc result is null'
+        self.request = request
+        self.url = url
