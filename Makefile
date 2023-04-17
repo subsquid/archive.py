@@ -20,7 +20,7 @@ write:
 
 ingest-eth:
 	@$(PY) -m etha.ingest --dest data/mainnet \
-		-e ${ETH_POKT} \
+		-e https://rpc.ankr.com/eth \
 		-c 10 \
 		-r 500 \
 		-m trace_replayBlockTransactions \

@@ -39,12 +39,15 @@ GET https://v2.archive.subsquid.io/worker/0/status
 ### Deployed status 1
 GET https://v2.archive.subsquid.io/worker/1/status
 
+### Routing request
+GET https://v2.archive.subsquid.io/network/ethereum-mainnet/4000000/worker
+
 ###
-POST https://v2.archive.subsquid.io/worker/0/query/czM6Ly9ldGhhLW1haW5uZXQtc2lh
+POST https://v2.archive.subsquid.io/worker/0/query/czM6Ly9ldGhhLW1haW5uZXQ
 Content-Type: application/json
 
 {
-  "fromBlock": 16000000,
+  "fromBlock": 4000000,
   "logs": [
     {
       "address": ["0x3883f5e181fccaf8410fa61e12b59bad963fb645"]
