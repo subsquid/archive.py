@@ -61,14 +61,14 @@ class BlockTableBuilder(TableBuilderBase):
         self.receipts_root.append(block['receiptsRoot'])
         self.mix_hash.append(block.get('mixHash'))
         self.miner.append(block['miner'])
-        self.difficulty.append(block.get('difficulty') and qty2int(block['difficulty']))
-        self.total_difficulty.append(block.get('totalDifficulty') and qty2int(block['totalDifficulty']))
+        self.difficulty.append(block.get('difficulty'))
+        self.total_difficulty.append(block.get('totalDifficulty'))
         self.extra_data.append(block['extraData'])
         self.size.append(qty2int(block['size']))
-        self.gas_used.append(qty2int(block['gasUsed']))
-        self.gas_limit.append(qty2int(block['gasLimit']))
+        self.gas_used.append(block['gasUsed'])
+        self.gas_limit.append(block['gasLimit'])
         self.timestamp.append(qty2int(block['timestamp']))
-        self.base_fee_per_gas.append(block.get('baseFeePerGas') and qty2int(block['baseFeePerGas']))
+        self.base_fee_per_gas.append(block.get('baseFeePerGas'))
 
 
 class TxTableBuilder(TableBuilderBase):
@@ -96,7 +96,6 @@ class TxTableBuilder(TableBuilderBase):
         self.effective_gas_price = Column(qty())
         self.type = Column(pyarrow.int8())
         self.status = Column(pyarrow.int8())
-        self._id = Column(pyarrow.int64())
 
     def append(self, tx: Transaction):
         block_number = qty2int(tx['blockNumber'])
@@ -105,16 +104,16 @@ class TxTableBuilder(TableBuilderBase):
 
         self.block_number.append(block_number)
         self.__dict__['from'].append(tx['from'])
-        self.gas.append(qty2int(tx['gas']))
-        self.gas_price.append(qty2int(tx['gasPrice']))
-        self.max_fee_per_gas.append(tx.get('maxFeePerGas') and qty2int(tx['maxFeePerGas']))
-        self.max_priority_fee_per_gas.append(tx.get('maxPriorityFeePerGas') and qty2int(tx['maxPriorityFeePerGas']))
+        self.gas.append(tx['gas'])
+        self.gas_price.append(tx['gasPrice'])
+        self.max_fee_per_gas.append(tx.get('maxFeePerGas'))
+        self.max_priority_fee_per_gas.append(tx.get('maxPriorityFeePerGas'))
         self.hash.append(tx['hash'])
         self.input.append(tx_input)
         self.nonce.append(qty2int(tx['nonce']))
         self.to.append(tx.get('to'))
         self.transaction_index.append(tx_index)
-        self.value.append(qty2int(tx['value']))
+        self.value.append(tx['value'])
         self.v.append(tx.get('v'))
         self.r.append(tx.get('r'))
         self.s.append(tx.get('s'))
@@ -125,19 +124,17 @@ class TxTableBuilder(TableBuilderBase):
 
         receipt = tx.get('receipt_')
         if receipt:
-            self.gas_used.append(qty2int(receipt['gasUsed']))
-            self.cumulative_gas_used.append(qty2int(receipt['cumulativeGasUsed']))
-            self.effective_gas_price.append(qty2int(receipt['effectiveGasPrice']))
+            self.gas_used.append(receipt['gasUsed'])
+            self.cumulative_gas_used.append(receipt['cumulativeGasUsed'])
+            self.effective_gas_price.append(receipt['effectiveGasPrice'])
             self.type.append(qty2int(receipt['type']))
-            self.status.append(receipt.get('status') and qty2int(receipt['status']))
+            self.status.append(qty2int(receipt['status']))
         else:
             self.gas_used.append(None)
             self.cumulative_gas_used.append(None)
             self.effective_gas_price.append(None)
             self.type.append(None)
             self.status.append(None)
-
-        self._id.append((block_number << 24) + tx_index)
 
 
 class LogTableBuilder(TableBuilderBase):
@@ -210,11 +207,11 @@ class TraceTableBuilder(TableBuilderBase):
         if trace['type'] == 'create':
             action = trace['action']
             self.create_from.append(action['from'])
-            self.create_value.append(qty2int(action['value']))
-            self.create_gas.append(qty2int(action['gas']))
+            self.create_value.append(action['value'])
+            self.create_gas.append(action['gas'])
             self.create_init.append(action['init'])
             if result := trace.get('result'):
-                self.create_result_gas_used.append(qty2int(result['gasUsed']))
+                self.create_result_gas_used.append(result['gasUsed'])
                 self.create_result_code.append(result['code'])
                 self.create_result_address.append(result['address'])
             else:
@@ -234,12 +231,12 @@ class TraceTableBuilder(TableBuilderBase):
             action = trace['action']
             self.call_from.append(action['from'])
             self.call_to.append(action['to'])
-            self.call_value.append(qty2int(action['value']))
-            self.call_gas.append(qty2int(action['gas']))
+            self.call_value.append(action['value'])
+            self.call_gas.append(action['gas'])
             self.call_input.append(action['input'])
             self.call_type.append(action['callType'])
             if result := trace.get('result'):
-                self.call_result_gas_used.append(qty2int(result['gasUsed']))
+                self.call_result_gas_used.append(result['gasUsed'])
                 self.call_result_output.append(result['output'])
             else:
                 self.call_result_gas_used.append(None)
@@ -258,7 +255,7 @@ class TraceTableBuilder(TableBuilderBase):
             action = trace['action']
             self.suicide_address.append(action['address'])
             self.suicide_refund_address.append(action['refundAddress'])
-            self.suicide_balance.append(qty2int(action['balance']))
+            self.suicide_balance.append(action['balance'])
         else:
             self.suicide_address.append(None)
             self.suicide_refund_address.append(None)
@@ -267,7 +264,7 @@ class TraceTableBuilder(TableBuilderBase):
         if trace['type'] == 'reward':
             action = trace['action']
             self.reward_author.append(action['author'])
-            self.reward_value.append(qty2int(action['value']))
+            self.reward_value.append(action['value'])
             self.reward_type.append(action['rewardType'])
         else:
             self.reward_author.append(None)

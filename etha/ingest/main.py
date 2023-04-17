@@ -270,4 +270,4 @@ class IngestionProcess:
 
 
 def cli():
-    run_async_program(cli, parse_cli_arguments())
+    run_async_program(ingest, parse_cli_arguments())

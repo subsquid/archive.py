@@ -19,13 +19,14 @@ write:
 
 
 ingest-eth:
-	@$(PY) -m etha.ingest.main --dest data/mainnet \
-		-e ${ETH_NODE} \
+	@$(PY) -m etha.ingest --dest data/mainnet \
+		-e ${ETH_POKT} \
 		-c 10 \
+		-r 500 \
 		-m trace_replayBlockTransactions \
 		-e ${ETH_BLAST} \
 		-c 10 \
-		-r 500 \
+		-r 100 \
 		--batch-limit 100 \
 		--with-receipts \
 		--with-traces \
@@ -34,7 +35,7 @@ ingest-eth:
 
 
 ingest-poly:
-	@$(PY) -m etha.ingest.main --dest data/poly \
+	@$(PY) -m etha.ingest --dest data/poly \
 		-e ${POLY_POKT} \
 		-c 10 \
 		-m eth_getTransactionReceipt \
