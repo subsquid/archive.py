@@ -13,7 +13,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0emessages.proto\x12\x08messages\"\xf3\x02\n\x08\x45nvelope\x12\x1e\n\x04ping\x18\x01 \x01(\x0b\x32\x0e.messages.PingH\x00\x12-\n\x0cstate_update\x18\x02 \x01(\x0b\x32\x15.messages.WorkerStateH\x00\x12)\n\nget_worker\x18\x03 \x01(\x0b\x32\x13.messages.GetWorkerH\x00\x12\x36\n\x11get_worker_result\x18\x04 \x01(\x0b\x32\x19.messages.GetWorkerResultH\x00\x12\x30\n\x10get_worker_error\x18\x05 \x01(\x0b\x32\x14.messages.QueryErrorH\x00\x12 \n\x05query\x18\x06 \x01(\x0b\x32\x0f.messages.QueryH\x00\x12-\n\x0cquery_result\x18\x07 \x01(\x0b\x32\x15.messages.QueryResultH\x00\x12+\n\x0bquery_error\x18\x08 \x01(\x0b\x32\x14.messages.QueryErrorH\x00\x42\x05\n\x03msg\"#\n\x05Range\x12\r\n\x05\x62\x65gin\x18\x01 \x01(\r\x12\x0b\n\x03\x65nd\x18\x02 \x01(\r\"+\n\x08RangeSet\x12\x1f\n\x06ranges\x18\x01 \x03(\x0b\x32\x0f.messages.Range\"\x89\x01\n\x0bWorkerState\x12\x35\n\x08\x64\x61tasets\x18\x01 \x03(\x0b\x32#.messages.WorkerState.DatasetsEntry\x1a\x43\n\rDatasetsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12!\n\x05value\x18\x02 \x01(\x0b\x32\x12.messages.RangeSet:\x02\x38\x01\"b\n\x04Ping\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x12\n\nworker_url\x18\x02 \x01(\t\x12$\n\x05state\x18\x03 \x01(\x0b\x32\x15.messages.WorkerState\x12\r\n\x05pause\x18\x04 \x01(\x08\"C\n\tGetWorker\x12\x10\n\x08query_id\x18\x01 \x01(\t\x12\x0f\n\x07\x64\x61taset\x18\x02 \x01(\t\x12\x13\n\x0bstart_block\x18\x03 \x01(\r\"O\n\x0fGetWorkerResult\x12\x10\n\x08query_id\x18\x01 \x01(\t\x12\x11\n\tworker_id\x18\x02 \x01(\t\x12\x17\n\x0f\x65ncoded_dataset\x18\x03 \x01(\t\"9\n\x05Query\x12\x10\n\x08query_id\x18\x01 \x01(\t\x12\x0f\n\x07\x64\x61taset\x18\x02 \x01(\t\x12\r\n\x05query\x18\x03 \x01(\t\"Y\n\x0bQueryResult\x12\x10\n\x08query_id\x18\x01 \x01(\t\x12\x1c\n\x14last_processed_block\x18\x02 \x01(\r\x12\x0c\n\x04size\x18\x03 \x01(\r\x12\x0c\n\x04\x64\x61ta\x18\x04 \x01(\x0c\"-\n\nQueryError\x12\x10\n\x08query_id\x18\x01 \x01(\t\x12\r\n\x05\x65rror\x18\x02 \x01(\tb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0emessages.proto\x12\x08messages\"\xa0\x03\n\x08\x45nvelope\x12\x1e\n\x04ping\x18\x01 \x01(\x0b\x32\x0e.messages.PingH\x00\x12-\n\x0cstate_update\x18\x02 \x01(\x0b\x32\x15.messages.WorkerStateH\x00\x12)\n\nget_worker\x18\x03 \x01(\x0b\x32\x13.messages.GetWorkerH\x00\x12\x36\n\x11get_worker_result\x18\x04 \x01(\x0b\x32\x19.messages.GetWorkerResultH\x00\x12\x30\n\x10get_worker_error\x18\x05 \x01(\x0b\x32\x14.messages.QueryErrorH\x00\x12 \n\x05query\x18\x06 \x01(\x0b\x32\x0f.messages.QueryH\x00\x12-\n\x0cquery_result\x18\x07 \x01(\x0b\x32\x15.messages.QueryResultH\x00\x12+\n\x0bquery_error\x18\x08 \x01(\x0b\x32\x14.messages.QueryErrorH\x00\x12+\n\rdataset_state\x18\t \x01(\x0b\x32\x12.messages.RangeSetH\x00\x42\x05\n\x03msg\"#\n\x05Range\x12\r\n\x05\x62\x65gin\x18\x01 \x01(\r\x12\x0b\n\x03\x65nd\x18\x02 \x01(\r\"+\n\x08RangeSet\x12\x1f\n\x06ranges\x18\x01 \x03(\x0b\x32\x0f.messages.Range\"\x89\x01\n\x0bWorkerState\x12\x35\n\x08\x64\x61tasets\x18\x01 \x03(\x0b\x32#.messages.WorkerState.DatasetsEntry\x1a\x43\n\rDatasetsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12!\n\x05value\x18\x02 \x01(\x0b\x32\x12.messages.RangeSet:\x02\x38\x01\"b\n\x04Ping\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x12\n\nworker_url\x18\x02 \x01(\t\x12$\n\x05state\x18\x03 \x01(\x0b\x32\x15.messages.WorkerState\x12\r\n\x05pause\x18\x04 \x01(\x08\"C\n\tGetWorker\x12\x10\n\x08query_id\x18\x01 \x01(\t\x12\x0f\n\x07\x64\x61taset\x18\x02 \x01(\t\x12\x13\n\x0bstart_block\x18\x03 \x01(\r\"O\n\x0fGetWorkerResult\x12\x10\n\x08query_id\x18\x01 \x01(\t\x12\x11\n\tworker_id\x18\x02 \x01(\t\x12\x17\n\x0f\x65ncoded_dataset\x18\x03 \x01(\t\"9\n\x05Query\x12\x10\n\x08query_id\x18\x01 \x01(\t\x12\x0f\n\x07\x64\x61taset\x18\x02 \x01(\t\x12\r\n\x05query\x18\x03 \x01(\t\"Y\n\x0bQueryResult\x12\x10\n\x08query_id\x18\x01 \x01(\t\x12\x1c\n\x14last_processed_block\x18\x02 \x01(\r\x12\x0c\n\x04size\x18\x03 \x01(\r\x12\x0c\n\x04\x64\x61ta\x18\x04 \x01(\x0c\"-\n\nQueryError\x12\x10\n\x08query_id\x18\x01 \x01(\t\x12\r\n\x05\x65rror\x18\x02 \x01(\tb\x06proto3')
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'messages_pb2', globals())
@@ -23,25 +23,25 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _WORKERSTATE_DATASETSENTRY._options = None
   _WORKERSTATE_DATASETSENTRY._serialized_options = b'8\001'
   _ENVELOPE._serialized_start=29
-  _ENVELOPE._serialized_end=400
-  _RANGE._serialized_start=402
-  _RANGE._serialized_end=437
-  _RANGESET._serialized_start=439
-  _RANGESET._serialized_end=482
-  _WORKERSTATE._serialized_start=485
-  _WORKERSTATE._serialized_end=622
-  _WORKERSTATE_DATASETSENTRY._serialized_start=555
-  _WORKERSTATE_DATASETSENTRY._serialized_end=622
-  _PING._serialized_start=624
-  _PING._serialized_end=722
-  _GETWORKER._serialized_start=724
-  _GETWORKER._serialized_end=791
-  _GETWORKERRESULT._serialized_start=793
-  _GETWORKERRESULT._serialized_end=872
-  _QUERY._serialized_start=874
-  _QUERY._serialized_end=931
-  _QUERYRESULT._serialized_start=933
-  _QUERYRESULT._serialized_end=1022
-  _QUERYERROR._serialized_start=1024
-  _QUERYERROR._serialized_end=1069
+  _ENVELOPE._serialized_end=445
+  _RANGE._serialized_start=447
+  _RANGE._serialized_end=482
+  _RANGESET._serialized_start=484
+  _RANGESET._serialized_end=527
+  _WORKERSTATE._serialized_start=530
+  _WORKERSTATE._serialized_end=667
+  _WORKERSTATE_DATASETSENTRY._serialized_start=600
+  _WORKERSTATE_DATASETSENTRY._serialized_end=667
+  _PING._serialized_start=669
+  _PING._serialized_end=767
+  _GETWORKER._serialized_start=769
+  _GETWORKER._serialized_end=836
+  _GETWORKERRESULT._serialized_start=838
+  _GETWORKERRESULT._serialized_end=917
+  _QUERY._serialized_start=919
+  _QUERY._serialized_end=976
+  _QUERYRESULT._serialized_start=978
+  _QUERYRESULT._serialized_end=1067
+  _QUERYERROR._serialized_start=1069
+  _QUERYERROR._serialized_end=1114
 # @@protoc_insertion_point(module_scope)

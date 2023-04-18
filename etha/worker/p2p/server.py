@@ -15,6 +15,7 @@ from etha.worker.p2p.p2p_transport_pb2 import Message, Empty
 from etha.worker.p2p.p2p_transport_pb2_grpc import P2PTransportStub
 from etha.worker.query import QueryResult
 from etha.worker.state.controller import State
+from etha.worker.state.dataset import dataset_encode
 from etha.worker.state.intervals import to_range_set
 from etha.worker.state.manager import StateManager
 from etha.worker.transport import Transport
@@ -74,21 +75,32 @@ class P2PTransport(Transport):
             else:
                 LOG.error(f"Unexpected message type received: {msg_type}")
 
-    async def _send(self, peer_id: str, envelope: msg_pb.Envelope) -> None:
+    async def _send(
+            self,
+            envelope: msg_pb.Envelope,
+            peer_id: Optional[str] = None,
+            topic: Optional[str] = None,
+    ) -> None:
         msg = Message(
             peer_id=peer_id,
+            topic=topic,
             content=envelope.SerializeToString()
         )
         await self._transport.SendMessage(msg)
 
-    async def send_ping(self, state: State, pause=False) -> None:
+    async def send_ping(self, range_set: State, pause=False) -> None:
         if self._local_peer_id is None:
             await self.initialize()
         envelope = msg_pb.Envelope(ping=msg_pb.Ping(
             worker_id=self._local_peer_id,
-            state=state_to_proto(state)
+            state=state_to_proto(range_set)
         ))
-        await self._send(self._router_id, envelope)
+        await self._send(envelope, peer_id=self._router_id)
+
+        for dataset, range_set in envelope.ping.state.datasets.items():
+            envelope = msg_pb.Envelope(dataset_state=range_set)
+            topic = dataset_encode(dataset)
+            await self._send(envelope, topic=topic)
 
     async def state_updates(self) -> AsyncIterator[State]:
         while True:
@@ -123,7 +135,7 @@ class P2PTransport(Transport):
                 data=data
             )
         )
-        await self._send(peer_id, envelope)
+        await self._send(envelope, peer_id=peer_id)
 
     async def send_query_error(self, query_id: str, error: Exception) -> None:
         try:
@@ -138,7 +150,7 @@ class P2PTransport(Transport):
                 error=str(error)
             )
         )
-        await self._send(peer_id, envelope)
+        await self._send(envelope, peer_id=peer_id)
 
 
 async def run_queries(transport: P2PTransport, worker: Worker):
