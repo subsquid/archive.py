@@ -1,11 +1,10 @@
-import base64
 import datetime
-import json
 import logging
 
 from locust import FastHttpUser, task
 
 from etha.query.model import Query
+from etha.worker.state.dataset import dataset_encode
 
 
 LOG = logging.getLogger(__name__)
@@ -21,12 +20,13 @@ class _WorkerUser(FastHttpUser):
 
     @task
     def sync(self):
-        ds = base64.urlsafe_b64encode(self.dataset.encode('utf-8')).decode('ascii')
+        ds = dataset_encode(self.dataset)
         q: Query = dict(self.query)
         beg = datetime.datetime.now()
         while q['fromBlock'] <= self.last_block:
             res = self.client.post(f'/query/{ds}', json=q)
-            blocks = json.loads(res.text)
+            res.raise_for_status()
+            blocks = res.json()
             next_block = blocks[-1]['header']['number'] + 1
             assert next_block > q['fromBlock']
             q['fromBlock'] = next_block
@@ -52,7 +52,8 @@ class _ArchiveUser(FastHttpUser):
             worker = res.text
             res = self.client.post(worker, json=q)
             res.raise_for_status()
-            next_block = int(res.headers['x-sqd-last-processed-block']) + 1
+            blocks = res.json()
+            next_block = blocks[-1]['header']['number'] + 1
             assert next_block > q['fromBlock']
             q['fromBlock'] = next_block
         dur = datetime.datetime.now() - beg

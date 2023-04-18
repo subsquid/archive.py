@@ -1,8 +1,8 @@
-from queries import GRAVATAR
+from queries import GRAVATAR, with_range
 from tools import ArchiveUser
 
 
 GravatarSquid = ArchiveUser(
     'GravatarSquid',
-    query=GRAVATAR
+    query=with_range(GRAVATAR, 0, 7_200_000),
 )

@@ -1,7 +1,7 @@
 import bisect
 import contextlib
 from dataclasses import dataclass, field
-from typing import NamedTuple, Optional, Protocol, Union, Literal, Callable
+from typing import NamedTuple, Optional, Protocol, Union, Literal, Callable, TypedDict
 
 from etha.worker.state.dataset import Dataset
 from etha.worker.state.intervals import difference, Range, RangeSet, to_range_set, union
@@ -104,9 +104,9 @@ class _DatasetTrack:
         self.downloading = difference(self.downloading, downloaded)
 
 
-class DatasetStatus(NamedTuple):
-    available_ranges: RangeSet
-    downloading_ranges: RangeSet
+class DatasetRanges(TypedDict):
+    available: RangeSet
+    downloading: RangeSet
 
 
 class StateController:
@@ -118,14 +118,14 @@ class StateController:
         self._track = {}
         self._reset()
 
-    def get_status(self) -> dict[Dataset, DatasetStatus]:
+    def get_status(self) -> dict[Dataset, DatasetRanges]:
         status = {}
         for dataset, track in self._track.items():
             if track.is_live:
-                status[dataset] = DatasetStatus(
-                    available_ranges=track.available,
-                    downloading_ranges=track.downloading
-                )
+                status[dataset] = {
+                    'available': track.available,
+                    'downloading': track.downloading
+                }
         return status
 
     def get_state(self) -> State:
