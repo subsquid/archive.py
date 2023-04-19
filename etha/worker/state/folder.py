@@ -19,7 +19,7 @@ class StateFolder:
                 ds = dataset_decode(item)
             except ValueError:
                 continue
-            state[ds] = to_range_set(get_chunks(self.fs.cd(item)))
+            state[ds] = to_range_set((c.first_block, c.last_block) for c in get_chunks(self.fs.cd(item)))
         return state
 
     def apply_update(self,

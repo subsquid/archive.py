@@ -2,7 +2,7 @@
 GET http://localhost:8000/status
 
 ### Query USDC transfers
-POST http://localhost:8000/query/czM6Ly9ldGhhLW1haW5uZXQ=
+POST http://localhost:8000/query/czM6Ly9ldGhhLW1haW5uZXQ
 Content-Type: application/json
 Accept-Encoding: gzip
 
@@ -12,7 +12,8 @@ Accept-Encoding: gzip
     "block": {
       "number": true,
       "hash": true,
-      "parentHash": true
+      "parentHash": true,
+      "timestamp": true
     },
     "log": {
       "data": true,
@@ -59,7 +60,7 @@ Content-Type: application/json
       "number": true,
       "hash": true,
       "parentHash": true,
-      "nonce": true
+      "timestamp": true
     },
     "log": {
       "address": true,

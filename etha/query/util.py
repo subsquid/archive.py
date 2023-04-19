@@ -1,5 +1,5 @@
 import re
-from typing import NamedTuple, Union
+from typing import NamedTuple, Union, Iterable, TypeVar
 
 
 class And(NamedTuple):
@@ -57,3 +57,16 @@ class SqlBuilder:
             sql += f" WHERE {where}"
 
         return sql
+
+
+_T = TypeVar('_T')
+
+
+def unique(elements: Iterable[_T]) -> Iterable[_T]:
+    seen = set()
+    for e in elements:
+        if e in seen:
+            pass
+        else:
+            seen.add(e)
+            yield e

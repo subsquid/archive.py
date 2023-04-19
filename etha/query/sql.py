@@ -1,9 +1,10 @@
 import os.path
+from itertools import chain
 from typing import Any, TypedDict, NotRequired, Literal, Iterable
 
 from etha.layout import DataChunk
 from etha.query.model import Query
-from etha.query.util import SqlBuilder, Bin, And, Or, to_snake_case
+from etha.query.util import SqlBuilder, Bin, And, Or, to_snake_case, unique
 
 
 TableName = Literal['blocks', 'transactions', 'logs']
@@ -224,27 +225,35 @@ class _SqlQueryBuilder:
         )
 
         props = [
-            ('header', _json_project(self.get_block_fields()))
+            ('header', self.project_block())
         ]
 
         if 'selected_transactions' in self.relations:
             props.append((
                 'transactions',
-                f'(SELECT json_group_array({_json_project(self.get_tx_fields(), "tx.")}) '
-                f'FROM transactions AS tx, selected_transactions AS stx '
-                f'WHERE tx.block_number = stx.block_number '
-                f'AND tx.transaction_index = stx.transaction_index '
-                f'AND tx.block_number = b.number)'
+                f'coalesce('
+                f' (SELECT json_group_array({_json_project(self.get_tx_fields(), "tx.")})'
+                f' FROM transactions AS tx, selected_transactions AS stx'
+                f' WHERE tx.block_number = stx.block_number'
+                f' AND tx.transaction_index = stx.transaction_index'
+                f' AND tx.block_number = b.number)'
+                f', '
+                f' list_value()'
+                f')'
             ))
 
         if 'selected_logs' in self.relations:
             props.append((
                 'logs',
-                f'(SELECT json_group_array({self.project_log()}) '
-                f'FROM logs, selected_logs AS s '
-                f'WHERE logs.block_number = s.block_number '
-                f'AND logs.log_index = s.log_index '
-                f'AND logs.block_number = b.number)'
+                f'coalesce('
+                f' (SELECT json_group_array({self.project_log()})'
+                f' FROM logs, selected_logs AS s'
+                f' WHERE logs.block_number = s.block_number'
+                f' AND logs.log_index = s.log_index'
+                f' AND logs.block_number = b.number)'
+                f', '
+                f' list_value()'
+                f')'
             ))
 
         return f"""
@@ -253,6 +262,14 @@ WITH
 SELECT {_json_project(props)} AS json_data 
 FROM selected_blocks AS b
         """
+
+    def project_block(self) -> str:
+        def rewrite_timestamp(f: str):
+            if f == 'timestamp':
+                return 'timestamp', 'epoch(timestamp)'
+            else:
+                return f
+        return _json_project(map(rewrite_timestamp, self.get_block_fields()))
 
     def project_log(self) -> str:
         fields = self.get_log_fields()
@@ -284,20 +301,22 @@ FROM selected_blocks AS b
             'logsBloom': 10
         })
 
-    def get_log_fields(self) -> set[str]:
+    def get_log_fields(self) -> list[str]:
         return self.get_fields('log', {'logIndex', 'transactionIndex'})
 
-    def get_tx_fields(self) -> set[str]:
+    def get_tx_fields(self) -> list[str]:
         return self.get_fields('transaction', {'transactionIndex'})
 
-    def get_block_fields(self) -> set[str]:
+    def get_block_fields(self) -> list[str]:
         return self.get_fields('block', {'number', 'hash', 'parentHash'})
 
-    def get_fields(self, table: str, required: Iterable[str]) -> set[str]:
+    def get_fields(self, table: str, required: Iterable[str]) -> list[str]:
         requested = self.q.get('fields', {}).get(table, {})
-        fields = set(required)
-        fields.update(f for f, included in requested.items() if included)
-        return fields
+        return list(
+            unique(
+                chain(required, requested)
+            )
+        )
 
     def in_condition(self, col: str, variants: list | None) -> Bin | None:
         if not variants:
