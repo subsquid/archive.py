@@ -55,6 +55,7 @@ TxFieldSelection = TypedDict('TxFieldSelection', {
 class LogFieldSelection(TypedDict, total=False):
     logIndex: bool
     transactionIndex: bool
+    transactionHash: bool
     address: bool
     data: bool
     topics: bool

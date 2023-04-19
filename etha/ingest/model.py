@@ -65,6 +65,7 @@ class Log(TypedDict):
     blockNumber: Qty
     logIndex: Qty
     transactionIndex: Qty
+    transactionHash: Hash32
     address: Address20
     data: Bytes
     topics: list[Bytes32]
