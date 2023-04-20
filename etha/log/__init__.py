@@ -10,9 +10,8 @@ class _Logger(logging.Logger):
 def init_logging():
     logging.setLoggerClass(_Logger)
     import sys
-    from etha.log.format import COLORFUL, PLAIN, TextFormatter
-    style = COLORFUL if sys.stderr.isatty() else PLAIN
-    f = TextFormatter(style)
+    from etha.log.format import COLORFUL, PLAIN, TextFormatter, StructFormatter
+    f = TextFormatter(COLORFUL) if sys.stderr.isatty() else StructFormatter()
     h = logging.StreamHandler(sys.stderr)
     h.setFormatter(f)
     logging.basicConfig(
