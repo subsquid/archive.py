@@ -1,14 +1,11 @@
 import os.path
-from itertools import chain
-from typing import Any, TypedDict, NotRequired, Literal, Iterable
+from itertools import chain, groupby
+from typing import Any, TypedDict, NotRequired, Iterable, Callable, NamedTuple
 
 from etha.layout import DataChunk
-from etha.query.model import Query
-from etha.query.util import SqlBuilder, Bin, And, Or, to_snake_case, unique
-
-
-TableName = Literal['blocks', 'transactions', 'logs']
-VariableName = TableName | Literal['last_block']
+from etha.query.model import Query, TxRequest, LogRequest, TraceRequest, StateDiffRequest
+from etha.query.util import SqlBuilder, Bin, unique, WhereExp, json_project, \
+    compute_item_weight, union_all, And, Or, project, json_list, remove_camel_prefix, to_snake_case
 
 
 class VariableMap(TypedDict):
@@ -27,8 +24,7 @@ class SqlQuery:
         self._last_block = q.get('toBlock')
 
     def set_chunk(self, dataset_dir: str, chunk: DataChunk) -> None:
-        table: TableName
-        for table in ['blocks', 'transactions', 'logs']:
+        for table in ['blocks', 'transactions', 'logs', 'traces', 'statediffs']:
             if table in self._variables:
                 idx = self._variables[table]
                 self.params[idx] = os.path.join(dataset_dir, chunk.path(), f'{table}.parquet')
@@ -39,6 +35,18 @@ class SqlQuery:
                 self.params[idx] = chunk.last_block
             else:
                 self.params[idx] = min(chunk.last_block, self._last_block)
+
+
+class _Child(NamedTuple):
+    table: str
+    request_field: str
+    key: list[str]
+
+
+class _Ref(NamedTuple):
+    table: str
+    request_field: str
+    join_condition: str
 
 
 class _SqlQueryBuilder:
@@ -56,118 +64,368 @@ class _SqlQueryBuilder:
         self.params.append(value)
         return f'${len(self.params)}'
 
-    def new_variable(self, name: VariableName) -> str:
+    def new_variable(self, name: str) -> str:
         assert name not in self.variables
         idx = int(self.new_param(None)[1:])
         self.variables[name] = idx - 1
         return f'${idx}'
 
-    def use_table(self, name: TableName) -> None:
+    def use_table(self, name: str) -> None:
         if name not in self.relations:
             self.relations[name] = f'SELECT * FROM read_parquet({self.new_variable(name)})'
 
-    def add_selected_logs(self) -> None:
-        selection = self.q.get('logs')
-        if not selection:
+    def add_request_relation(self,
+                             table: str,
+                             columns: Iterable[str],
+                             relations: Iterable[str],
+                             where: Callable[[Any], Iterable[WhereExp]]
+                             ):
+        requests: list[dict] | None
+        requests = self.q.get(table)
+        if not requests:
             return
 
-        self.use_table('logs')
+        self.use_table(table)
 
-        qb = SqlBuilder('logs')
+        def relation_mask(req: dict):
+            return tuple(map(lambda rel: req.get(rel, False), relations))
 
-        cases = []
-        for variant in selection:
-            cond = And([])
+        union = []
+        requests = requests.copy()
+        requests.sort(key=relation_mask)
 
-            where_address = self.in_condition('address', variant.get('address'))
-            if where_address:
-                cond.ops.append(where_address)
+        for mask, req_group in groupby(requests, key=relation_mask):
+            qb = SqlBuilder(table)
+            qb.add_columns(columns)
+            for i, rel in enumerate(relations):
+                qb.add_columns([
+                    f'{self.new_param(mask[i])} AS include_{rel}'
+                ])
 
-            where_topic = self.in_condition('topic0', variant.get('topic0'))
-            if where_topic:
-                cond.ops.append(where_topic)
+            cases = []
+            for req in requests:
+                conditions = list(c for c in where(req) if c)
+                if conditions:
+                    cases.append(And(conditions))
+                else:
+                    cases = []
+                    break
+            if cases:
+                qb.add_where(Or(cases))
 
-            if cond.ops:
-                cases.append(cond)
+            union.append(qb.build())
+
+        relation_name = f'requested_{table}'
+
+        if len(union) == 1:
+            self.relations[relation_name] = union[0]
+        else:
+            qb = SqlBuilder(f'({union_all(union)})')
+            qb.add_columns(columns)
+            qb.add_columns(f'MAX(include_{rel}) AS include_{rel}' for rel in relations)
+            self.relations[relation_name] = qb.build() + ' GROUP BY ' + ', '.join(columns)
+
+    def is_rel_requested(self, rel: _Child | _Ref) -> bool:
+        for req in self.q.get(rel.table, []):
+            if req.get(rel.request_field):
+                return True
+        return False
+
+    def add_select_relation(self,
+                            table: str,
+                            key: list[str],
+                            references: list[_Ref],
+                            children: list[_Child]
+                            ):
+
+        relation_name = f'selected_{table}'
+        union = []
+
+        for child in children:
+            if self.is_rel_requested(child):
+                projection = ", ".join(
+                    c if a == c else f"{c} AS {a}" for a, c in zip(key, child.key)
+                )
+                union.append(f'SELECT {projection} '
+                             f'FROM requested_{child.table} '
+                             f'WHERE include_{child.request_field}')
+
+        has_children = bool(union)
+
+        for ref in references:
+            if self.is_rel_requested(ref):
+                union.append(
+                    f'SELECT {project(key, prefix="s.")} '
+                    f'FROM {table} s, requested_{ref.table} p '
+                    f'WHERE p.include_{ref.request_field} '
+                    f'AND s.block_number = p.block_number '
+                    f'AND {ref.join_condition}'
+                )
+
+        if f'requested_{table}' in self.relations:
+            union.append(f'SELECT {project(key)} FROM requested_{table}')
+
+        if not union:
+            return
+
+        self.use_table(table)
+
+        if len(union) == 1 and not has_children:
+            self.relations[relation_name] = union[0]
+        else:
+            self.relations[relation_name] = f'SELECT DISTINCT {project(key)} FROM ({union_all(union)})'
+
+    def log_where(self, req: LogRequest) -> Iterable[WhereExp]:
+        yield self.in_condition('address', req.get('address'))
+        yield self.in_condition('topic0', req.get('topic0'))
+
+    def add_requested_logs(self) -> None:
+        self.add_request_relation(
+            table='logs',
+            columns=['block_number', 'log_index', 'transaction_index'],
+            relations=['transaction'],
+            where=self.log_where
+        )
+
+    def add_selected_logs(self) -> None:
+        self.add_select_relation(
+            table='logs',
+            key=['block_number', 'log_index'],
+            references=[
+                _Ref(
+                    table='transactions',
+                    request_field='logs',
+                    join_condition='s.block_number = p.block_number AND s.transaction_index = p.transaction_index'
+                )
+            ],
+            children=[]
+        )
+
+    def get_log_fields(self) -> list[str]:
+        return self.get_fields('log', ['logIndex', 'transactionIndex'])
+
+    def get_log_weight(self) -> int:
+        return compute_item_weight(self.get_log_fields(), {
+            'data': 4,
+            'topics': 4
+        })
+
+    def project_log(self, prefix: str) -> str:
+        def rewrite_topics(f: str):
+            if f == 'topics':
+                p = prefix
+                return 'topics', f'[t for t in list_value({p}topic0, {p}topic1, {p}topic2, {p}topic3) if t is not null]'
             else:
-                cases = []
-                break
+                return f
 
-        qb.add_where(Or(cases))
-        qb.add_columns(['block_number', 'log_index', 'transaction_index'])
-        self.relations['selected_logs'] = qb.build()
+        return json_project(
+            map(rewrite_topics, self.get_log_fields()),
+            prefix
+        )
+
+    def trace_where(self, req: TraceRequest) -> Iterable[WhereExp]:
+        yield self.in_condition('type', req.get('type'))
+        yield self.in_condition('create_from', req.get('createFrom'))
+        yield self.in_condition('call_from', req.get('callFrom'))
+        yield self.in_condition('call_to', req.get('callTo'))
+        yield self.in_condition('call_sighash', req.get('callSighash'))
+        yield self.in_condition('suicide_refund_address', req.get('suicideRefundAddress'))
+        yield self.in_condition('reward_author', req.get('rewardAuthor'))
+
+    def add_requested_traces(self):
+        self.add_request_relation(
+            table='traces',
+            columns=['block_number', 'transaction_index', 'trace_address'],
+            relations=['transaction', 'subtraces'],
+            where=self.trace_where
+        )
+
+    def add_selected_traces(self) -> None:
+        self.add_select_relation(
+            table='traces',
+            key=['block_number', 'transaction_index', 'trace_address'],
+            references=[
+                _Ref(
+                    table='transactions',
+                    request_field='traces',
+                    join_condition='s.transaction_index = p.transaction_index'
+                ),
+                _Ref(
+                    table='traces',
+                    request_field='subtraces',
+                    join_condition='s.transaction_index = p.transaction_index AND '
+                                   'len(s.trace_address) > len(p.trace_address) AND '
+                                   's.trace_address[1:len(p.trace_address)] = p.trace_address'
+                )
+            ],
+            children=[]
+        )
+
+    def get_trace_fields(self) -> list[str]:
+        return self.get_fields('trace', ['transactionIndex', 'traceAddress', 'type'])
+
+    def get_trace_weight(self) -> int:
+        return compute_item_weight(self.get_trace_fields(), {})
+
+    def project_trace(self, prefix: str) -> str:
+        fields = self.get_trace_fields()
+
+        create_result_fields = [f for f in fields if f.startswith('createResult')]
+        create_action_fields = [f for f in fields if f.startswith('create') and not f.startswith('createResult')]
+        call_result_fields = [f for f in fields if f.startswith('callResult')]
+        call_action_fields = [f for f in fields if f.startswith('call') and not f.startswith('callResult')]
+        suicide_fields = [f for f in fields if f.startswith('suicide')]
+        reward_fields = [f for f in fields if f.startswith('reward')]
+
+        all_action_fields = set(chain(create_action_fields, call_action_fields, suicide_fields, reward_fields))
+        rest_fields = [f for f in fields if f not in all_action_fields]
+
+        topics = []
+
+        if create_action_fields or create_result_fields:
+            topics.append(('create', create_action_fields, create_result_fields))
+
+        if call_action_fields or call_result_fields:
+            topics.append(('call', call_action_fields, call_result_fields))
+
+        if suicide_fields:
+            topics.append(('suicide', suicide_fields, []))
+
+        if reward_fields:
+            topics.append(('reward', reward_fields, []))
+
+        if topics:
+            cases = []
+
+            def topic_projection(_topic: str, _topic_fields: list[str]) -> str:
+                return json_project(
+                    (remove_camel_prefix(f, _topic), f'{prefix}{to_snake_case(f)}')
+                    for f in _topic_fields
+                )
+
+            for topic, action_fields, result_fields in topics:
+                ext = []
+
+                if action_fields:
+                    ext.append(('action', topic_projection(topic, action_fields)))
+
+                if result_fields:
+                    ext.append(('result', topic_projection(f'{topic}Result', result_fields)))
+
+                proj = chain(rest_fields, ext)
+
+                cases.append(
+                    f"WHEN {prefix}type='{topic}' THEN {json_project(proj, prefix)}"
+                )
+
+            when_exps = ' '.join(cases)
+            return f'CASE {when_exps} ELSE {json_project(rest_fields, prefix)} END'
+        else:
+            return json_project(rest_fields, prefix)
+
+    def statediff_where(self, req: StateDiffRequest) -> Iterable[WhereExp]:
+        yield self.in_condition('address', req.get('address'))
+        yield self.in_condition('key', req.get('key'))
+        yield self.in_condition('kind', req.get('kind'))
+
+    def add_requested_statediffs(self):
+        self.add_request_relation(
+            table='statediffs',
+            columns=['block_number', 'transaction_index', 'address', 'key'],
+            relations=['transaction'],
+            where=self.statediff_where
+        )
+
+    def add_selected_statediffs(self):
+        self.add_select_relation(
+            table='statediffs',
+            key=['block_number', 'transaction_index', 'address', 'key'],
+            references=[
+                _Ref(
+                    table='transactions',
+                    request_field='stateDiffs',
+                    join_condition='s.transaction_index = p.transaction_index'
+                )
+            ],
+            children=[]
+        )
+
+    def get_statediff_weight(self) -> int:
+        return compute_item_weight(self.get_statediff_fields(), {})
+
+    def get_statediff_fields(self) -> list[str]:
+        return self.get_fields('stateDiff', ['transactionIndex', 'kind'])
+
+    def project_statediff(self, prefix: str):
+        return json_project(self.get_statediff_fields(), prefix)
+
+    def tx_where(self, req: TxRequest):
+        yield self.in_condition('"to"', req.get('to'))
+        yield self.in_condition('"from"', req.get('from'))
+        yield self.in_condition('sighash', req.get('sighash'))
 
     def add_requested_transactions(self) -> None:
-        selection = self.q.get('transactions', [])
-        if not selection:
-            return None
-
-        self.use_table('transactions')
-
-        qb = SqlBuilder('transactions')
-
-        cases = []
-
-        for variant in selection:
-            cond = And([])
-
-            where_address = self.in_condition('"to"', variant.get('to'))
-            if where_address:
-                cond.ops.append(where_address)
-
-            where_sighash = self.in_condition('sighash', variant.get('sighash'))
-            if where_sighash:
-                cond.ops.append(where_sighash)
-
-            if cond.ops:
-                cases.append(cond)
-            else:
-                cases = []
-                break
-
-        qb.add_where(Or(cases))
-        qb.add_columns(['block_number', 'transaction_index'])
-        self.relations['requested_transactions'] = qb.build()
+        self.add_request_relation(
+            table='transactions',
+            columns=['block_number', 'transaction_index'],
+            relations=['traces', 'logs', 'stateDiffs'],
+            where=self.tx_where
+        )
 
     def add_selected_transactions(self) -> None:
-        has_log_txs = 'selected_logs' in self.relations and 'transaction' in self.get_log_fields()
-        has_requested_txs = 'requested_transactions' in self.relations
-        query = None
+        self.add_select_relation(
+            table='transactions',
+            key=['block_number', 'transaction_index'],
+            references=[],
+            children=[
+                _Child(
+                    table='logs',
+                    request_field='transaction',
+                    key=['block_number', 'transaction_index']
+                ),
+                _Child(
+                    table='traces',
+                    request_field='transaction',
+                    key=['block_number', 'transaction_index']
+                ),
+                _Child(
+                    table='statediffs',
+                    request_field='transaction',
+                    key=['block_number', 'transaction_index']
+                )
+            ]
+        )
 
-        if has_log_txs and has_requested_txs:
-            query = 'SELECT DISTINCT block_number, transaction_index FROM (' \
-                    'SELECT block_number, transaction_index FROM selected_logs ' \
-                    'UNION ALL ' \
-                    'SELECT * FROM requested_transactions' \
-                    ')'
-        elif has_log_txs:
-            self.use_table('transactions')
-            query = 'SELECT DISTINCT block_number, transaction_index FROM selected_logs'
-        elif has_requested_txs:
-            query = 'SELECT * FROM requested_transactions'
+    def get_tx_fields(self) -> list[str]:
+        return self.get_fields('transaction', ['transactionIndex'])
 
-        if query:
-            self.relations['selected_transactions'] = query
+    def get_tx_weight(self) -> int:
+        return compute_item_weight(self.get_tx_fields(), {
+            'input': 4
+        })
+
+    def project_tx(self, prefix: str) -> str:
+        return json_project(self.get_tx_fields(), prefix)
 
     def add_item_stats(self) -> None:
         sources = []
 
-        if 'selected_logs' in self.relations:
-            sources.append(
-                f'SELECT block_number, {self.new_param(self.get_log_weight())} AS weight '
-                f'FROM selected_logs'
-            )
-
-        if 'selected_transactions' in self.relations:
-            sources.append(
-                f'SELECT block_number, {self.new_param(self.get_tx_weight())} AS weight '
-                f'FROM selected_transactions'
-            )
+        self.append_weight_source(sources, 'transactions', self.get_tx_weight())
+        self.append_weight_source(sources, 'logs', self.get_log_weight())
+        self.append_weight_source(sources, 'traces', self.get_trace_weight())
+        self.append_weight_source(sources, 'statediffs', self.get_statediff_weight())
 
         if sources:
             self.relations['item_stats'] = f'SELECT block_number, SUM(weight) AS weight ' \
-                                           f'FROM ({_union_all(sources)}) ' \
+                                           f'FROM ({union_all(sources)}) ' \
                                            f'GROUP BY block_number'
+
+    def append_weight_source(self, sources: list[str], table: str, weight: int) -> None:
+        if f'selected_{table}' in self.relations:
+            sources.append(
+                f'SELECT block_number, {self.new_param(weight)} AS weight '
+                f'FROM selected_{table}'
+            )
 
     def add_block_stats(self) -> None:
         if 'item_stats' not in self.relations:
@@ -213,9 +471,14 @@ class _SqlQueryBuilder:
 
     def build(self) -> str:
         self.use_table('blocks')
-        self.add_selected_logs()
         self.add_requested_transactions()
+        self.add_requested_logs()
+        self.add_requested_traces()
+        self.add_requested_statediffs()
         self.add_selected_transactions()
+        self.add_selected_logs()
+        self.add_selected_traces()
+        self.add_selected_statediffs()
         self.add_item_stats()
         self.add_block_stats()
         self.add_selected_blocks()
@@ -231,37 +494,72 @@ class _SqlQueryBuilder:
         if 'selected_transactions' in self.relations:
             props.append((
                 'transactions',
-                f'coalesce('
-                f' (SELECT json_group_array({_json_project(self.get_tx_fields(), "tx.")})'
-                f' FROM transactions AS tx, selected_transactions AS stx'
-                f' WHERE tx.block_number = stx.block_number'
-                f' AND tx.transaction_index = stx.transaction_index'
-                f' AND tx.block_number = b.number)'
-                f', '
-                f' list_value()'
-                f')'
+                json_list(
+                    f'SELECT {self.project_tx("tx.")} AS obj'
+                    f' FROM transactions AS tx, selected_transactions AS stx'
+                    f' WHERE tx.block_number = stx.block_number'
+                    f' AND tx.transaction_index = stx.transaction_index'
+                    f' AND tx.block_number = b.number'
+                    f' ORDER BY tx.transaction_index'
+                )
             ))
 
         if 'selected_logs' in self.relations:
             props.append((
                 'logs',
-                f'coalesce('
-                f' (SELECT json_group_array({self.project_log()})'
-                f' FROM logs, selected_logs AS s'
-                f' WHERE logs.block_number = s.block_number'
-                f' AND logs.log_index = s.log_index'
-                f' AND logs.block_number = b.number)'
-                f', '
-                f' list_value()'
-                f')'
+                json_list(
+                    f'SELECT {self.project_log("logs.")} AS obj'
+                    f' FROM logs, selected_logs AS s'
+                    f' WHERE logs.block_number = s.block_number'
+                    f' AND logs.log_index = s.log_index'
+                    f' AND logs.block_number = b.number'
+                    f' ORDER BY logs.log_index'
+                )
+            ))
+
+        if 'selected_traces' in self.relations:
+            props.append((
+                'traces',
+                json_list(
+                    f'SELECT {self.project_trace("tr.")} AS obj'
+                    f' FROM traces AS tr, selected_traces AS s'
+                    f' WHERE tr.block_number = s.block_number'
+                    f' AND tr.transaction_index = s.transaction_index'
+                    f' AND tr.trace_address = s.trace_address'
+                    f' AND tr.block_number = b.number'
+                    f' ORDER BY tr.transaction_index, tr.trace_address'
+                )
+            ))
+
+        if 'selected_statediffs' in self.relations:
+            props.append((
+                'stateDiffs',
+                json_list(
+                    f'SELECT {self.project_statediff("diff.")} AS obj'
+                    f' FROM statediffs AS diff, selected_statediffs AS s'
+                    f' WHERE diff.block_number = s.block_number'
+                    f' AND diff.transaction_index = s.transaction_index'
+                    f' AND diff.address = s.address'
+                    f' AND diff.key = s.key'
+                    f' AND diff.block_number = b.number'
+                    f' ORDER BY diff.transaction_index, diff.address, diff.key'
+                )
             ))
 
         return f"""
 WITH
 {with_exp}
-SELECT {_json_project(props)} AS json_data 
+SELECT {json_project(props)} AS json_data 
 FROM selected_blocks AS b
         """
+
+    def get_block_fields(self) -> list[str]:
+        return self.get_fields('block', ['number', 'hash', 'parentHash'])
+
+    def get_block_weight(self) -> int:
+        return compute_item_weight(self.get_block_fields(), {
+            'logsBloom': 10
+        })
 
     def project_block(self) -> str:
         def rewrite_timestamp(f: str):
@@ -269,46 +567,10 @@ FROM selected_blocks AS b
                 return 'timestamp', 'epoch(timestamp)'
             else:
                 return f
-        return _json_project(map(rewrite_timestamp, self.get_block_fields()))
 
-    def project_log(self) -> str:
-        fields = self.get_log_fields()
-        props = []
-        for name in fields:
-            if name == 'topics':
-                props.append(
-                    ('topics', '[t for t in list_value(topic0, topic1, topic2, topic3) if t is not null]')
-                )
-            elif name == 'transaction':
-                pass
-            else:
-                props.append(name)
-        return _json_project(props, 'logs.')
-
-    def get_log_weight(self) -> int:
-        return _compute_item_weight(self.get_log_fields(), {
-            'data': 4,
-            'topics': 4
-        })
-
-    def get_tx_weight(self) -> int:
-        return _compute_item_weight(self.get_tx_fields(), {
-            'input': 4
-        })
-
-    def get_block_weight(self) -> int:
-        return _compute_item_weight(self.get_block_fields(), {
-            'logsBloom': 10
-        })
-
-    def get_log_fields(self) -> list[str]:
-        return self.get_fields('log', {'logIndex', 'transactionIndex'})
-
-    def get_tx_fields(self) -> list[str]:
-        return self.get_fields('transaction', {'transactionIndex'})
-
-    def get_block_fields(self) -> list[str]:
-        return self.get_fields('block', {'number', 'hash', 'parentHash'})
+        return json_project(
+            map(rewrite_timestamp, self.get_block_fields())
+        )
 
     def get_fields(self, table: str, required: Iterable[str]) -> list[str]:
         requested = self.q.get('fields', {}).get(table, {})
@@ -325,26 +587,3 @@ FROM selected_blocks AS b
             return Bin('=', col, self.new_param(variants[0]))
         else:
             return Bin('IN', col, f"(SELECT UNNEST({self.new_param(variants)}))")
-
-
-def _json_project(fields: Iterable[str | tuple[str, str]], field_prefix: str = '') -> str:
-    props = []
-    for alias in fields:
-        if isinstance(alias, tuple):
-            exp = alias[1]
-            alias = alias[0]
-        else:
-            exp = f'{field_prefix}"{to_snake_case(alias)}"'
-
-        props.append(f"'{alias}'")
-        props.append(exp)
-
-    return f'json_object({", ".join(props)})'
-
-
-def _compute_item_weight(fields: Iterable[str], weights: dict[str, int]) -> int:
-    return sum(weights.get(f, 1) for f in fields)
-
-
-def _union_all(relations: Iterable[str]) -> str:
-    return ' UNION ALL '.join(relations)

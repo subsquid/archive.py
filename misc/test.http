@@ -1,7 +1,7 @@
 ### Worker status
 GET http://localhost:8000/status
 
-### Query USDC transfers
+### Query USDT transfers
 POST http://localhost:8000/query/czM6Ly9ldGhhLW1haW5uZXQ
 Content-Type: application/json
 Accept-Encoding: gzip
@@ -17,8 +17,7 @@ Accept-Encoding: gzip
     },
     "log": {
       "data": true,
-      "topics": true,
-      "transaction": true
+      "topics": true
     },
     "transaction": {
       "from": true,
@@ -27,8 +26,37 @@ Accept-Encoding: gzip
   },
   "logs": [
     {
-      "address": ["0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"],
-      "topic0": ["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"]
+      "address": ["0xdac17f958d2ee523a2206206994597c13d831ec7"],
+      "topic0": ["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"],
+      "transaction": true
+    }
+  ]
+}
+
+
+### Some subtraces
+POST http://localhost:8000/query/czM6Ly9ldGhhLW1haW5uZXQ
+Content-Type: application/json
+Accept-Encoding: gzip
+
+{
+  "fromBlock": 5947000,
+  "fields": {
+    "transaction": {
+      "from": true,
+      "sighash": true
+    },
+    "trace": {
+      "callFrom": true,
+      "callInput": true,
+      "error": true
+    }
+  },
+  "traces": [
+    {
+      "callTo": ["0xa4ba60fee8fc18a214140da7a085fff7d2628d2f"],
+      "subtraces": true,
+      "transaction": true
     }
   ]
 }

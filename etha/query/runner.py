@@ -21,7 +21,7 @@ class QueryRunner:
 
 
 def perform_test():
-    dataset_dir = 'data/worker/czM6Ly9ldGhhLW1haW5uZXQtc2lh'
+    dataset_dir = 'data/worker/czM6Ly9ldGhhLW1haW5uZXQ'
     runner = QueryRunner(dataset_dir, {
         'fromBlock': 0,
         'fields': {
@@ -33,24 +33,44 @@ def perform_test():
             'log': {
                 'topics': True,
                 'data': True,
-                'transaction': True
             },
             'transaction': {
                 'hash': True,
                 'from': True
+            },
+            'trace': {
+                'type': True,
+                'callTo': True,
+                'callInput': True,
+                'callGas': True,
+                'callResultOutput': True
+            },
+            'stateDiff': {
+                'address': True,
+                'key': True,
+                'prev': True,
+                'next': True
             }
         },
-        'logs': [
-            {
-                'address': ['0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'],
-                'topic0': ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef']
-            }
-        ],
+        # 'logs': [
+        #     {
+        #         'address': ['0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'],
+        #         'topic0': ['0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef']
+        #     }
+        # ],
         # 'transactions': [
         #     {
-        #         'to': ['0x3883f5e181fccaf8410fa61e12b59bad963fb645']
+        #         'to': ['0xdac17f958d2ee523a2206206994597c13d831ec7'],
+        #         'logs': True,
+        #         'stateDiffs': True
         #     }
         # ]
+        'traces': [
+            {
+                'callTo': ['0xa4ba60fee8fc18a214140da7a085fff7d2628d2f'],
+                'subtraces': True
+            }
+        ]
     })
 
     from etha.fs import LocalFs

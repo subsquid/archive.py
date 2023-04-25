@@ -120,7 +120,7 @@ class TxTableBuilder(TableBuilderBase):
         self.y_parity.append(tx.get('yParity') and qty2int(tx['yParity']))
         self.chain_id.append(tx.get('chainId') and qty2int(tx['chainId']))
 
-        self.sighash.append(tx_input[:10] if len(tx_input) >= 10 else None)
+        self.sighash.append(_to_sighash(tx_input))
 
         receipt = tx.get('receipt_')
         if receipt:
@@ -185,6 +185,7 @@ class TraceTableBuilder(TableBuilderBase):
         self.call_to = Column(pyarrow.string())
         self.call_value = Column(qty())
         self.call_gas = Column(qty())
+        self.call_sighash = Column(pyarrow.string())
         self.call_input = Column(pyarrow.string())
         self.call_type = Column(pyarrow.string())
         self.call_result_gas_used = Column(qty())
@@ -235,6 +236,7 @@ class TraceTableBuilder(TableBuilderBase):
             self.call_to.append(action['to'])
             self.call_value.append(action['value'])
             self.call_gas.append(action['gas'])
+            self.call_sighash.append(_to_sighash(action['input']))
             self.call_input.append(action['input'])
             self.call_type.append(action['callType'])
             if result := trace.get('result'):
@@ -248,6 +250,7 @@ class TraceTableBuilder(TableBuilderBase):
             self.call_to.append(None)
             self.call_value.append(None)
             self.call_gas.append(None)
+            self.call_sighash.append(None)
             self.call_input.append(None)
             self.call_type.append(None)
             self.call_result_gas_used.append(None)
@@ -330,3 +333,10 @@ class StateDiffTableBuilder(TableBuilderBase):
             self.next.append(None)
         else:
             raise ValueError(f'unsupported state diff kind - {diff}')
+
+
+def _to_sighash(tx_input: str) -> str | None:
+    if len(tx_input) >= 10:
+        return tx_input[:10]
+    else:
+        return None

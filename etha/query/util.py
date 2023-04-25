@@ -1,5 +1,5 @@
 import re
-from typing import NamedTuple, Union, Iterable, TypeVar
+from typing import NamedTuple, Union, Iterable, TypeVar, Callable
 
 
 class And(NamedTuple):
@@ -35,13 +35,17 @@ def to_snake_case(name: str) -> str:
     return re.sub('([a-z0-9])([A-Z])', r'\1_\2', name).lower()
 
 
+def remove_camel_prefix(name: str, prefix: str) -> str:
+    return name[len(prefix)].lower() + name[len(prefix) + 1:]
+
+
 class SqlBuilder:
     def __init__(self, table: str):
         self._table = table
         self._columns = []
         self._where = And([])
 
-    def add_columns(self, cols: list[str]) -> None:
+    def add_columns(self, cols: Iterable[str]) -> None:
         self._columns.extend(cols)
 
     def add_where(self, exp: WhereExp) -> None:
@@ -70,3 +74,39 @@ def unique(elements: Iterable[_T]) -> Iterable[_T]:
         else:
             seen.add(e)
             yield e
+
+
+def json_project(fields: Iterable[str | tuple[str, str]], field_prefix: str = '') -> str:
+    props = []
+    for alias in fields:
+        if isinstance(alias, tuple):
+            exp = alias[1]
+            alias = alias[0]
+        else:
+            exp = f'{field_prefix}"{to_snake_case(alias)}"'
+
+        props.append(f"'{alias}'")
+        props.append(exp)
+
+    return f'json_object({", ".join(props)})'
+
+
+def project(columns: Iterable[str], prefix: str = '') -> str:
+    return ', '.join(
+        prefix + c for c in columns
+    )
+
+
+def json_list(subquery: str):
+    return f'coalesce(' \
+           f'(SELECT json_group_array(obj) FROM ({subquery})), ' \
+           f'list_value()' \
+           f')'
+
+
+def compute_item_weight(fields: Iterable[str], weights: dict[str, int]) -> int:
+    return sum(weights.get(f, 1) for f in fields)
+
+
+def union_all(relations: Iterable[str]) -> str:
+    return ' UNION ALL '.join(relations)
