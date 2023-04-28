@@ -160,7 +160,7 @@ class Ingest:
             if self._with_traces:
                 replay_by_tx = {replay['transactionHash']: replay for replay in replays[i]}
                 for tx in block['transactions']:
-                    tx['replay_'] = replay_by_tx[tx['hash']]
+                    tx['replay_'] = replay_by_tx.get(tx['hash'])
 
             if self._with_receipts:
                 for tx in block['transactions']:
