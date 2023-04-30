@@ -94,6 +94,7 @@ class TxTableBuilder(TableBuilderBase):
         self.gas_used = Column(qty())
         self.cumulative_gas_used = Column(qty())
         self.effective_gas_price = Column(qty())
+        self.contract_address = Column(pyarrow.string())
         self.type = Column(pyarrow.int8())
         self.status = Column(pyarrow.int8())
 
@@ -127,12 +128,14 @@ class TxTableBuilder(TableBuilderBase):
             self.gas_used.append(receipt['gasUsed'])
             self.cumulative_gas_used.append(receipt['cumulativeGasUsed'])
             self.effective_gas_price.append(receipt['effectiveGasPrice'])
+            self.contract_address.append(receipt.get('contractAddress'))
             self.type.append(qty2int(receipt['type']))
             self.status.append(qty2int(receipt['status']))
         else:
             self.gas_used.append(None)
             self.cumulative_gas_used.append(None)
             self.effective_gas_price.append(None)
+            self.contract_address.append(None)
             self.type.append(None)
             self.status.append(None)
 

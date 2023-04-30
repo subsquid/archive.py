@@ -79,6 +79,7 @@ class Receipt(TypedDict):
     cumulativeGasUsed: Qty
     effectiveGasPrice: Qty
     gasUsed: Qty
+    contractAddress: NotRequired[Address20]
     logs: list[Log]
     type: Qty
     status: NotRequired[Qty]
