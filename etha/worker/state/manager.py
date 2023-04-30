@@ -59,14 +59,15 @@ class StateManager:
 
     async def _ping(self, client: httpx.AsyncClient):
         try:
-            response = await client.post('/ping', json=self.get_ping_message())
+            msg = self.get_ping_message()
+            response = await client.post('/ping', json=msg)
             response.raise_for_status()
         except httpx.HTTPError:
             LOG.exception('failed to send a ping message')
             return
 
         ping = response.json()
-        LOG.info('ping', extra=ping)
+        LOG.info('ping', extra={'current_state': msg['state'], 'desired_state': ping})
 
         desired_state = {
             ds: to_range_set(map(tuple, ranges)) for ds, ranges in ping.items()
