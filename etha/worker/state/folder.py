@@ -28,7 +28,7 @@ class StateFolder:
                      log=logging.getLogger(__name__)
                      ):
 
-        log.info('update task started')
+        log.info('update task started', extra={'update': update})
 
         # delete old chunks and datasets
         for ds, upd in update.items():

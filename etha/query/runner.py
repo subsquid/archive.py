@@ -67,7 +67,7 @@ def perform_test():
         # ]
         'traces': [
             {
-                'callTo': ['0xa4ba60fee8fc18a214140da7a085fff7d2628d2f'],
+                'callTo': ['0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'],
                 'subtraces': True
             }
         ]
