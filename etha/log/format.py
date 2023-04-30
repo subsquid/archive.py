@@ -3,6 +3,7 @@ import traceback
 from datetime import datetime
 from io import StringIO
 from typing import NamedTuple
+import json
 
 
 class Style(NamedTuple):
@@ -105,3 +106,22 @@ def _print_exception(exc_info) -> str:
     if s[-1:] == '\n':
         s = s[:-1]
     return s
+
+
+class StructFormatter:
+    def format(self, rec: logging.LogRecord) -> str:
+        obj = {
+            'time': int(rec.created * 1000),
+            'level': rec.levelname,
+            'ns': rec.name,
+            'msg': rec.getMessage(),
+        }
+
+        for k in rec.__dict__:
+            if k not in known_attributes:
+                obj[k] = rec.__dict__[k]
+
+        if rec.exc_info:
+            obj['err'] = _print_exception(rec.exc_info)
+
+        return json.dumps(obj)
