@@ -159,8 +159,14 @@ class Ingest:
 
             if self._with_traces:
                 replay_by_tx = {replay['transactionHash']: replay for replay in replays[i]}
+                assigned_replays = 0
                 for tx in block['transactions']:
-                    tx['replay_'] = replay_by_tx.get(tx['hash'])
+                    rep = replay_by_tx.get(tx['hash'])
+                    if rep:  # On polygon traces are not available for some contracts
+                        tx['replay_'] = rep
+                        assigned_replays += 1
+                assert assigned_replays == len(replay_by_tx), \
+                    'trace_replayBlockTransactions came from a different block'
 
             if self._with_receipts:
                 for tx in block['transactions']:
