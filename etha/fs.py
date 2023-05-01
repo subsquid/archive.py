@@ -123,7 +123,7 @@ def create_fs(url: str, s3_endpoint: Optional[str] = os.environ.get('AWS_S3_ENDP
         client_kwargs = {}
         if s3_endpoint:
             client_kwargs['endpoint_url'] = s3_endpoint
-        s3 = s3fs.S3FileSystem(client_kwargs=client_kwargs)
+        s3 = s3fs.S3FileSystem(client_kwargs=client_kwargs, use_listings_cache=False)
         bucket = u.netloc + u.path
         return S3Fs(s3, bucket)
     elif not u.scheme:

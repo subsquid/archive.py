@@ -68,37 +68,35 @@ GET https://v2.archive.subsquid.io/worker/0/status
 ### Deployed status 1
 GET https://v2.archive.subsquid.io/worker/1/status
 
+### Deployed status 2
+GET https://v2.archive.subsquid.io/worker/2/status
+
+### Height
+GET https://v2.archive.subsquid.io/network/ethereum-mainnet/height
+
 ### Routing request
-GET https://v2.archive.subsquid.io/network/ethereum-mainnet/4000000/worker
+GET https://v2.archive.subsquid.io/network/ethereum-mainnet/16284160/worker
 
 ###
 POST https://v2.archive.subsquid.io/worker/0/query/czM6Ly9ldGhhLW1haW5uZXQ
 Content-Type: application/json
 
 {
-  "fromBlock": 4000000,
+  "fromBlock": 16000000,
   "logs": [
     {
-      "address": ["0x3883f5e181fccaf8410fa61e12b59bad963fb645"]
+      "address": ["0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"]
     }
   ],
   "transactions": [],
   "fields": {
     "block": {
-      "number": true,
-      "hash": true,
-      "parentHash": true,
       "timestamp": true
     },
     "log": {
       "address": true,
       "topics": true,
-      "data": true,
-      "transaction": true
-    },
-    "transaction": {
-      "to": true,
-      "gas": true
+      "data": true
     }
   }
 }
