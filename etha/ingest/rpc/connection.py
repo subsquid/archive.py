@@ -225,8 +225,9 @@ def _is_retryable_error(e: Exception) -> bool:
         return True
     elif isinstance(e, RpcResultIsNull):
         return True
-    elif isinstance(e, RpcError) and isinstance(e.info, dict) and e.info.get('code') == 429:
-        return True
+    elif isinstance(e, RpcError) and isinstance(e.info, dict):
+        code = e.info.get('code')
+        return code == 429 or code == -32603
     else:
         return False
 
