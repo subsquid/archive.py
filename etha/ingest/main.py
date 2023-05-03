@@ -252,6 +252,11 @@ class IngestionProcess:
             if prev_write:
                 prev_write.result()
 
+            if bb.buffered_bytes() > 0:
+                batch = bb.build()
+                LOG.debug('write accumulated data from the last strides')
+                writer.write(batch)
+
     async def _report_loop(self):
         while True:
             if self._progress.has_news():
