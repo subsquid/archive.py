@@ -44,6 +44,8 @@ class StateFolder:
 
         # download new chunks
         for ds, upd in update.items():
+            if not upd:
+                continue
             fs = self.fs.cd(dataset_encode(ds))
             rfs = create_fs(ds)
             for new in upd.new:
