@@ -19,7 +19,7 @@ class StateFolder:
                 ds = dataset_decode(item)
             except ValueError:
                 continue
-            state[ds] = to_range_set(get_chunks(self.fs.cd(item)))
+            state[ds] = to_range_set((c.first_block, c.last_block) for c in get_chunks(self.fs.cd(item)))
         return state
 
     def apply_update(self,
@@ -28,7 +28,7 @@ class StateFolder:
                      log=logging.getLogger(__name__)
                      ):
 
-        log.info('update task started')
+        log.info('update task started', extra={'update': update})
 
         # delete old chunks and datasets
         for ds, upd in update.items():
@@ -44,16 +44,18 @@ class StateFolder:
 
         # download new chunks
         for ds, upd in update.items():
+            if not upd:
+                continue
             fs = self.fs.cd(dataset_encode(ds))
             rfs = create_fs(ds)
             for new in upd.new:
                 for chunk in get_chunks(rfs, first_block=new[0], last_block=new[1]):
                     dest = fs.abs(chunk.path())
                     with fs.transact(dest) as d:
-                        for f in ['transactions', 'logs', 'blocks']:
-                            src = f'{chunk.path()}/{f}.parquet'
-                            log.info(f'downloading {rfs.abs(src)}')
-                            rfs.download(src, d.abs(f'{f}.parquet'))
+                        src = chunk.path()
+                        log.info(f'downloading {rfs.abs(src)}')
+                        # FIXME: we can potentially miss files here
+                        rfs.download(src, d.abs())
                     log.info('saved %s', dest)
                     on_downloaded_chunk(ds, chunk)
 

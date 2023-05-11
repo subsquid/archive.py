@@ -1,19 +1,16 @@
 import argparse
 import asyncio
-import logging
 import multiprocessing
 import os
 
 import uvicorn
 
-from etha.util import create_child_task, init_child_process, monitor_service_tasks, run_async_program
+from etha.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
+from etha.util.child_proc import init_child_process
 from etha.worker.api import create_app
 from etha.worker.state.manager import StateManager
 from etha.worker.transport import HttpTransport
 from etha.worker.worker import Worker
-
-LOG = logging.getLogger('etha.worker')
-
 
 class Server(uvicorn.Server):
     def install_signal_handlers(self) -> None:
@@ -29,7 +26,7 @@ class Server(uvicorn.Server):
             await task
 
 
-async def main():
+def parse_cli_args():
     program = argparse.ArgumentParser(
         description='Subsquid eth archive worker'
     )
@@ -65,17 +62,21 @@ async def main():
         '--port',
         type=int,
         default=8000,
+        metavar='N',
         help='port to listen on (defaults to 8000)'
     )
 
     program.add_argument(
         '--procs',
         type=int,
+        metavar='N',
         help='number of processes to use to execute data queries'
     )
 
-    args = program.parse_args()
+    return program.parse_args()
 
+
+async def serve(args):
     sm = StateManager(data_dir=args.data_dir or os.getcwd())
     transport = HttpTransport(
         worker_id=args.worker_id,
@@ -100,8 +101,8 @@ async def main():
             asyncio.create_task(server.run_server_task(), name='http_server'),
             asyncio.create_task(sm.run(), name='state_manager'),
             asyncio.create_task(worker.run(), name='worker'),
-        ], log=LOG)
+        ])
 
 
-if __name__ == '__main__':
-    run_async_program(main(), log=LOG)
+def cli():
+    run_async_program(serve, parse_cli_args())

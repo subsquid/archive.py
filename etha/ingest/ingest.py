@@ -1,23 +1,37 @@
-from typing import Optional, AsyncIterator
 import asyncio
+import logging
+from itertools import groupby
+from typing import Optional, AsyncIterator
 
-from etha.ingest.rpc import RpcClient, RpcCall
-from etha.ingest.model import Block, Log, Transaction, Trace, BlockHeader
-from etha.ingest.trace import parse_action, parse_result
-from etha.ingest.block import calculate_hash
+from etha.ingest.model import Block, Log, Receipt, TransactionReplay
+from etha.ingest.rpc import RpcClient, RpcBatchCall
+from etha.ingest.util import trim_hash
+
+
+LOG = logging.getLogger(__name__)
 
 
 class Ingest:
-    def __init__(self, rpc: RpcClient, from_block: Optional[int], to_block: Optional[int],
-                 concurrency: Optional[int], offset: Optional[int]):
+    def __init__(
+        self,
+        rpc: RpcClient,
+        finality_offset: int = 10,
+        from_block: int = 0,
+        to_block: Optional[int] = None,
+        last_hash: Optional[str] = None,
+        with_receipts: bool = False,
+        with_traces: bool = False
+    ):
         self._rpc = rpc
-        self._height = (from_block or 0) - 1
+        self._finality_offset = finality_offset
+        self._with_receipts = with_receipts
+        self._with_traces = with_traces
+        self._last_hash = last_hash
+        self._height = from_block - 1
         self._end = to_block
-        self._concurrency = concurrency or 5
-        self._offset = offset or 10
         self._chain_height = 0
         self._strides = []
-        self._stride_size = 10
+        self._stride_size = 20
 
     async def loop(self) -> AsyncIterator[list[Block]]:
         while not self._is_finished() or len(self._strides):
@@ -28,129 +42,14 @@ class Ingest:
                 self._schedule_strides()
             else:
                 blocks = await stride
+                self._validate_blocks(blocks)
                 self._schedule_strides()
                 yield blocks
 
-    async def _wait_chain(self):
-        stride_size = self._stride_size
-        if self._end is not None:
-            stride_size = min(stride_size, self._end - self._height)
-        if self._dist() < stride_size:
-            self._chain_height = await self._get_chain_height()
-
-        while self._dist() <= 0:
-            await asyncio.sleep(2)
-            self._chain_height = await self._get_chain_height()
-
-    async def _get_chain_height(self) -> int:
-        hex = await self._rpc.call('eth_blockNumber')
-        height = int(hex, 0)
-        return max(height - self._offset, 0)
-
-    async def _fetch_stride(self, from_block: int, to_block: int) -> list[Block]:
-        calls = []
-        for i in range(from_block, to_block + 1):
-            calls.append(RpcCall('eth_getBlockByNumber', [hex(i), True]))
-        for i in range(from_block, to_block + 1):
-            calls.append(RpcCall('trace_block', [hex(i)]))
-        calls.append(RpcCall('eth_getLogs', [{
-            'fromBlock': hex(from_block),
-            'toBlock': hex(to_block),
-        }]))
-
-        response = await self._rpc.batch(calls)
-        tx_status = await self._fetch_tx_status(response[:len(response) // 2])
-
-        blocks: list[Block] = []
-        for raw in response[:len(response) // 2]:
-            transactions: list[Transaction] = []
-            for tx in raw['transactions']:
-                transactions.append({
-                    'blockNumber': int(tx['blockNumber'], 0),
-                    'transactionIndex': int(tx['transactionIndex'], 0),
-                    'hash': tx['hash'],
-                    'gas': int(tx['gas'], 0),
-                    'gasPrice': parse_optional_hex(tx, 'gasPrice'),
-                    'maxFeePerGas': parse_optional_hex(tx, 'maxFeePerGas'),
-                    'maxPriorityFeePerGas': parse_optional_hex(tx, 'maxPriorityFeePerGas'),
-                    'from': tx['from'],
-                    'to': tx['to'],
-                    'sighash': tx['input'][:10] if len(tx['input']) > 10 else None,
-                    'input': tx['input'],
-                    'nonce': int(tx['nonce'], 0),
-                    'value': int(tx['value'], 0),
-                    'type': int(tx['type'], 0),
-                    'v': str(int(tx['v'], 0)) if 'v' in tx else None,
-                    's': str(int(tx['s'], 0)),
-                    'r': str(int(tx['r'], 0)),
-                    'yParity': parse_optional_hex(tx, 'yParity'),
-                    'chainId': parse_optional_hex(tx, 'chainId'),
-                    'accessList': tx.get('accessList'),
-                    'status': tx_status[tx['hash']],
-                })
-            header: BlockHeader = {
-                'number': int(raw['number'], 0),
-                'hash': raw['hash'],
-                'parentHash': raw['parentHash'],
-                'nonce': raw.get('nonce'),
-                'sha3Uncles': raw['sha3Uncles'],
-                'logsBloom': raw['logsBloom'],
-                'transactionsRoot': raw['transactionsRoot'],
-                'stateRoot': raw['stateRoot'],
-                'receiptsRoot': raw['receiptsRoot'],
-                'miner': raw['miner'],
-                'gasUsed': int(raw['gasUsed'], 0),
-                'gasLimit': int(raw['gasLimit'], 0),
-                'size': int(raw['size'], 0),
-                'timestamp': int(raw['timestamp'], 0),
-                'extraData': raw['extraData'],
-                'difficulty': parse_optional_hex(raw, 'difficulty'),
-                'totalDifficulty': parse_optional_hex(raw, 'totalDifficulty'),
-                'mixHash': raw.get('mixHash'),
-                'baseFeePerGas': parse_optional_hex(raw, 'baseFeePerGas'),
-            }
-            assert calculate_hash(header) == header['hash']
-            blocks.append({
-                'header': header,
-                'transactions': transactions,
-                'logs': [],
-                'traces': [],
-            })
-
-        for traces in response[len(response) // 2:-1]:
-            for raw in traces:
-                trace: Trace = {
-                    'action': parse_action(raw),
-                    'blockNumber': raw['blockNumber'],
-                    'error': raw.get('error'),
-                    'result': parse_result(raw),
-                    'subtraces': raw['subtraces'],
-                    'traceAddress': raw['traceAddress'],
-                    'transactionPosition': raw.get('transactionPosition'),
-                    'type': raw['type'],
-                }
-                blocks[trace['blockNumber'] - from_block]['traces'].append(trace)
-
-        for raw in response[-1]:
-            topics = iter(raw['topics'])
-            log: Log = {
-                'blockNumber': int(raw['blockNumber'], 0),
-                'logIndex': int(raw['logIndex'], 0),
-                'transactionIndex': int(raw['transactionIndex'], 0),
-                'address': raw['address'],
-                'data': raw['data'],
-                'topic0': next(topics, None),
-                'topic1': next(topics, None),
-                'topic2': next(topics, None),
-                'topic3': next(topics, None),
-                'removed': raw['removed'],
-            }
-            blocks[log['blockNumber'] - from_block]['logs'].append(log)
-
-        return blocks
-
     def _schedule_strides(self):
-        while (len(self._strides) < self._concurrency) and not self._is_finished() and (self._dist() > 0):
+        while len(self._strides) < max(1, min(50, self._rpc.get_total_capacity())) \
+                and not self._is_finished() \
+                and self._dist() > 0:
             from_block = self._height + 1
             stride_size = min(self._stride_size, self._dist())
             if self._end is not None:
@@ -164,25 +63,125 @@ class Ingest:
         return self._chain_height - self._height
 
     def _is_finished(self) -> bool:
-        if self._end is not None:
+        if self._end is None:
+            return False
+        else:
             return self._height >= self._end
-        return False
 
-    async def _fetch_tx_status(self, raw_blocks) -> dict[str, Optional[int]]:
-        calls = []
-        for raw in raw_blocks:
-            for tx in raw['transactions']:
-                calls.append(RpcCall('eth_getTransactionReceipt', [tx['hash']]))
+    async def _wait_chain(self):
+        stride_size = self._stride_size
 
-        tx_status = {}
-        if calls:
-            receipts = await self._rpc.batch(calls)
-            for receipt in receipts:
-                status = int(receipt['status'], 0) if 'status' in receipt else None
-                tx_status[receipt['transactionHash']] = status
+        if self._end is not None:
+            stride_size = min(stride_size, self._end - self._height)
 
-        return tx_status
+        if self._dist() < stride_size:
+            self._chain_height = await self._get_chain_height()
 
+        while self._dist() <= 0:
+            await asyncio.sleep(2)
+            self._chain_height = await self._get_chain_height()
 
-def parse_optional_hex(target: dict, key: str) -> Optional[int]:
-    return int(target[key], 0) if key in target else None
+    async def _get_chain_height(self) -> int:
+        hex_height = await self._rpc.call('eth_blockNumber')
+        height = int(hex_height, 0)
+        return max(height - self._finality_offset, 0)
+
+    async def _fetch_stride(self, from_block: int, to_block: int) -> list[Block]:
+        extra = {'first_block': from_block, 'last_block': to_block}
+
+        LOG.debug('fetching new stride', extra=extra)
+
+        block_batch: RpcBatchCall = [
+            ('eth_getBlockByNumber', [hex(i), True])
+            for i in range(from_block, to_block + 1)
+        ]
+
+        if not self._with_receipts:
+            block_batch.append(
+                ('eth_getLogs', [{
+                    'fromBlock': hex(from_block),
+                    'toBlock': hex(to_block)
+                }])
+            )
+
+        if self._with_traces:
+            trace_batch = [
+                ('trace_replayBlockTransactions', [hex(i), ['trace', 'stateDiff']])
+                for i in range(from_block, to_block + 1)
+            ]
+            if from_block == 0:
+                # skip replay if genesis
+                del trace_batch[0]
+        else:
+            trace_batch = []
+
+        trace_future = self._rpc.batch_call(trace_batch, priority=from_block)
+
+        block_batch_response = await self._rpc.batch_call(block_batch, priority=from_block)
+        blocks: list[Block] = block_batch_response[:(to_block - from_block + 1)]
+
+        receipts: list[Receipt]
+        logs: list[Log]
+        if self._with_receipts:
+            receipts = await self._rpc.batch_call(
+                [
+                    ('eth_getTransactionReceipt', [tx['hash']])
+                    for b in blocks
+                    for tx in b['transactions']
+                ],
+                priority=from_block
+            )
+            logs = []
+            for r in receipts:
+                logs.extend(r['logs'])
+        else:
+            receipts = []
+            logs = block_batch_response[-1]
+
+        replays: list[list[TransactionReplay]] = await trace_future
+        if from_block == 0:
+            # mock replay if genesis
+            replays.insert(0, [])
+
+        logs.sort(key=lambda rec: rec['blockNumber'])
+        logs_by_block = {k: list(it) for k, it in groupby(logs, key=lambda b: b['blockNumber'])}
+
+        receipts_by_tx = {r['transactionHash']: r for r in receipts}
+
+        for i, block in enumerate(blocks):
+            block_number = block['number']
+            block_hash = block['hash']
+
+            block_logs = logs_by_block.get(block_number, [])
+            for item in block_logs:
+                assert item['blockHash'] == block_hash
+            block['logs_'] = block_logs
+
+            if self._with_traces:
+                replay_by_tx = {replay['transactionHash']: replay for replay in replays[i]}
+                assigned_replays = 0
+                for tx in block['transactions']:
+                    rep = replay_by_tx.get(tx['hash'])
+                    if rep:  # On polygon traces are not available for some contracts
+                        tx['replay_'] = rep
+                        assigned_replays += 1
+                assert assigned_replays == len(replay_by_tx), \
+                    'trace_replayBlockTransactions came from a different block'
+
+            if self._with_receipts:
+                for tx in block['transactions']:
+                    tx['receipt_'] = receipts_by_tx[tx['hash']]
+
+        LOG.debug('stride is ready', extra=extra)
+
+        return blocks
+
+    def _validate_blocks(self, blocks: list[Block]):
+        for block in blocks:
+            block_parent_hash = trim_hash(block['parentHash'])
+            block_hash = trim_hash(block['hash'])
+
+            if self._last_hash and self._last_hash != block_parent_hash:
+                raise Exception(f'broken chain: block {block_hash} is not a direct child of {self._last_hash}')
+
+            self._last_hash = block_hash

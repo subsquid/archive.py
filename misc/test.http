@@ -1,37 +1,65 @@
 ### Worker status
 GET http://localhost:8000/status
 
-### Query
-POST http://localhost:8000/query/czM6Ly9ldGhhLW1haW5uZXQtc2lh
+### Query USDT transfers
+POST http://localhost:8000/query/czM6Ly9ldGhhLW1haW5uZXQ
 Content-Type: application/json
+Accept-Encoding: gzip
 
 {
-        "fromBlock": 16143005,
-        "logs": [
-            {
-                "address": ["0x1f98431c8ad98523631ae4a59f267346ea31f984"]
-            }
-        ],
-        "transactions": [],
-        "fields": {
-            "block": {
-                "number": true,
-                "hash": true,
-                "parentHash": true,
-                "nonce": true
-            },
-            "log": {
-                "address": true,
-                "topics": true,
-                "data": true,
-                "transaction": true
-            },
-            "transaction": {
-                "to": true,
-                "gas": true
-            }
-        }
+  "fromBlock": 5947000,
+  "fields": {
+    "block": {
+      "number": true,
+      "hash": true,
+      "parentHash": true,
+      "timestamp": true
+    },
+    "log": {
+      "data": true,
+      "topics": true
+    },
+    "transaction": {
+      "from": true,
+      "sighash": true
     }
+  },
+  "logs": [
+    {
+      "address": ["0xdac17f958d2ee523a2206206994597c13d831ec7"],
+      "topic0": ["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"],
+      "transaction": true
+    }
+  ]
+}
+
+
+### Some subtraces
+POST http://localhost:8000/query/czM6Ly9ldGhhLW1haW5uZXQ
+Content-Type: application/json
+Accept-Encoding: gzip
+
+{
+  "fromBlock": 5947000,
+  "fields": {
+    "transaction": {
+      "from": true,
+      "sighash": true
+    },
+    "trace": {
+      "callFrom": true,
+      "callInput": true,
+      "error": true
+    }
+  },
+  "traces": [
+    {
+      "callTo": ["0xa4ba60fee8fc18a214140da7a085fff7d2628d2f"],
+      "subtraces": true,
+      "transaction": true
+    }
+  ]
+}
 
 
 ### Deployed status 0
@@ -40,34 +68,35 @@ GET https://v2.archive.subsquid.io/worker/0/status
 ### Deployed status 1
 GET https://v2.archive.subsquid.io/worker/1/status
 
+### Deployed status 2
+GET https://v2.archive.subsquid.io/worker/2/status
+
+### Height
+GET https://v2.archive.subsquid.io/network/ethereum-mainnet/height
+
+### Routing request
+GET https://v2.archive.subsquid.io/network/ethereum-mainnet/16284160/worker
+
 ###
-POST https://v2.archive.subsquid.io/worker/0/query/czM6Ly9ldGhhLW1haW5uZXQtc2lh
+POST https://v2.archive.subsquid.io/worker/0/query/czM6Ly9ldGhhLW1haW5uZXQ
 Content-Type: application/json
 
 {
   "fromBlock": 16000000,
   "logs": [
     {
-      "address": ["0x3883f5e181fccaf8410fa61e12b59bad963fb645"]
+      "address": ["0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"]
     }
   ],
   "transactions": [],
   "fields": {
     "block": {
-      "number": true,
-      "hash": true,
-      "parentHash": true,
-      "nonce": true
+      "timestamp": true
     },
     "log": {
       "address": true,
       "topics": true,
-      "data": true,
-      "transaction": true
-    },
-    "transaction": {
-      "to": true,
-      "gas": true
+      "data": true
     }
   }
 }

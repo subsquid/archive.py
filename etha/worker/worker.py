@@ -3,8 +3,8 @@ import logging
 from multiprocessing.pool import Pool
 
 from etha.query.model import Query
-from etha.util import create_child_task, monitor_service_tasks
-from etha.worker.query import QueryResult, execute_query
+from etha.util.asyncio import create_child_task, monitor_service_tasks
+from etha.worker.query import execute_query
 from etha.worker.state.dataset import dataset_decode
 from etha.worker.state.manager import StateManager
 from etha.worker.transport import Transport
@@ -53,7 +53,7 @@ class Worker:
         except:
             LOG.exception('failed to send a pause ping')
 
-    async def execute_query(self, query: Query, dataset: str) -> QueryResult:
+    async def execute_query(self, query: Query, dataset: str) -> str:
         try:
             dataset = dataset_decode(dataset)
         except ValueError:

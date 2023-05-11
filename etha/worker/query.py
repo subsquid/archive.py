@@ -1,89 +1,34 @@
 import datetime
 import math
-import os
-import tempfile
-import zipfile
-from contextlib import AbstractContextManager, contextmanager
-from io import BytesIO
-from typing import NamedTuple, Optional, Union
+from typing import Iterable
 
 from etha.fs import LocalFs
 from etha.layout import get_chunks
 from etha.query.model import Query
-from etha.query.result_set import ResultSet
 from etha.query.runner import QueryRunner
 from etha.worker.state.intervals import Range
 
 
-class QueryResult(NamedTuple):
-    last_processed_block: int
-    data: Optional[Union[str, bytes]]  # either name of a temp file or raw response body
-    size: int
-
-
-def execute_query(out_dir: str, dataset_dir: str, data_range: Range, q: Query) -> QueryResult:
+def execute_query(dataset_dir: str, data_range: Range, q: Query) -> str:
     first_block = max(data_range[0], q['fromBlock'])
     last_block = min(data_range[1], q.get('toBlock', math.inf))
     assert first_block <= last_block
 
-    beg = datetime.datetime.now()
-    runner = QueryRunner(q)
-    result = Result(out_dir)
-    last_processed_block = None
+    def json_lines() -> Iterable[str]:
+        beg = datetime.datetime.now()
+        runner = QueryRunner(dataset_dir, q)
+        size = 0
 
-    with result.write() as rs:
         for chunk in get_chunks(LocalFs(dataset_dir), first_block=first_block, last_block=last_block):
-            chunk_dir = os.path.join(dataset_dir, chunk.path())
+            for row in runner.visit(chunk):
+                line = row.as_py()
+                yield line
+                size += len(line)
 
-            runner.visit(chunk_dir, rs)
-
-            last_processed_block = min(chunk.last_block, last_block)
-
-            if rs.size > 4 * 1024 * 1024:
+            if size > 20 * 1024 * 1024:
                 break
 
             if datetime.datetime.now() - beg > datetime.timedelta(seconds=2):
                 break
 
-    assert last_processed_block is not None
-    return QueryResult(last_processed_block, result.data, result.size)
-
-
-class Result:
-    def __init__(self, out_dir: str):
-        self._out_dir = out_dir
-        self.data = None
-        self.size = 0
-
-    @contextmanager
-    def write(self) -> AbstractContextManager['ResultSet']:
-        rs = ResultSet()
-        yield rs
-
-        if rs.size == 0:
-            return
-
-        if rs.size > 8 * 1024 * 1024:
-            os.makedirs(self._out_dir, exist_ok=True)
-            fd, filename = tempfile.mkstemp(dir=self._out_dir, prefix='result-', suffix='.zip')
-            try:
-                with os.fdopen(fd, 'wb') as dest:
-                    _write_zip(dest, rs)
-            except Exception as ex:
-                os.unlink(filename)
-                raise ex
-            stat = os.stat(filename)
-            self.data = filename
-            self.size = stat.st_size
-        else:
-            dest = BytesIO()
-            _write_zip(dest, rs)
-            self.data = dest.getvalue()
-            self.size = len(self.data)
-
-
-def _write_zip(dest, rs: ResultSet):
-    with zipfile.ZipFile(dest, 'w', compression=zipfile.ZIP_DEFLATED) as arch:
-        for name, data in rs.close().items():
-            with arch.open(f'{name}.arrow_stream', 'w') as zf:
-                zf.write(data)
+    return f'[{",".join(json_lines())}]'

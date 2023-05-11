@@ -4,7 +4,6 @@ channels:
   - conda-forge
 
 dependencies:
-  - aiofiles
   - falcon
   - fastparquet
   - fsspec
@@ -14,12 +13,9 @@ dependencies:
   - marshmallow
   - numpy
   - pandas
+  - prometheus_client
   - pyarrow
-  - python-duckdb
+  - python-duckdb=0.7.1
   - python=3.11
   - s3fs>=2021.8.0
   - uvicorn
-  - uvloop
-  - yappi
-  - py-evm
-  - prometheus_client

@@ -1,7 +1,5 @@
 from typing import Optional
 
-import aiofiles
-import aiofiles.os
 import falcon
 import falcon.asgi as fa
 import marshmallow as mm
@@ -61,24 +59,13 @@ class QueryResource:
         query: Query = await get_json(req, query_schema)
 
         try:
-            result: QueryResult = await self._worker.execute_query(query, dataset)
+            res.text = await self._worker.execute_query(query, dataset)
         except QueryError as e:
             raise falcon.HTTPBadRequest(description=str(e))
         except Exception as e:
             raise falcon.HTTPInternalServerError(description=str(e))
 
-        if isinstance(result.data, str):
-            stream = await aiofiles.open(result.data, 'rb')
-            await aiofiles.os.unlink(result.data)
-            res.set_header('content-type', 'application/zip')
-            res.set_stream(stream, result.size)
-        elif isinstance(result.data, bytes):
-            res.set_header('content-type', 'application/zip')
-            res.data = result.data
-        else:
-            res.status = 204
-
-        res.set_header('x-sqd-last-processed-block', str(result.last_processed_block))
+        res.content_type = 'application/json'
 
 
 def create_app(sm: StateManager, worker: Worker) -> fa.App:

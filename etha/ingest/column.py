@@ -20,6 +20,9 @@ class Column:
         self.chunks.append(a)
         self.buf.clear()
 
+    def bytesize(self):
+        return sum((c.nbytes for c in self.chunks), 0)
+
     def build(self) -> Union[pyarrow.ChunkedArray, pyarrow.Array]:
         if self.buf:
             self._new_chunk()

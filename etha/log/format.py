@@ -1,9 +1,9 @@
 import logging
-import sys
 import traceback
 from datetime import datetime
 from io import StringIO
-from typing import Any, NamedTuple
+from typing import NamedTuple
+import json
 
 
 class Style(NamedTuple):
@@ -108,12 +108,20 @@ def _print_exception(exc_info) -> str:
     return s
 
 
-def init_logging():
-    style = COLORFUL if sys.stderr.isatty() else PLAIN
-    f: Any = TextFormatter(style)
-    h = logging.StreamHandler(sys.stderr)
-    h.setFormatter(f)
-    logging.basicConfig(
-        level=logging.INFO,
-        handlers=[h]
-    )
+class StructFormatter:
+    def format(self, rec: logging.LogRecord) -> str:
+        obj = {
+            'time': int(rec.created * 1000),
+            'level': rec.levelname,
+            'ns': rec.name,
+            'msg': rec.getMessage(),
+        }
+
+        for k in rec.__dict__:
+            if k not in known_attributes:
+                obj[k] = rec.__dict__[k]
+
+        if rec.exc_info:
+            obj['err'] = _print_exception(rec.exc_info)
+
+        return json.dumps(obj)

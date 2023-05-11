@@ -14,4 +14,4 @@ make init
 
 The above command will create a ready to use python environment in `.env` dir.
 
-Use `.env/bin/python3` to run executables and setup it as a python interpreter for your IDE.
+Use `.env/bin/python3` to run executables and set it up as a python interpreter for your IDE.

@@ -5,15 +5,14 @@ import multiprocessing
 import os
 from typing import AsyncIterator, Optional, Dict
 
-import aiofiles
 import grpc.aio
 
 from etha.query.model import query_schema
-from etha.util import create_child_task, monitor_service_tasks, init_child_process, run_async_program
+from etha.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
+from etha.util.child_proc import init_child_process
 from etha.worker.p2p import messages_pb2 as msg_pb
 from etha.worker.p2p.p2p_transport_pb2 import Message, Empty
 from etha.worker.p2p.p2p_transport_pb2_grpc import P2PTransportStub
-from etha.worker.query import QueryResult
 from etha.worker.state.controller import State
 from etha.worker.state.dataset import dataset_encode
 from etha.worker.state.intervals import to_range_set
@@ -111,16 +110,7 @@ class P2PTransport(Transport):
         while True:
             yield await self._query_tasks.get()
 
-    async def send_query_result(self, query_id: str, result: QueryResult) -> None:
-        if isinstance(result.data, bytes):
-            data = result.data
-        elif isinstance(result.data, str):
-            async with aiofiles.open(result.data, 'rb') as f:
-                data = f.read()
-            await aiofiles.os.unlink(result.data)
-        else:
-            data = None
-
+    async def send_query_result(self, query_id: str, result: str) -> None:
         try:
             peer_id = self._query_peers.pop(query_id)
         except KeyError:
@@ -130,9 +120,7 @@ class P2PTransport(Transport):
         envelope = msg_pb.Envelope(
             query_result=msg_pb.QueryResult(
                 query_id=query_id,
-                last_processed_block=result.last_processed_block,
-                size=result.size,
-                data=data
+                data=result
             )
         )
         await self._send(envelope, peer_id=peer_id)
@@ -167,7 +155,7 @@ async def run_queries(transport: P2PTransport, worker: Worker):
         asyncio.create_task(task())
 
 
-async def main():
+async def _main():
     program = argparse.ArgumentParser(
         description='Subsquid eth archive worker'
     )
@@ -210,5 +198,5 @@ async def main():
             ], log=LOG)
 
 
-if __name__ == '__main__':
-    run_async_program(main(), log=LOG)
+def main():
+    run_async_program(main, log=LOG)

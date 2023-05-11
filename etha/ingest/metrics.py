@@ -1,10 +1,10 @@
 from typing import Iterable
 
 from prometheus_client import start_wsgi_server
-from prometheus_client.registry import REGISTRY, Collector
 from prometheus_client.metrics_core import Metric, GaugeMetricFamily, CounterMetricFamily
+from prometheus_client.registry import REGISTRY, Collector
 
-from etha.ingest.progress import Progress
+from etha.util.counters import Progress
 from etha.ingest.rpc import RpcClient
 
 

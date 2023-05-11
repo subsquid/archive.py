@@ -11,21 +11,23 @@ def _format_block(block_number: int):
     return f'{block_number:010}'
 
 
-def _parse_range(dirname: str) -> Optional[tuple[int, int]]:
-    m = re.match(r'^(\d{10})-(\d{10})$', dirname)
+def _parse_range(dirname: str) -> Optional[tuple[int, int, str]]:
+    m = re.match(r'^(\d{10})-(\d{10})-(\w{8})$', dirname)
     if m:
         beg = int(m[1])
         end = int(m[2])
-        return beg, end
+        hash_ = m[3]
+        return beg, end, hash_
 
 
 class DataChunk(NamedTuple):
     first_block: int
     last_block: int
+    last_hash: str
     top: int
 
     def path(self):
-        return f'{_format_block(self.top)}/{_format_block(self.first_block)}-{_format_block(self.last_block)}'
+        return f'{_format_block(self.top)}/{_format_block(self.first_block)}-{_format_block(self.last_block)}-{self.last_hash}'
 
 
 def get_tops(fs: Fs) -> list[int]:
@@ -35,7 +37,7 @@ def get_tops(fs: Fs) -> list[int]:
     return tops
 
 
-def _get_top_ranges(fs: Fs, top: int) -> list[tuple[int, int]]:
+def _get_top_ranges(fs: Fs, top: int) -> list[tuple[int, int, str]]:
     ranges = [r for r in (_parse_range(d) for d in fs.ls(_format_block(top))) if r]
     ranges.sort()
     return ranges
@@ -51,8 +53,8 @@ def validate_layout(fs: Fs):
     for i, top in enumerate(tops):
         ranges = _get_top_ranges(fs, top)
 
-        for j, (beg, end) in enumerate(ranges):
-            chunk = DataChunk(beg, end, top)
+        for j, (beg, end, hash_) in enumerate(ranges):
+            chunk = DataChunk(beg, end, hash_, top)
 
             if beg > end:
                 raise InvalidLayoutException(
@@ -65,7 +67,7 @@ def validate_layout(fs: Fs):
                 )
 
             if j > 0 and ranges[j-1][1] >= beg:
-                prev_chunk = DataChunk(ranges[j-1][0], ranges[j-1][1], top)
+                prev_chunk = DataChunk(ranges[j-1][0], ranges[j-1][1], ranges[j-1][2], top)
                 raise InvalidLayoutException(
                     f'overlapping ranges: {prev_chunk.path()} and {chunk.path()}'
                 )
@@ -88,14 +90,14 @@ def get_chunks(fs: Fs, first_block: int = 0, last_block: int = math.inf) -> Iter
         if len(tops) > i + 1 and tops[i + 1] < first_block:
             continue
 
-        for beg, end in _get_top_ranges(fs, top):
+        for beg, end, hash_ in _get_top_ranges(fs, top):
             if last_block < beg:
                 return
 
             if first_block > end:
                 continue
 
-            yield DataChunk(beg, end, top)
+            yield DataChunk(beg, end, hash_, top)
 
 
 class LayoutConflictException(Exception):
@@ -126,7 +128,7 @@ class ChunkWriter:
                 self._ranges = []
 
         if self._ranges and self._ranges[-1][1] > last_block:
-            overlap = DataChunk(self._ranges[-1][0], self._ranges[-1][1], self._top)
+            overlap = DataChunk(self._ranges[-1][0], self._ranges[-1][1], self._ranges[-1][2], self._top)
             raise LayoutConflictException(f'chunk {overlap.path()} already exceeds {last_block}. Perhaps part of {first_block}-{last_block} range is controlled by another writer.')
 
         self._fs = fs
@@ -137,8 +139,8 @@ class ChunkWriter:
         if not self._ranges:
             return
 
-        beg, end = self._ranges[-1]
-        chunk = DataChunk(beg, end, self._top)
+        beg, end, hash_ = self._ranges[-1]
+        chunk = DataChunk(beg, end, hash_, self._top)
 
         if last_file not in self._fs.ls(chunk.path()):
             self._fs.delete(chunk.path())
@@ -151,8 +153,15 @@ class ChunkWriter:
         else:
             return self._top
 
+    @property
+    def last_hash(self) -> str | None:
+        if self._ranges:
+            return self._ranges[-1][2]
+        else:
+            return None
+
     @contextmanager
-    def write(self, first_block: int, last_block: int) -> AbstractContextManager[Fs]:
+    def write(self, first_block: int, last_block: int, last_hash: str) -> AbstractContextManager[Fs]:
         assert self.next_block <= first_block <= last_block <= self.last_block
 
         if len(self._ranges) < 500 or self.last_block == last_block:
@@ -161,8 +170,8 @@ class ChunkWriter:
             top = first_block
             self._ranges = []
 
-        with self._fs.transact(DataChunk(first_block, last_block, top).path()) as loc:
+        with self._fs.transact(DataChunk(first_block, last_block, last_hash, top).path()) as loc:
             yield loc
 
         self._top = top
-        self._ranges.append((first_block, last_block))
+        self._ranges.append((first_block, last_block, last_hash))

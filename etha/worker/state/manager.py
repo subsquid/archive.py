@@ -3,7 +3,7 @@ import os.path
 from typing import Optional
 
 
-from etha.util import create_child_task, monitor_service_tasks
+from etha.util.asyncio import create_child_task, monitor_service_tasks
 from etha.worker.state.controller import RangeLock, StateController, State
 from etha.worker.state.dataset import Dataset, dataset_encode
 from etha.worker.state.sync import SyncProcess
