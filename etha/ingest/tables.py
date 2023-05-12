@@ -1,7 +1,9 @@
+from typing import Iterable, Literal
+
 import pyarrow
 
 from etha.ingest.column import Column
-from etha.ingest.model import Transaction, Log, Trace, Block, StateDiff, Address20, Qty, Diff
+from etha.ingest.model import Transaction, Log, Block, Qty, CallFrame, StateDiff, Address20, Bytes, StateMap
 from etha.ingest.util import qty2int
 
 
@@ -175,6 +177,7 @@ class TraceTableBuilder(TableBuilderBase):
         self.transaction_index = Column(pyarrow.int32())
         self.type = Column(pyarrow.string())
         self.error = Column(pyarrow.string())
+        self.revert_reason = Column(pyarrow.string())
 
         self.create_from = Column(pyarrow.string())
         self.create_value = Column(qty())
@@ -202,82 +205,87 @@ class TraceTableBuilder(TableBuilderBase):
         self.reward_value = Column(qty())
         self.reward_type = Column(pyarrow.string())
 
-    def append(self, block_number: Qty, transaction_index: Qty, trace: Trace):
-        self.block_number.append(qty2int(block_number))
-        self.trace_address.append(trace['traceAddress'])
-        self.subtraces.append(trace['subtraces'])
-        self.transaction_index.append(qty2int(transaction_index))
-        self.type.append(trace['type'])
-        self.error.append(trace.get('error'))
+    def append(self, block_number: Qty, transaction_index: Qty, top: CallFrame):
+        bn = qty2int(block_number)
+        tix = qty2int(transaction_index)
+        for addr, subtraces, frame in _traverse_frame(top, []):
+            self.block_number.append(bn)
+            self.transaction_index.append(tix)
+            self.trace_address.append(addr)
+            self.subtraces.append(subtraces)
+            self.error.append(frame.get('error'))
+            self.revert_reason.append(frame.get('revertReason'))
 
-        if trace['type'] == 'create':
-            action = trace['action']
-            self.create_from.append(action['from'])
-            self.create_value.append(action['value'])
-            self.create_gas.append(action['gas'])
-            self.create_init.append(action['init'])
-            if result := trace.get('result'):
-                self.create_result_gas_used.append(result['gasUsed'])
-                self.create_result_code.append(result['code'])
-                self.create_result_address.append(result['address'])
+            trace_type: Literal['create', 'call', 'suicide']
+            frame_type = frame['type']
+            if frame_type in ('CALL', 'STATICCALL', 'DELEGATECALL'):
+                trace_type = 'call'
+            elif frame_type in ('CREATE', 'CREATE2'):
+                trace_type = 'create'
+            elif frame_type == 'SELFDESTRUCT':
+                trace_type = 'suicide'
             else:
+                raise Exception(f'Unknown frame type - {frame_type}')
+
+            self.type.append(trace_type)
+
+            if trace_type == 'create':
+                self.create_from.append(frame['from'])
+                self.create_value.append(frame['value'])
+                self.create_gas.append(frame['gas'])
+                self.create_init.append(frame['input'])
+                self.create_result_gas_used.append(frame.get('gasUsed'))
+                self.create_result_code.append(frame.get('output'))
+                self.create_result_address.append(frame.get('to'))
+            else:
+                self.create_from.append(None)
+                self.create_value.append(None)
+                self.create_gas.append(None)
+                self.create_init.append(None)
                 self.create_result_gas_used.append(None)
                 self.create_result_code.append(None)
                 self.create_result_address.append(None)
-        else:
-            self.create_from.append(None)
-            self.create_value.append(None)
-            self.create_gas.append(None)
-            self.create_init.append(None)
-            self.create_result_gas_used.append(None)
-            self.create_result_code.append(None)
-            self.create_result_address.append(None)
 
-        if trace['type'] == 'call':
-            action = trace['action']
-            self.call_from.append(action['from'])
-            self.call_to.append(action['to'])
-            self.call_value.append(action['value'])
-            self.call_gas.append(action['gas'])
-            self.call_sighash.append(_to_sighash(action['input']))
-            self.call_input.append(action['input'])
-            self.call_type.append(action['callType'])
-            if result := trace.get('result'):
-                self.call_result_gas_used.append(result['gasUsed'])
-                self.call_result_output.append(result['output'])
+            if trace_type == 'call':
+                self.call_from.append(frame['from'])
+                self.call_to.append(frame['to'])
+                self.call_value.append(frame.get('value'))
+                self.call_gas.append(frame['gas'])
+                self.call_sighash.append(_to_sighash(frame['input']))
+                self.call_input.append(frame['input'])
+                self.call_type.append(frame_type.lower())
+                self.call_result_gas_used.append(frame.get('gasUsed'))
+                self.call_result_output.append(frame.get('output'))
             else:
+                self.call_from.append(None)
+                self.call_to.append(None)
+                self.call_value.append(None)
+                self.call_gas.append(None)
+                self.call_sighash.append(None)
+                self.call_input.append(None)
+                self.call_type.append(None)
                 self.call_result_gas_used.append(None)
                 self.call_result_output.append(None)
-        else:
-            self.call_from.append(None)
-            self.call_to.append(None)
-            self.call_value.append(None)
-            self.call_gas.append(None)
-            self.call_sighash.append(None)
-            self.call_input.append(None)
-            self.call_type.append(None)
-            self.call_result_gas_used.append(None)
-            self.call_result_output.append(None)
 
-        if trace['type'] == 'suicide':
-            action = trace['action']
-            self.suicide_address.append(action['address'])
-            self.suicide_refund_address.append(action['refundAddress'])
-            self.suicide_balance.append(action['balance'])
-        else:
-            self.suicide_address.append(None)
-            self.suicide_refund_address.append(None)
-            self.suicide_balance.append(None)
+            if trace_type == 'suicide':
+                self.suicide_address.append(frame['from'])
+                self.suicide_refund_address.append(frame['to'])
+                self.suicide_balance.append(frame['value'])
+            else:
+                self.suicide_address.append(None)
+                self.suicide_refund_address.append(None)
+                self.suicide_balance.append(None)
 
-        if trace['type'] == 'reward':
-            action = trace['action']
-            self.reward_author.append(action['author'])
-            self.reward_value.append(action['value'])
-            self.reward_type.append(action['rewardType'])
-        else:
             self.reward_author.append(None)
             self.reward_value.append(None)
             self.reward_type.append(None)
+
+
+def _traverse_frame(frame: CallFrame, address: list[int]) -> Iterable[tuple[list[int], int, CallFrame]]:
+    subcalls = frame.get('calls', ())
+    yield address, len(subcalls), frame
+    for i, call in enumerate(subcalls):
+        yield from _traverse_frame(call, [*address, i])
 
 
 class StateDiffTableBuilder(TableBuilderBase):
@@ -294,48 +302,86 @@ class StateDiffTableBuilder(TableBuilderBase):
         self,
         block_number: Qty,
         transaction_index: Qty,
-        address: Address20,
         diff: StateDiff
     ):
         bn = qty2int(block_number)
         tix = qty2int(transaction_index)
-        self._append(bn, tix, address, 'balance', diff['balance'])
-        self._append(bn, tix, address, 'code', diff['code'])
-        self._append(bn, tix, address, 'nonce', diff['nonce'])
-        for slot, d in diff['storage'].items():
-            self._append(bn, tix, address, slot, d)
+        pre = diff['pre']
+        post = diff['post']
 
-    def _append(
+        for address, pre_map in pre.items():
+            post_map = post.get(address, {})
+            self._append_address(bn, tix, address, pre_map, post_map)
+
+        for address, post_map in post.items():
+            if address in pre:
+                pass
+            else:
+                self._append_address(bn, tix, address, {}, post_map)
+
+    def _append_address(
+        self,
+        block_number: int,
+        transaction_index: int,
+        address: Address20,
+        pre: StateMap,
+        post: StateMap
+    ):
+        for key, prev, nxt in _known_keys_diff(pre, post):
+            self._append_row(block_number, transaction_index, address, key, prev, nxt)
+
+        pre_storage = pre.get('storage', {})
+        post_storage = post.get('storage', {})
+
+        for key, prev in pre_storage.items():
+            nxt = post_storage.get(key)
+            self._append_row(block_number, transaction_index, address, key, prev, nxt)
+
+        for key, nxt in post_storage.items():
+            if key in pre_storage:
+                pass
+            else:
+                self._append_row(block_number, transaction_index, address, key, None, nxt)
+
+    def _append_row(
         self,
         block_number: int,
         transaction_index: int,
         address: Address20,
         key: str,
-        diff: Diff
+        pre: Bytes | None,
+        post: Bytes | None
     ):
         self.block_number.append(block_number)
         self.transaction_index.append(transaction_index)
         self.address.append(address)
         self.key.append(key)
 
-        if diff == '=':
-            self.kind.append('=')
-            self.prev.append(None)
-            self.next.append(None)
-        elif '+' in diff:
-            self.kind.append('+')
-            self.prev.append(None)
-            self.next.append(diff['+'])
-        elif '*' in diff:
-            self.kind.append('*')
-            self.prev.append(diff['*']['from'])
-            self.next.append(diff['*']['to'])
-        elif '-' in diff:
-            self.kind.append('-')
-            self.prev.append(diff['-'])
-            self.next.append(None)
+        kind: str
+        if pre is None:
+            assert post is not None
+            kind = '+'
+        elif post is None:
+            kind = '-'
         else:
-            raise ValueError(f'unsupported state diff kind - {diff}')
+            kind = '*'
+
+        self.kind.append(kind)
+        self.prev.append(pre)
+        self.next.append(post)
+
+
+def _known_keys_diff(pre: StateMap, post: StateMap) -> Iterable[tuple[str, Bytes | None, Bytes | None]]:
+    for key in ('balance', 'code', 'nonce'):
+        prev = pre.get(key)
+        nxt = post.get(key)
+        if key == 'nonce':
+            prev = None if prev is None else hex(prev)
+            nxt = None if nxt is None else hex(nxt)
+        if nxt is None:
+            pass
+        else:
+            yield key, prev, nxt
 
 
 def _to_sighash(tx_input: str) -> str | None:

@@ -20,17 +20,17 @@ write:
 
 ingest-eth:
 	@$(PY) -m etha.ingest --dest data/mainnet \
-		-e https://rpc.ankr.com/eth \
-		-c 10 \
-		-r 500 \
-		-m trace_replayBlockTransactions \
+		-e ${ETH_ALCHEMY} \
+		-c 20 \
+		-r 400 \
+		-m debug_traceBlockByHash \
 		-e ${ETH_BLAST} \
-		-c 10 \
-		-r 100 \
+		-c 20 \
+		-r 400 \
 		--batch-limit 100 \
-		--with-receipts \
 		--with-traces \
-		--write-chunk-size 2048 \
+		--with-receipts \
+		--write-chunk-size 10 \
 		--first-block 15000000
 
 

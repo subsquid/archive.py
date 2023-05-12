@@ -223,11 +223,13 @@ def _is_retryable_error(e: Exception) -> bool:
         return e.response.status_code in (429, 502, 503, 504, 530)
     elif isinstance(e, httpx.ConnectError) or isinstance(e, httpx.TimeoutException):
         return True
+    elif isinstance(e, httpx.RemoteProtocolError) and 'without sending' in str(e):
+        return True
     elif isinstance(e, RpcResultIsNull):
         return True
     elif isinstance(e, RpcError) and isinstance(e.info, dict):
         code = e.info.get('code')
-        return code == 429 or code == -32603
+        return code == 429 or code == -32603 or code == -32000
     else:
         return False
 

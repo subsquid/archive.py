@@ -47,12 +47,12 @@ class BatchBuilder:
 
         for tx in block['transactions']:
             self.tx_table.append(tx)
-            if replay := tx.get('replay_'):
-                for trace in replay['trace']:
-                    self.trace_table.append(tx['blockNumber'], tx['transactionIndex'], trace)
 
-                for address, diff in replay['stateDiff'].items():
-                    self.statediff_table.append(tx['blockNumber'], tx['transactionIndex'], address, diff)
+            if frame := tx.get('callTrace_'):
+                self.trace_table.append(tx['blockNumber'], tx['transactionIndex'], frame)
+
+            if diff := tx.get('stateDiff_'):
+                self.statediff_table.append(tx['blockNumber'], tx['transactionIndex'], diff)
 
         for log in block.get('logs_', []):
             self.log_table.append(log)

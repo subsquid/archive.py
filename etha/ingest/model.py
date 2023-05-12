@@ -56,7 +56,8 @@ Transaction = TypedDict('Transaction', {
     'yParity': NotRequired[Qty],
     'chainId': NotRequired[Qty],
     'receipt_': NotRequired['Receipt'],
-    'replay_': NotRequired['TransactionReplay'],
+    'callTrace_': NotRequired['CallFrame'],
+    'stateDiff_': NotRequired['StateDiff']
 })
 
 
@@ -85,113 +86,36 @@ class Receipt(TypedDict):
     status: NotRequired[Qty]
 
 
-# https://github.com/openethereum/parity-ethereum/blob/55c90d4016505317034e3e98f699af07f5404b63/rpc/src/v1/types/trace.rs#L482
-class _TraceBase(TypedDict):
-    error: NotRequired[str]
-    traceAddress: list[int]
-    subtraces: int
-
-
-class CreateTrace(_TraceBase):
-    type: Literal['create']
-    action: 'CreateTraceAction'
-    result: NotRequired['CreateTraceActionResult']
-
-
-CreateTraceAction = TypedDict('CreateTraceAction', {
-    'from': Address20,
-    'value': Qty,
-    'gas': Qty,
-    'init': Bytes,
-    'creation_method': NotRequired[Literal['create', 'create2']]
-})
-
-
-class CreateTraceActionResult(TypedDict):
-    gasUsed: Qty
-    code: Bytes
-    address: Address20
-
-
-class CallTrace(_TraceBase):
-    type: Literal['call']
-    action: 'CallTraceAction'
-    result: 'CallTraceActionResult'
-
-
-CallTraceAction = TypedDict('CallTraceAction', {
+CallFrame = TypedDict('CallFrame', {
+    'type': Literal['CALL', 'STATICCALL', 'DELEGATECALL', 'CREATE', 'CREATE2', 'SELFDESTRUCT'],
     'from': Address20,
     'to': Address20,
-    'value': Qty,
+    'value': NotRequired[Qty],
     'gas': Qty,
+    'gasUsed': Qty,
     'input': Bytes,
-    'callType': Optional[Literal['call', 'callcode', 'delegatecall', 'staticcall']]
+    'output': Bytes,
+    'error': NotRequired[str],
+    'revertReason': NotRequired[str],
+    'calls': NotRequired[list['CallFrame']]
 })
 
 
-class CallTraceActionResult(TypedDict):
-    gasUsed: Qty
-    output: Bytes
+class CallFrameResult(TypedDict):
+    result: CallFrame
 
 
-class SuicideTrace(_TraceBase):
-    type: Literal['suicide']
-    action: 'SuicideTraceAction'
-
-
-class SuicideTraceAction(TypedDict):
-    address: Address20
-    refundAddress: Address20
+class StateMap(TypedDict, total=False):
     balance: Qty
-
-
-# is not supported for trace_replayBlockTransactions rpc call
-class RewardTrace(_TraceBase):
-    type: Literal['reward']
-    action: 'RewardTraceAction'
-
-
-class RewardTraceAction(TypedDict):
-    author: Address20
-    value: Qty
-    rewardType: Literal['block', 'uncle', 'emptyStep', 'external']
-
-
-Trace = Union[CreateTrace, CallTrace, SuicideTrace, RewardTrace]
-
-
-AddDiff = TypedDict('AddDiff', {
-    '+': Bytes
-})
-
-
-ChangeValue = TypedDict('ChangeValue', {
-    'from': Bytes,
-    'to': Bytes,
-})
-
-
-ChangeDiff = TypedDict('ChangeDiff', {
-    '*': ChangeValue
-})
-
-
-DeleteDiff = TypedDict('DeleteDiff', {
-    '-': Bytes
-})
-
-
-Diff = Union[Literal['='], AddDiff, ChangeDiff, DeleteDiff]
+    code: Bytes
+    nonce: int
+    storage: dict[Bytes32, Bytes]
 
 
 class StateDiff(TypedDict):
-    balance: Diff
-    code: Diff
-    nonce: Diff
-    storage: dict[Bytes32, Diff]
+    pre: dict[Address20, StateMap]
+    post: dict[Address20, StateMap]
 
 
-class TransactionReplay(TypedDict):
-    stateDiff: dict[Address20, StateDiff]
-    trace: list[Trace]
-    transactionHash: Hash32
+class StateDiffResult(TypedDict):
+    result: StateDiff

@@ -1,11 +1,10 @@
 import asyncio
 import logging
-from itertools import groupby
 from typing import Optional, AsyncIterator
 
-from etha.ingest.model import Block, Log, Receipt, TransactionReplay
-from etha.ingest.rpc import RpcClient, RpcBatchCall
-from etha.ingest.util import trim_hash
+from etha.ingest.model import Block, Log, Receipt, CallFrameResult, StateDiffResult
+from etha.ingest.rpc import RpcClient
+from etha.ingest.util import trim_hash, qty2int
 
 
 LOG = logging.getLogger(__name__)
@@ -47,7 +46,7 @@ class Ingest:
                 yield blocks
 
     def _schedule_strides(self):
-        while len(self._strides) < max(1, min(50, self._rpc.get_total_capacity())) \
+        while len(self._strides) < max(1, min(10, self._rpc.get_total_capacity())) \
                 and not self._is_finished() \
                 and self._dist() > 0:
             from_block = self._height + 1
@@ -91,90 +90,115 @@ class Ingest:
 
         LOG.debug('fetching new stride', extra=extra)
 
-        block_batch: RpcBatchCall = [
-            ('eth_getBlockByNumber', [hex(i), True])
-            for i in range(from_block, to_block + 1)
+        blocks: list[Block] = await self._rpc.batch_call(
+            [
+                ('eth_getBlockByNumber', [hex(i), True])
+                for i in range(from_block, to_block + 1)
+            ],
+            priority=from_block
+        )
+
+        subtasks = [
+            asyncio.create_task(coro)
+            for coro in self._stride_subtasks(blocks)
         ]
 
-        if not self._with_receipts:
-            block_batch.append(
-                ('eth_getLogs', [{
-                    'fromBlock': hex(from_block),
-                    'toBlock': hex(to_block)
-                }])
-            )
-
-        if self._with_traces:
-            trace_batch = [
-                ('trace_replayBlockTransactions', [hex(i), ['trace', 'stateDiff']])
-                for i in range(from_block, to_block + 1)
-            ]
-            if from_block == 0:
-                # skip replay if genesis
-                del trace_batch[0]
-        else:
-            trace_batch = []
-
-        trace_future = self._rpc.batch_call(trace_batch, priority=from_block)
-
-        block_batch_response = await self._rpc.batch_call(block_batch, priority=from_block)
-        blocks: list[Block] = block_batch_response[:(to_block - from_block + 1)]
-
-        receipts: list[Receipt]
-        logs: list[Log]
-        if self._with_receipts:
-            receipts = await self._rpc.batch_call(
-                [
-                    ('eth_getTransactionReceipt', [tx['hash']])
-                    for b in blocks
-                    for tx in b['transactions']
-                ],
-                priority=from_block
-            )
-            logs = []
-            for r in receipts:
-                logs.extend(r['logs'])
-        else:
-            receipts = []
-            logs = block_batch_response[-1]
-
-        replays: list[list[TransactionReplay]] = await trace_future
-        if from_block == 0:
-            # mock replay if genesis
-            replays.insert(0, [])
-
-        logs.sort(key=lambda rec: rec['blockNumber'])
-        logs_by_block = {k: list(it) for k, it in groupby(logs, key=lambda b: b['blockNumber'])}
-
-        receipts_by_tx = {r['transactionHash']: r for r in receipts}
-
-        for i, block in enumerate(blocks):
-            block_number = block['number']
-            block_hash = block['hash']
-
-            block_logs = logs_by_block.get(block_number, [])
-            for item in block_logs:
-                assert item['blockHash'] == block_hash
-            block['logs_'] = block_logs
-
-            if self._with_traces:
-                replay_by_tx = {replay['transactionHash']: replay for replay in replays[i]}
-                assigned_replays = 0
-                for tx in block['transactions']:
-                    rep = replay_by_tx.get(tx['hash'])
-                    if rep:  # On polygon traces are not available for some contracts
-                        tx['replay_'] = rep
-                        assigned_replays += 1
-                assert assigned_replays == len(replay_by_tx), \
-                    'trace_replayBlockTransactions came from a different block'
-
-            if self._with_receipts:
-                for tx in block['transactions']:
-                    tx['receipt_'] = receipts_by_tx[tx['hash']]
+        for sub in subtasks:
+            await sub
 
         LOG.debug('stride is ready', extra=extra)
-
         return blocks
+
+    def _stride_subtasks(self, blocks: list[Block]):
+        if self._with_receipts:
+            yield self._fetch_receipts(blocks)
+        else:
+            yield self._fetch_logs(blocks)
+
+        if self._with_traces:
+            for block in blocks:
+                yield self._fetch_call_trace(block)
+                yield self._fetch_state_diff(block)
+
+    async def _fetch_logs(self, blocks: list[Block]) -> None:
+        priority = qty2int(blocks[0]['number'])
+
+        logs: list[Log] = await self._rpc.call(
+            'eth_getLogs',
+            [{
+                'fromBlock': blocks[0]['number'],
+                'toBlock': blocks[-1]['number']
+            }],
+            priority=priority
+        )
+
+        block_map = {}
+        for block in blocks:
+            block['logs_'] = []
+            block_map[block['hash']] = block
+
+        for log in logs:
+            block = block_map[log['blockHash']]
+            block['logs_'].append(log)
+
+    async def _fetch_receipts(self, blocks: list[Block]) -> None:
+        priority = qty2int(blocks[0]['number'])
+
+        receipts: list[Receipt] = await self._rpc.batch_call(
+            [
+                ('eth_getTransactionReceipt', [tx['hash']])
+                for b in blocks
+                for tx in b['transactions']
+            ],
+            priority=priority
+        )
+
+        receipts_map = {r['transactionHash']: r for r in receipts}
+
+        for block in blocks:
+            logs = block['logs_'] = []
+            for tx in block['transactions']:
+                r = receipts_map[tx['hash']]
+                logs.extend(r['logs'])
+                tx['receipt_'] = r
+
+    async def _fetch_call_trace(self, block: Block) -> None:
+        priority = qty2int(block['number'])
+
+        traces: list[CallFrameResult] = await self._rpc.call('debug_traceBlockByHash', [
+            block['hash'],
+            {
+                'tracer': 'callTracer',
+                'tracerConfig': {
+                    'onlyTopCall': False,
+                    'withLog': True
+                }
+            }
+        ], priority=priority)
+
+        transactions = block['transactions']
+        assert len(transactions) == len(traces)
+        for tx, trace in zip(transactions, traces):
+            tx['callTrace_'] = trace['result']
+
+    async def _fetch_state_diff(self, block: Block) -> None:
+        priority = qty2int(block['number'])
+
+        diffs: list[StateDiffResult] = await self._rpc.call('debug_traceBlockByHash', [
+            block['hash'],
+            {
+                'tracer': 'prestateTracer',
+                'tracerConfig': {
+                    'onlyTopCall': False,  # Incorrect, but required by Alchemy endpoints
+                    'diffMode': True
+                }
+            }
+        ], priority=priority)
+
+        transactions = block['transactions']
+        assert len(transactions) == len(diffs)
+        for tx, diff in zip(transactions, diffs):
+            tx['stateDiff_'] = diff['result']
 
     def _validate_blocks(self, blocks: list[Block]):
         for block in blocks:
