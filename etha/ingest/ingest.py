@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import Optional, AsyncIterator
 
-from etha.ingest.model import Block, Log, Receipt, CallFrameResult, StateDiffResult
+from etha.ingest.model import Block, Log, Receipt, DebugFrameResult, DebugStateDiffResult, TraceTransactionReplay
 from etha.ingest.rpc import RpcClient
 from etha.ingest.util import trim_hash, qty2int
 
@@ -19,12 +19,16 @@ class Ingest:
         to_block: Optional[int] = None,
         last_hash: Optional[str] = None,
         with_receipts: bool = False,
-        with_traces: bool = False
+        with_traces: bool = False,
+        with_statediffs: bool = False,
+        use_debug_api_for_statediffs: bool = False
     ):
         self._rpc = rpc
         self._finality_offset = finality_offset
         self._with_receipts = with_receipts
         self._with_traces = with_traces
+        self._with_statediffs = with_statediffs
+        self._use_debug_api_for_statediffs = use_debug_api_for_statediffs
         self._last_hash = last_hash
         self._height = from_block - 1
         self._end = to_block
@@ -115,10 +119,15 @@ class Ingest:
         else:
             yield self._fetch_logs(blocks)
 
-        if self._with_traces:
-            for block in blocks:
+        for block in blocks:
+            if self._with_traces:
                 yield self._fetch_call_trace(block)
-                yield self._fetch_state_diff(block)
+
+            if self._with_statediffs:
+                if self._use_debug_api_for_statediffs:
+                    yield self._fetch_debug_state_diff(block)
+                else:
+                    yield self._fetch_trace_state_diff(block)
 
     async def _fetch_logs(self, blocks: list[Block]) -> None:
         priority = qty2int(blocks[0]['number'])
@@ -165,7 +174,7 @@ class Ingest:
     async def _fetch_call_trace(self, block: Block) -> None:
         priority = qty2int(block['number'])
 
-        traces: list[CallFrameResult] = await self._rpc.call('debug_traceBlockByHash', [
+        traces: list[DebugFrameResult] = await self._rpc.call('debug_traceBlockByHash', [
             block['hash'],
             {
                 'tracer': 'callTracer',
@@ -179,12 +188,13 @@ class Ingest:
         transactions = block['transactions']
         assert len(transactions) == len(traces)
         for tx, trace in zip(transactions, traces):
-            tx['callTrace_'] = trace['result']
+            assert 'result' in trace
+            tx['debugFrame_'] = trace
 
-    async def _fetch_state_diff(self, block: Block) -> None:
+    async def _fetch_debug_state_diff(self, block: Block) -> None:
         priority = qty2int(block['number'])
 
-        diffs: list[StateDiffResult] = await self._rpc.call('debug_traceBlockByHash', [
+        diffs: list[DebugStateDiffResult] = await self._rpc.call('debug_traceBlockByHash', [
             block['hash'],
             {
                 'tracer': 'prestateTracer',
@@ -198,7 +208,30 @@ class Ingest:
         transactions = block['transactions']
         assert len(transactions) == len(diffs)
         for tx, diff in zip(transactions, diffs):
-            tx['stateDiff_'] = diff['result']
+            assert 'result' in diff
+            tx['debugStateDiff_'] = diff
+
+    async def _fetch_trace_state_diff(self, block: Block) -> None:
+        priority = qty2int(block['number'])
+        if priority == 0:
+            # skip replay for genesis block
+            return
+
+        replays: list[TraceTransactionReplay] = await self._rpc.call(
+            'trace_replayBlockTransactions',
+            [block['number'], ['stateDiff']],
+            priority=priority
+        )
+
+        # On some chains (binance?) not all transactions have replays
+        by_tx = {rep['transactionHash']: rep for rep in replays}
+        used = 0
+        for tx in block['transactions']:
+            if rep := by_tx.get(tx['hash']):
+                tx['traceReplay_'] = rep
+                used += 1
+
+        assert used == len(replays)
 
     def _validate_blocks(self, blocks: list[Block]):
         for block in blocks:

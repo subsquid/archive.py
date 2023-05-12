@@ -134,7 +134,19 @@ def parse_cli_arguments():
     program.add_argument(
         '--with-traces',
         action='store_true',
-        help='fetch and write EVM traces (in Parity format)'
+        help='fetch and write EVM call traces'
+    )
+
+    program.add_argument(
+        '--with-statediffs',
+        action='store_true',
+        help='fetch and write EVM state updates'
+    )
+
+    program.add_argument(
+        '--use-debug-api-for-statediffs',
+        action='store_true',
+        help='use debug prestateTracer to fetch statediffs (by default will use trace_* api)'
     )
 
     program.add_argument(
@@ -202,7 +214,9 @@ async def ingest(args):
         to_block=args.last_block,
         last_hash=chunk_writer.last_hash,
         with_receipts=args.with_receipts,
-        with_traces=args.with_traces
+        with_traces=args.with_traces,
+        with_statediffs=args.with_statediffs,
+        use_debug_api_for_statediffs=args.use_debug_api_for_statediffs
     )
 
     await IngestionProcess(ingest, write_service).run()

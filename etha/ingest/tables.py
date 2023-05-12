@@ -3,7 +3,9 @@ from typing import Iterable, Literal
 import pyarrow
 
 from etha.ingest.column import Column
-from etha.ingest.model import Transaction, Log, Block, Qty, CallFrame, StateDiff, Address20, Bytes, StateMap
+from etha.ingest.model import Transaction, Log, Block, Qty, DebugFrame, DebugStateDiff, Address20, \
+    Bytes, DebugStateMap, \
+    TraceStateDiff, TraceDiff, TraceTransactionReplay
 from etha.ingest.util import qty2int
 
 
@@ -205,7 +207,7 @@ class TraceTableBuilder(TableBuilderBase):
         self.reward_value = Column(qty())
         self.reward_type = Column(pyarrow.string())
 
-    def append(self, block_number: Qty, transaction_index: Qty, top: CallFrame):
+    def append(self, block_number: Qty, transaction_index: Qty, top: DebugFrame):
         bn = qty2int(block_number)
         tix = qty2int(transaction_index)
         for addr, subtraces, frame in _traverse_frame(top, []):
@@ -281,7 +283,7 @@ class TraceTableBuilder(TableBuilderBase):
             self.reward_type.append(None)
 
 
-def _traverse_frame(frame: CallFrame, address: list[int]) -> Iterable[tuple[list[int], int, CallFrame]]:
+def _traverse_frame(frame: DebugFrame, address: list[int]) -> Iterable[tuple[list[int], int, DebugFrame]]:
     subcalls = frame.get('calls', ())
     yield address, len(subcalls), frame
     for i, call in enumerate(subcalls):
@@ -294,15 +296,15 @@ class StateDiffTableBuilder(TableBuilderBase):
         self.transaction_index = Column(pyarrow.int32())
         self.address = Column(pyarrow.string())
         self.key = Column(pyarrow.string())  # 'balance', 'code', 'nonce', '0x00000023420387'
-        self.kind = Column(pyarrow.string())  # =, +, *, - (DIC)
+        self.kind = Column(pyarrow.string())  # +, *, - (DIC)
         self.prev = Column(pyarrow.string())
         self.next = Column(pyarrow.string())
 
-    def append(
+    def append_debug(
         self,
         block_number: Qty,
         transaction_index: Qty,
-        diff: StateDiff
+        diff: DebugStateDiff
     ):
         bn = qty2int(block_number)
         tix = qty2int(transaction_index)
@@ -311,39 +313,39 @@ class StateDiffTableBuilder(TableBuilderBase):
 
         for address, pre_map in pre.items():
             post_map = post.get(address, {})
-            self._append_address(bn, tix, address, pre_map, post_map)
+            self._append_debug_address(bn, tix, address, pre_map, post_map)
 
         for address, post_map in post.items():
             if address in pre:
                 pass
             else:
-                self._append_address(bn, tix, address, {}, post_map)
+                self._append_debug_address(bn, tix, address, {}, post_map)
 
-    def _append_address(
+    def _append_debug_address(
         self,
         block_number: int,
         transaction_index: int,
         address: Address20,
-        pre: StateMap,
-        post: StateMap
+        pre: DebugStateMap,
+        post: DebugStateMap
     ):
         for key, prev, nxt in _known_keys_diff(pre, post):
-            self._append_row(block_number, transaction_index, address, key, prev, nxt)
+            self._append_debug_row(block_number, transaction_index, address, key, prev, nxt)
 
         pre_storage = pre.get('storage', {})
         post_storage = post.get('storage', {})
 
         for key, prev in pre_storage.items():
             nxt = post_storage.get(key)
-            self._append_row(block_number, transaction_index, address, key, prev, nxt)
+            self._append_debug_row(block_number, transaction_index, address, key, prev, nxt)
 
         for key, nxt in post_storage.items():
             if key in pre_storage:
                 pass
             else:
-                self._append_row(block_number, transaction_index, address, key, None, nxt)
+                self._append_debug_row(block_number, transaction_index, address, key, None, nxt)
 
-    def _append_row(
+    def _append_debug_row(
         self,
         block_number: int,
         transaction_index: int,
@@ -370,8 +372,68 @@ class StateDiffTableBuilder(TableBuilderBase):
         self.prev.append(pre)
         self.next.append(post)
 
+    def append_trace(
+        self,
+        block_number: Qty,
+        transaction_index: Qty,
+        replay: TraceTransactionReplay
+    ):
+        bn = qty2int(block_number)
+        tix = qty2int(transaction_index)
+        for address, diff in replay['stateDiff'].items():
+            self._append_trace_diff(
+                bn,
+                tix,
+                address,
+                diff
+            )
 
-def _known_keys_diff(pre: StateMap, post: StateMap) -> Iterable[tuple[str, Bytes | None, Bytes | None]]:
+    def _append_trace_diff(
+        self,
+        block_number: int,
+        transaction_index: int,
+        address: Address20,
+        diff: TraceStateDiff
+    ):
+        self._append_trace_row(block_number, transaction_index, address, 'balance', diff['balance'])
+        self._append_trace_row(block_number, transaction_index, address, 'code', diff['code'])
+        self._append_trace_row(block_number, transaction_index, address, 'nonce', diff['nonce'])
+        for slot, d in diff['storage'].items():
+            self._append_trace_row(block_number, transaction_index, address, slot, d)
+
+    def _append_trace_row(
+            self,
+            block_number: int,
+            transaction_index: int,
+            address: Address20,
+            key: str,
+            diff: TraceDiff
+    ):
+        if diff == '=':
+            return
+
+        self.block_number.append(block_number)
+        self.transaction_index.append(transaction_index)
+        self.address.append(address)
+        self.key.append(key)
+
+        if '+' in diff:
+            self.kind.append('+')
+            self.prev.append(None)
+            self.next.append(diff['+'])
+        elif '*' in diff:
+            self.kind.append('*')
+            self.prev.append(diff['*']['from'])
+            self.next.append(diff['*']['to'])
+        elif '-' in diff:
+            self.kind.append('-')
+            self.prev.append(diff['-'])
+            self.next.append(None)
+        else:
+            raise ValueError(f'unsupported state diff kind - {diff}')
+
+
+def _known_keys_diff(pre: DebugStateMap, post: DebugStateMap) -> Iterable[tuple[str, Bytes | None, Bytes | None]]:
     for key in ('balance', 'code', 'nonce'):
         prev = pre.get(key)
         nxt = post.get(key)

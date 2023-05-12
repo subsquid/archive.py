@@ -23,13 +23,13 @@ ingest-eth:
 		-e ${ETH_ALCHEMY} \
 		-c 20 \
 		-r 400 \
-		-m debug_traceBlockByHash \
 		-e ${ETH_BLAST} \
 		-c 20 \
 		-r 400 \
 		--batch-limit 100 \
-		--with-traces \
 		--with-receipts \
+		--with-traces \
+		--with-statediffs \
 		--write-chunk-size 10 \
 		--first-block 15000000
 

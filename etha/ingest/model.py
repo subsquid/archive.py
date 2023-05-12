@@ -56,8 +56,9 @@ Transaction = TypedDict('Transaction', {
     'yParity': NotRequired[Qty],
     'chainId': NotRequired[Qty],
     'receipt_': NotRequired['Receipt'],
-    'callTrace_': NotRequired['CallFrame'],
-    'stateDiff_': NotRequired['StateDiff']
+    'debugFrame_': NotRequired['DebugFrameResult'],
+    'debugStateDiff_': NotRequired['DebugStateDiffResult'],
+    'traceReplay_': NotRequired['TraceTransactionReplay']
 })
 
 
@@ -86,7 +87,7 @@ class Receipt(TypedDict):
     status: NotRequired[Qty]
 
 
-CallFrame = TypedDict('CallFrame', {
+DebugFrame = TypedDict('DebugFrame', {
     'type': Literal['CALL', 'STATICCALL', 'DELEGATECALL', 'CREATE', 'CREATE2', 'SELFDESTRUCT'],
     'from': Address20,
     'to': Address20,
@@ -101,21 +102,58 @@ CallFrame = TypedDict('CallFrame', {
 })
 
 
-class CallFrameResult(TypedDict):
-    result: CallFrame
+class DebugFrameResult(TypedDict):
+    result: DebugFrame
 
 
-class StateMap(TypedDict, total=False):
+class DebugStateMap(TypedDict, total=False):
     balance: Qty
     code: Bytes
     nonce: int
     storage: dict[Bytes32, Bytes]
 
 
-class StateDiff(TypedDict):
-    pre: dict[Address20, StateMap]
-    post: dict[Address20, StateMap]
+class DebugStateDiff(TypedDict):
+    pre: dict[Address20, DebugStateMap]
+    post: dict[Address20, DebugStateMap]
 
 
-class StateDiffResult(TypedDict):
-    result: StateDiff
+class DebugStateDiffResult(TypedDict):
+    result: DebugStateDiff
+
+
+
+TraceAddDiff = TypedDict('TraceAddDiff', {
+    '+': Bytes
+})
+
+
+TraceChangeValue = TypedDict('TraceChangeValue', {
+    'from': Bytes,
+    'to': Bytes,
+})
+
+
+TraceChangeDiff = TypedDict('TraceChangeDiff', {
+    '*': TraceChangeValue
+})
+
+
+TraceDeleteDiff = TypedDict('TraceDeleteDiff', {
+    '-': Bytes
+})
+
+
+TraceDiff = Union[Literal['='], TraceAddDiff, TraceChangeDiff, TraceDeleteDiff]
+
+
+class TraceStateDiff(TypedDict):
+    balance: TraceDiff
+    code: TraceDiff
+    nonce: TraceDiff
+    storage: dict[Bytes32, TraceDiff]
+
+
+class TraceTransactionReplay(TypedDict):
+    transactionHash: Hash32
+    stateDiff: dict[Address20, TraceStateDiff]
