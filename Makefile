@@ -33,8 +33,23 @@ ingest-eth:
 		--with-traces \
 		--with-statediffs \
 		--write-chunk-size 10 \
-		--raw \
+		--use-trace-api \
 		--first-block 15000000
+
+
+ingest-arb:
+	@$(PY) -m etha.ingest --dest data/arb-one \
+		-e ${ARB_BLAST} \
+		-c 20 \
+		-r 400 \
+		--batch-limit 100 \
+		--with-receipts \
+		--with-traces \
+		--with-statediffs \
+		--use-debug-api-for-statediffs \
+		--write-chunk-size 10 \
+		--first-block 900 \
+		--arbitrum
 
 
 ingest-poly:
@@ -63,4 +78,4 @@ worker:
 		--procs 2
 
 
-.PHONY: init build-ingest write ingest-eth ingest-poly router worker
+.PHONY: init build-ingest write ingest-eth ingest-arb ingest-poly router worker

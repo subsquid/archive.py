@@ -33,6 +33,7 @@ class Block(TypedDict):
     uncles: list[Hash32]
     transactions: list['Transaction']
     logs_: NotRequired[list['Log']]
+    unknownTraceReplays_: NotRequired[list]
 
 
 # Alternative syntax allows to use reserved keywords as keys
@@ -122,6 +123,80 @@ class DebugStateDiffResult(TypedDict):
     result: DebugStateDiff
 
 
+# https://github.com/openethereum/parity-ethereum/blob/55c90d4016505317034e3e98f699af07f5404b63/rpc/src/v1/types/trace.rs#L482
+class _TraceRecBase(TypedDict):
+    error: NotRequired[str]
+    traceAddress: list[int]
+    subtraces: int
+
+
+class TraceCreateRec(_TraceRecBase):
+    type: Literal['create']
+    action: 'TraceCreateAction'
+    result: NotRequired['TraceCreateActionResult']
+
+
+TraceCreateAction = TypedDict('TraceCreateAction', {
+    'from': Address20,
+    'value': Qty,
+    'gas': Qty,
+    'init': Bytes,
+    'creation_method': NotRequired[Literal['create', 'create2']]
+})
+
+
+class TraceCreateActionResult(TypedDict):
+    gasUsed: Qty
+    code: Bytes
+    address: Address20
+
+
+class TraceCallRec(_TraceRecBase):
+    type: Literal['call']
+    action: 'TraceCallAction'
+    result: 'TraceCallActionResult'
+
+
+TraceCallAction = TypedDict('TraceCallAction', {
+    'from': Address20,
+    'to': Address20,
+    'value': Qty,
+    'gas': Qty,
+    'input': Bytes,
+    'callType': Optional[Literal['call', 'callcode', 'delegatecall', 'staticcall']]
+})
+
+
+class TraceCallActionResult(TypedDict):
+    gasUsed: Qty
+    output: Bytes
+
+
+class TraceSuicideRec(_TraceRecBase):
+    type: Literal['suicide']
+    action: 'TraceSuicideAction'
+
+
+class TraceSuicideAction(TypedDict):
+    address: Address20
+    refundAddress: Address20
+    balance: Qty
+
+
+# is not supported for trace_replayBlockTransactions rpc call
+class TraceRewardRec(_TraceRecBase):
+    type: Literal['reward']
+    action: 'TraceRewardAction'
+
+
+class TraceRewardAction(TypedDict):
+    author: Address20
+    value: Qty
+    rewardType: Literal['block', 'uncle', 'emptyStep', 'external']
+
+
+TraceRec = Union[TraceCreateRec, TraceCallRec, TraceSuicideRec, TraceRewardRec]
+
 
 TraceAddDiff = TypedDict('TraceAddDiff', {
     '+': Bytes
@@ -155,5 +230,7 @@ class TraceStateDiff(TypedDict):
 
 
 class TraceTransactionReplay(TypedDict):
-    transactionHash: Hash32
-    stateDiff: dict[Address20, TraceStateDiff]
+    transactionHash: NotRequired[Hash32]
+    trace: NotRequired[list[TraceRec]]
+    stateDiff: NotRequired[dict[Address20, TraceStateDiff]]
+    index_: NotRequired[int]

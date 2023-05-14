@@ -102,19 +102,18 @@ Content-Type: application/json
 }
 
 ###
-POST {{eth_blast}}
+POST {{arb_blast}}
 Content-Type: application/json
 
 {
   "id": "1",
   "jsonrpc": "2.0",
-  "method": "debug_traceBlockByHash",
+  "method": "debug_traceBlockByNumber",
   "params": [
-    "0x076ff40528862b59f3db258747491bc65b6f38feda1502bb7ebb36d39dcfa353",
+    "0x55d4a80",
     {
       "tracer": "prestateTracer",
       "tracerConfig": {
-        "onlyTopCall": false,
         "diffMode": true
       }
     }
@@ -130,7 +129,56 @@ Content-Type: application/json
   "jsonrpc": "2.0",
   "method": "trace_replayBlockTransactions",
   "params": [
-    "0xf44af8",
+    "0xb71b00",
     ["trace"]
+  ]
+}
+
+###
+POST {{arb_blast}}
+Content-Type: application/json
+
+{
+  "id": "1",
+  "jsonrpc": "2.0",
+  "method": "debug_traceBlockByNumber",
+  "params": [
+    "0x152dd4a",
+    {
+      "tracer": "callTracer",
+      "tracerConfig": {
+        "onlyTopCall": false,
+        "withLog": true
+      }
+    }
+  ]
+}
+
+###
+POST {{arb_blast}}
+Content-Type: application/json
+
+{
+  "id": "1",
+  "jsonrpc": "2.0",
+  "method": "arbtrace_replayBlockTransactions",
+  "params": [
+    "0x420",
+    ["trace"]
+  ]
+}
+
+
+###
+POST {{arb_blast}}
+Content-Type: application/json
+
+{
+  "id": "1",
+  "jsonrpc": "2.0",
+  "method": "eth_getBlockByNumber",
+  "params": [
+    "0x420",
+    false
   ]
 }

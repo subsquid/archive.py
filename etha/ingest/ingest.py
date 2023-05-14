@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from typing import Optional, AsyncIterator
+from functools import cached_property
+from typing import Optional, AsyncIterator, Literal
 
 from etha.ingest.model import Block, Log, Receipt, DebugFrameResult, DebugStateDiffResult, TraceTransactionReplay
 from etha.ingest.rpc import RpcClient
@@ -21,14 +22,18 @@ class Ingest:
         with_receipts: bool = False,
         with_traces: bool = False,
         with_statediffs: bool = False,
-        use_debug_api_for_statediffs: bool = False
+        use_trace_api: bool = False,
+        use_debug_api_for_statediffs: bool = False,
+        arbitrum: bool = False
     ):
         self._rpc = rpc
         self._finality_offset = finality_offset
         self._with_receipts = with_receipts
         self._with_traces = with_traces
         self._with_statediffs = with_statediffs
+        self._use_trace_api = use_trace_api
         self._use_debug_api_for_statediffs = use_debug_api_for_statediffs
+        self._arbitrum = arbitrum
         self._last_hash = last_hash
         self._height = from_block - 1
         self._end = to_block
@@ -119,15 +124,40 @@ class Ingest:
         else:
             yield self._fetch_logs(blocks)
 
-        for block in blocks:
-            if self._with_traces:
-                yield self._fetch_call_trace(block)
-
-            if self._with_statediffs:
-                if self._use_debug_api_for_statediffs:
-                    yield self._fetch_debug_state_diff(block)
+        if self._trace_tracers:
+            for block in blocks:
+                if self._arbitrum:
+                    bn = qty2int(block['number'])
+                    if 1 < bn < 22207815:
+                        yield self._fetch_trace_replay(
+                            block,
+                            self._trace_tracers,
+                            method='arbtrace_replayBlockTransactions'
+                        )
+                    elif bn >= 22207818:
+                        yield self._fetch_debug_call_trace(block)
+                elif self._use_trace_api:
+                    yield self._fetch_trace_replay(block, self._trace_tracers)
                 else:
-                    yield self._fetch_trace_state_diff(block)
+                    if self._with_traces:
+                        yield self._fetch_debug_call_trace(block)
+                    if self._with_statediffs:
+                        if self._use_debug_api_for_statediffs:
+                            yield self._fetch_debug_state_diff(block)
+                        else:
+                            yield self._fetch_trace_replay(block, ['stateDiff'])
+
+    @cached_property
+    def _trace_tracers(self) -> list[Literal['trace', 'stateDiff']]:
+        tracers: list[Literal['trace', 'stateDiff']] = []
+
+        if self._with_traces:
+            tracers.append('trace')
+
+        if self._with_statediffs and not self._arbitrum:
+            tracers.append('stateDiff')
+
+        return tracers
 
     async def _fetch_logs(self, blocks: list[Block]) -> None:
         priority = qty2int(blocks[0]['number'])
@@ -171,8 +201,10 @@ class Ingest:
                 logs.extend(r['logs'])
                 tx['receipt_'] = r
 
-    async def _fetch_call_trace(self, block: Block) -> None:
-        priority = qty2int(block['number'])
+    async def _fetch_debug_call_trace(self, block: Block) -> None:
+        block_number = qty2int(block['number'])
+        if block_number == 0:
+            return
 
         traces: list[DebugFrameResult] = await self._rpc.call('debug_traceBlockByHash', [
             block['hash'],
@@ -183,7 +215,7 @@ class Ingest:
                     'withLog': True
                 }
             }
-        ], priority=priority)
+        ], priority=block_number)
 
         transactions = block['transactions']
         assert len(transactions) == len(traces)
@@ -192,7 +224,9 @@ class Ingest:
             tx['debugFrame_'] = trace
 
     async def _fetch_debug_state_diff(self, block: Block) -> None:
-        priority = qty2int(block['number'])
+        block_number = qty2int(block['number'])
+        if block_number == 0:
+            return
 
         diffs: list[DebugStateDiffResult] = await self._rpc.call('debug_traceBlockByHash', [
             block['hash'],
@@ -203,7 +237,7 @@ class Ingest:
                     'diffMode': True
                 }
             }
-        ], priority=priority)
+        ], priority=block_number)
 
         transactions = block['transactions']
         assert len(transactions) == len(diffs)
@@ -211,27 +245,47 @@ class Ingest:
             assert 'result' in diff
             tx['debugStateDiff_'] = diff
 
-    async def _fetch_trace_state_diff(self, block: Block) -> None:
-        priority = qty2int(block['number'])
-        if priority == 0:
-            # skip replay for genesis block
+    async def _fetch_trace_replay(self,
+                                  block: Block,
+                                  tracers: list[Literal['trace', 'stateDiff']],
+                                  method: str = 'trace_replayBlockTransactions'
+                                  ) -> None:
+        block_number = qty2int(block['number'])
+        if block_number == 0:
             return
 
         replays: list[TraceTransactionReplay] = await self._rpc.call(
-            'trace_replayBlockTransactions',
-            [block['number'], ['stateDiff']],
-            priority=priority
+            method,
+            [block['number'], tracers],
+            priority=block_number
         )
 
-        # On some chains (binance?) not all transactions have replays
-        by_tx = {rep['transactionHash']: rep for rep in replays}
+        unassigned_replays = []
+
+        for i, rep in enumerate(replays):
+            rep['index_'] = i
+            if 'transactionHash' in rep:
+                pass
+            else:
+                tx_hash = None
+                for trace in (rep['trace'] or []):
+                    assert tx_hash is None or tx_hash == trace['transactionHash']
+                    tx_hash = trace['transactionHash']
+                rep['transactionHash'] = tx_hash
+                if not tx_hash:
+                    unassigned_replays.append(rep)
+
+        by_tx = {rep['transactionHash']: rep for rep in replays if rep['transactionHash']}
         used = 0
         for tx in block['transactions']:
             if rep := by_tx.get(tx['hash']):
                 tx['traceReplay_'] = rep
                 used += 1
+        assert used == len(by_tx)
 
-        assert used == len(replays)
+        if unassigned_replays:
+            block['unknownTraceReplays_'] = unassigned_replays
+
 
     def _validate_blocks(self, blocks: list[Block]):
         for block in blocks:
@@ -242,3 +296,14 @@ class Ingest:
                 raise Exception(f'broken chain: block {block_hash} is not a direct child of {self._last_hash}')
 
             self._last_hash = block_hash
+
+
+def _get_trace_replay_tx_hash(rep: TraceTransactionReplay) -> str | None:
+    try:
+        return rep['transactionHash']
+    except KeyError:
+        tx_hash = None
+        for trace in (rep['trace'] or []):
+            assert tx_hash is None or tx_hash == trace['transactionHash']
+            tx_hash = trace['transactionHash']
+        return tx_hash

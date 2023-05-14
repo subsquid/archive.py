@@ -154,9 +154,21 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
+        '--use-trace-api',
+        action='store_true',
+        help='use trace_* API for statediffs and call traces'
+    )
+
+    program.add_argument(
         '--use-debug-api-for-statediffs',
         action='store_true',
         help='use debug prestateTracer to fetch statediffs (by default will use trace_* api)'
+    )
+
+    program.add_argument(
+        '--arbitrum',
+        action='store_true',
+        help='set this flag when indexing Arbitrum One'
     )
 
     program.add_argument(
@@ -232,7 +244,9 @@ async def run(args):
         with_receipts=args.with_receipts,
         with_traces=args.with_traces,
         with_statediffs=args.with_statediffs,
-        use_debug_api_for_statediffs=args.use_debug_api_for_statediffs
+        use_trace_api=args.use_trace_api,
+        use_debug_api_for_statediffs=args.use_debug_api_for_statediffs,
+        arbitrum=args.arbitrum
     )
 
     await write_service.write(ingest.loop())

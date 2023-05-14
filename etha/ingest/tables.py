@@ -5,7 +5,7 @@ import pyarrow
 from etha.ingest.column import Column
 from etha.ingest.model import Transaction, Log, Block, Qty, DebugFrame, DebugStateDiff, Address20, \
     Bytes, DebugStateMap, \
-    TraceStateDiff, TraceDiff, TraceTransactionReplay
+    TraceStateDiff, TraceDiff, TraceTransactionReplay, TraceRec
 from etha.ingest.util import qty2int
 
 
@@ -207,7 +207,88 @@ class TraceTableBuilder(TableBuilderBase):
         self.reward_value = Column(qty())
         self.reward_type = Column(pyarrow.string())
 
-    def append(self, block_number: Qty, transaction_index: Qty, top: DebugFrame):
+    def trace_append(self, block_number: Qty, transaction_index: Qty, records: list[TraceRec]):
+        bn = qty2int(block_number)
+        tix = qty2int(transaction_index)
+        for rec in records:
+            self.block_number.append(bn)
+            self.trace_address.append(rec['traceAddress'])
+            self.subtraces.append(rec['subtraces'])
+            self.transaction_index.append(tix)
+            self.type.append(rec['type'])
+            self.error.append(rec.get('error'))
+            self.revert_reason.append(None)
+
+            if rec['type'] == 'create':
+                action = rec['action']
+                self.create_from.append(action['from'])
+                self.create_value.append(action['value'])
+                self.create_gas.append(action['gas'])
+                self.create_init.append(action['init'])
+                if result := rec.get('result'):
+                    self.create_result_gas_used.append(result['gasUsed'])
+                    self.create_result_code.append(result['code'])
+                    self.create_result_address.append(result['address'])
+                else:
+                    self.create_result_gas_used.append(None)
+                    self.create_result_code.append(None)
+                    self.create_result_address.append(None)
+            else:
+                self.create_from.append(None)
+                self.create_value.append(None)
+                self.create_gas.append(None)
+                self.create_init.append(None)
+                self.create_result_gas_used.append(None)
+                self.create_result_code.append(None)
+                self.create_result_address.append(None)
+
+            if rec['type'] == 'call':
+                action = rec['action']
+                self.call_from.append(action['from'])
+                self.call_to.append(action['to'])
+                self.call_value.append(action['value'])
+                self.call_gas.append(action['gas'])
+                self.call_sighash.append(_to_sighash(action['input']))
+                self.call_input.append(action['input'])
+                self.call_type.append(action['callType'])
+                if result := rec.get('result'):
+                    self.call_result_gas_used.append(result['gasUsed'])
+                    self.call_result_output.append(result['output'])
+                else:
+                    self.call_result_gas_used.append(None)
+                    self.call_result_output.append(None)
+            else:
+                self.call_from.append(None)
+                self.call_to.append(None)
+                self.call_value.append(None)
+                self.call_gas.append(None)
+                self.call_sighash.append(None)
+                self.call_input.append(None)
+                self.call_type.append(None)
+                self.call_result_gas_used.append(None)
+                self.call_result_output.append(None)
+
+            if rec['type'] == 'suicide':
+                action = rec['action']
+                self.suicide_address.append(action['address'])
+                self.suicide_refund_address.append(action['refundAddress'])
+                self.suicide_balance.append(action['balance'])
+            else:
+                self.suicide_address.append(None)
+                self.suicide_refund_address.append(None)
+                self.suicide_balance.append(None)
+
+            if rec['type'] == 'reward':
+                action = rec['action']
+                self.reward_author.append(action['author'])
+                self.reward_value.append(action['value'])
+                self.reward_type.append(action['rewardType'])
+            else:
+                self.reward_author.append(None)
+                self.reward_value.append(None)
+                self.reward_type.append(None)
+
+    def debug_append(self, block_number: Qty, transaction_index: Qty, top: DebugFrame):
         bn = qty2int(block_number)
         tix = qty2int(transaction_index)
         for addr, subtraces, frame in _traverse_frame(top, []):
@@ -300,7 +381,7 @@ class StateDiffTableBuilder(TableBuilderBase):
         self.prev = Column(pyarrow.string())
         self.next = Column(pyarrow.string())
 
-    def append_debug(
+    def debug_append(
         self,
         block_number: Qty,
         transaction_index: Qty,
@@ -313,15 +394,15 @@ class StateDiffTableBuilder(TableBuilderBase):
 
         for address, pre_map in pre.items():
             post_map = post.get(address, {})
-            self._append_debug_address(bn, tix, address, pre_map, post_map)
+            self._debug_append_address(bn, tix, address, pre_map, post_map)
 
         for address, post_map in post.items():
             if address in pre:
                 pass
             else:
-                self._append_debug_address(bn, tix, address, {}, post_map)
+                self._debug_append_address(bn, tix, address, {}, post_map)
 
-    def _append_debug_address(
+    def _debug_append_address(
         self,
         block_number: int,
         transaction_index: int,
@@ -330,22 +411,22 @@ class StateDiffTableBuilder(TableBuilderBase):
         post: DebugStateMap
     ):
         for key, prev, nxt in _known_keys_diff(pre, post):
-            self._append_debug_row(block_number, transaction_index, address, key, prev, nxt)
+            self._debug_append_row(block_number, transaction_index, address, key, prev, nxt)
 
         pre_storage = pre.get('storage', {})
         post_storage = post.get('storage', {})
 
         for key, prev in pre_storage.items():
             nxt = post_storage.get(key)
-            self._append_debug_row(block_number, transaction_index, address, key, prev, nxt)
+            self._debug_append_row(block_number, transaction_index, address, key, prev, nxt)
 
         for key, nxt in post_storage.items():
             if key in pre_storage:
                 pass
             else:
-                self._append_debug_row(block_number, transaction_index, address, key, None, nxt)
+                self._debug_append_row(block_number, transaction_index, address, key, None, nxt)
 
-    def _append_debug_row(
+    def _debug_append_row(
         self,
         block_number: int,
         transaction_index: int,
@@ -372,36 +453,36 @@ class StateDiffTableBuilder(TableBuilderBase):
         self.prev.append(pre)
         self.next.append(post)
 
-    def append_trace(
+    def trace_append(
         self,
         block_number: Qty,
         transaction_index: Qty,
-        replay: TraceTransactionReplay
+        diff: dict[Address20, TraceStateDiff]
     ):
         bn = qty2int(block_number)
         tix = qty2int(transaction_index)
-        for address, diff in replay['stateDiff'].items():
-            self._append_trace_diff(
+        for address, diff in diff.items():
+            self._trace_append_diff(
                 bn,
                 tix,
                 address,
                 diff
             )
 
-    def _append_trace_diff(
+    def _trace_append_diff(
         self,
         block_number: int,
         transaction_index: int,
         address: Address20,
         diff: TraceStateDiff
     ):
-        self._append_trace_row(block_number, transaction_index, address, 'balance', diff['balance'])
-        self._append_trace_row(block_number, transaction_index, address, 'code', diff['code'])
-        self._append_trace_row(block_number, transaction_index, address, 'nonce', diff['nonce'])
+        self._trace_append_row(block_number, transaction_index, address, 'balance', diff['balance'])
+        self._trace_append_row(block_number, transaction_index, address, 'code', diff['code'])
+        self._trace_append_row(block_number, transaction_index, address, 'nonce', diff['nonce'])
         for slot, d in diff['storage'].items():
-            self._append_trace_row(block_number, transaction_index, address, slot, d)
+            self._trace_append_row(block_number, transaction_index, address, slot, d)
 
-    def _append_trace_row(
+    def _trace_append_row(
             self,
             block_number: int,
             transaction_index: int,

@@ -48,12 +48,14 @@ class ArrowBatchBuilder:
             self.tx_table.append(tx)
 
             if frame := tx.get('debugFrame_'):
-                self.trace_table.append(tx['blockNumber'], tx['transactionIndex'], frame['result'])
+                self.trace_table.debug_append(tx['blockNumber'], tx['transactionIndex'], frame['result'])
+            elif trace := tx.get('traceReplay_', {}).get('trace'):
+                self.trace_table.trace_append(tx['blockNumber'], tx['transactionIndex'], trace)
 
             if diff := tx.get('debugStateDiff_'):
-                self.statediff_table.append_debug(tx['blockNumber'], tx['transactionIndex'], diff['result'])
-            elif replay := tx.get('traceReplay_'):
-                self.statediff_table.append_trace(tx['blockNumber'], tx['transactionIndex'], replay)
+                self.statediff_table.debug_append(tx['blockNumber'], tx['transactionIndex'], diff['result'])
+            elif diff := tx.get('traceReplay_', {}).get('stateDiff'):
+                self.statediff_table.trace_append(tx['blockNumber'], tx['transactionIndex'], diff)
 
         for log in block.get('logs_', []):
             self.log_table.append(log)
