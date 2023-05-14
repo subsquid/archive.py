@@ -1,5 +1,5 @@
-from time import perf_counter_ns
 from dataclasses import dataclass
+from time import time as now
 
 
 @dataclass
@@ -15,11 +15,12 @@ class Progress:
         self._window: list[ProgressUnit] = []
         self._tail = 0
         self._size = window_size + 1
-        self._granularity = int(window_granularity_seconds) * 1_000_000_000
+        self._granularity = window_granularity_seconds
         self._has_news = False
 
-    def set_current_value(self, value: int):
-        time = perf_counter_ns()
+    def set_current_value(self, value: int, time: float | None = None):
+        if time is None:
+            time = now()
 
         if len(self._window) == 0:
             self._window.append(ProgressUnit(value, time))
@@ -57,7 +58,7 @@ class Progress:
         end = self._last()
         duration = end.time - beg.time
         inc = end.value - beg.value
-        return inc * 1_000_000_000 / duration
+        return inc / duration
 
     def _last(self) -> ProgressUnit:
         assert len(self._window) > 0

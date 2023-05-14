@@ -23,6 +23,8 @@ ingest-eth:
 		-e ${ETH_ALCHEMY} \
 		-c 20 \
 		-r 400 \
+		-m debug_traceBlockByHash \
+		-m trace_replayBlockTransactions \
 		-e ${ETH_BLAST} \
 		-c 20 \
 		-r 400 \
@@ -31,6 +33,7 @@ ingest-eth:
 		--with-traces \
 		--with-statediffs \
 		--write-chunk-size 10 \
+		--raw \
 		--first-block 15000000
 
 

@@ -4,7 +4,7 @@ from typing import Optional, AsyncIterator
 
 from etha.ingest.model import Block, Log, Receipt, DebugFrameResult, DebugStateDiffResult, TraceTransactionReplay
 from etha.ingest.rpc import RpcClient
-from etha.ingest.util import trim_hash, qty2int
+from etha.ingest.util import short_hash, qty2int
 
 
 LOG = logging.getLogger(__name__)
@@ -235,8 +235,8 @@ class Ingest:
 
     def _validate_blocks(self, blocks: list[Block]):
         for block in blocks:
-            block_parent_hash = trim_hash(block['parentHash'])
-            block_hash = trim_hash(block['hash'])
+            block_parent_hash = short_hash(block['parentHash'])
+            block_hash = short_hash(block['hash'])
 
             if self._last_hash and self._last_hash != block_parent_hash:
                 raise Exception(f'broken chain: block {block_hash} is not a direct child of {self._last_hash}')

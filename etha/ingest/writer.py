@@ -1,21 +1,20 @@
 import logging
-from functools import cache
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 import pyarrow
 
-from etha.fs import create_fs
+from etha.fs import Fs
 from etha.ingest.model import Block
 from etha.ingest.tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder, TraceTableBuilder, \
     StateDiffTableBuilder
-from etha.ingest.util import trim_hash
+from etha.ingest.util import short_hash
 from etha.layout import ChunkWriter
 
 
 LOG = logging.getLogger(__name__)
 
 
-class DataBatch(NamedTuple):
+class ArrowDataBatch(NamedTuple):
     blocks: pyarrow.Table
     transactions: pyarrow.Table
     logs: pyarrow.Table
@@ -24,7 +23,7 @@ class DataBatch(NamedTuple):
     bytesize: int
 
 
-class BatchBuilder:
+class ArrowBatchBuilder:
     def __init__(self):
         self._init()
 
@@ -59,9 +58,9 @@ class BatchBuilder:
         for log in block.get('logs_', []):
             self.log_table.append(log)
 
-    def build(self) -> DataBatch:
+    def build(self) -> ArrowDataBatch:
         bytesize = self.buffered_bytes()
-        batch = DataBatch(
+        batch = ArrowDataBatch(
             blocks=self.block_table.to_table(),
             transactions=self.tx_table.to_table(),
             logs=self.log_table.to_table(),
@@ -73,12 +72,14 @@ class BatchBuilder:
         return batch
 
 
-class BlockWriter:
-    def __init__(self, chunk_writer: ChunkWriter, with_traces: bool):
+class ParquetWriter:
+    def __init__(self, fs: Fs, chunk_writer: ChunkWriter, with_traces: bool, with_statediffs: bool):
+        self.fs = fs
         self.chunk_writer = chunk_writer
         self.with_traces = with_traces
+        self.with_statediffs = with_statediffs
 
-    def write(self, batch: DataBatch) -> None:
+    def write(self, batch: ArrowDataBatch) -> None:
         blocks = batch.blocks
         transactions = batch.transactions
         logs = batch.logs
@@ -88,7 +89,7 @@ class BlockWriter:
         block_numbers: pyarrow.ChunkedArray = blocks.column('number')
         first_block = block_numbers[0].as_py()
         last_block = block_numbers[-1].as_py()
-        last_hash = trim_hash(blocks.column('hash')[-1].as_py())
+        last_hash = short_hash(blocks.column('hash')[-1].as_py())
 
         extra = {'first_block': first_block, 'last_block': last_block, 'last_hash': last_hash}
         LOG.debug('saving data chunk', extra=extra)
@@ -103,7 +104,9 @@ class BlockWriter:
             ('topic0', 'ascending')
         ])
 
-        with self.chunk_writer.write(first_block, last_block, last_hash) as loc:
+        chunk = self.chunk_writer.next_chunk(first_block, last_block, last_hash)
+
+        with self.fs.transact(chunk.path()) as loc:
             kwargs = {
                 'data_page_size': 32 * 1024,
                 'compression': 'zstd',
@@ -146,6 +149,7 @@ class BlockWriter:
 
                 LOG.debug('wrote %s', loc.abs('traces.parquet'))
 
+            if self.with_statediffs:
                 loc.write_parquet(
                     'statediffs.parquet',
                     statediffs,
@@ -167,35 +171,3 @@ class BlockWriter:
             )
 
             LOG.debug('wrote %s', loc.abs('blocks.parquet'))
-
-
-class WriteOptions(NamedTuple):
-    dest: str
-    s3_endpoint: Optional[str] = None
-    chunk_size: int = 1024
-    first_block: int = 0
-    last_block: Optional[int] = None
-    with_traces: bool = False
-
-
-# WriteOptions class is serializable, while WriteService is not
-class WriteService:
-    def __init__(self, options: WriteOptions):
-        self.options = options
-
-    @cache
-    def chunk_writer(self) -> ChunkWriter:
-        fs = create_fs(self.options.dest, s3_endpoint=self.options.s3_endpoint)
-        return ChunkWriter(
-            fs,
-            first_block=self.options.first_block,
-            last_block=self.options.last_block
-        )
-
-    @cache
-    def block_writer(self) -> BlockWriter:
-        return BlockWriter(
-            self.chunk_writer(),
-            with_traces=self.options.with_traces
-        )
-

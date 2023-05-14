@@ -2,7 +2,7 @@ import os
 import shutil
 import urllib.parse
 from contextlib import AbstractContextManager, contextmanager
-from typing import Optional
+from typing import Optional, IO
 
 import pyarrow.fs
 import pyarrow.parquet
@@ -28,6 +28,9 @@ class Fs:
         raise NotImplementedError()
 
     def download(self, src_loc: str, local_dest: str):
+        raise NotImplementedError()
+
+    def upload(self, local_src: str, dest: str):
         raise NotImplementedError()
 
 
@@ -111,6 +114,9 @@ class S3Fs(Fs):
     def download(self, src_loc: str, local_dest: str):
         src_path = self._abs_path(src_loc)
         self._s3.download(src_path, local_dest, recursive=True)
+
+    def upload(self, local_src: str, dest: str):
+        self._s3.upload(local_src, self._abs_path(dest), recursive=True)
 
     def write_parquet(self, file: str, table, **kwargs):
         path = self._abs_path(file)

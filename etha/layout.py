@@ -2,7 +2,7 @@ import bisect
 import math
 import re
 from contextlib import AbstractContextManager, contextmanager
-from typing import Iterable, NamedTuple, Optional
+from typing import Iterable, NamedTuple, Optional, Callable
 
 from etha.fs import Fs
 
@@ -100,51 +100,65 @@ def get_chunks(fs: Fs, first_block: int = 0, last_block: int = math.inf) -> Iter
             yield DataChunk(beg, end, hash_, top)
 
 
-class LayoutConflictException(Exception):
-    pass
+def get_chunks_in_reversed_order(fs: Fs, first_block: int = 0, last_block: int = math.inf) -> Iterable[DataChunk]:
+    assert first_block <= last_block
+
+    tops = get_tops(fs)
+
+    for top in reversed(tops):
+        if top > last_block:
+            continue
+
+        for beg, end, hash_ in _get_top_ranges(fs, top):
+            if beg > last_block:
+                continue
+            if end < first_block:
+                return
+            yield DataChunk(beg, end, hash_, top)
 
 
 class ChunkWriter:
-    def __init__(self, fs: Fs, first_block: int = 0, last_block: Optional[int] = None):
+    def __init__(
+            self,
+            fs: Fs,
+            chunk_check: Callable[[list[str]], bool],
+            first_block: int = 0,
+            last_block: Optional[int] = None
+    ):
         last_block = math.inf if last_block is None else last_block
         assert last_block >= first_block
 
-        tops = get_tops(fs)
-        i = bisect.bisect_left(tops, last_block)
-
-        if i < len(tops) and tops[i] == last_block:
-            self._top = last_block
-            self._ranges = _get_top_ranges(fs, last_block)
-        elif i - 1 < 0:
-            self._top = first_block
-            self._ranges = []
-        else:
-            top = tops[i - 1]
-            if top >= first_block:
-                self._top = top
-                self._ranges = _get_top_ranges(fs, top)
-            else:
-                self._top = first_block
-                self._ranges = []
-
-        if self._ranges and self._ranges[-1][1] > last_block:
-            overlap = DataChunk(self._ranges[-1][0], self._ranges[-1][1], self._ranges[-1][2], self._top)
-            raise LayoutConflictException(f'chunk {overlap.path()} already exceeds {last_block}. Perhaps part of {first_block}-{last_block} range is controlled by another writer.')
-
-        self._fs = fs
         self.first_block = first_block
         self.last_block = last_block
 
-    def verify_last_chunk(self, last_file: str):
-        if not self._ranges:
-            return
+        chunks = iter(get_chunks(fs, first_block=first_block, last_block=last_block))
+        reversed_chunks = iter(get_chunks_in_reversed_order(fs, first_block=first_block, last_block=last_block))
 
-        beg, end, hash_ = self._ranges[-1]
-        chunk = DataChunk(beg, end, hash_, self._top)
+        first_chunk = next(chunks, None)
+        last_chunk = next(reversed_chunks, None)
 
-        if last_file not in self._fs.ls(chunk.path()):
-            self._fs.delete(chunk.path())
-            self._ranges.pop()
+        if first_chunk and first_chunk.first_block != first_block:
+            raise LayoutConflictException(
+                f'First chunk of the range {first_block}-{last_block} is {first_chunk}. '
+                f'Perhaps part of the range {first_block}-{last_block} is controlled by another writer'
+            )
+
+        if last_chunk and last_chunk.last_block > last_block:
+            raise LayoutConflictException(
+                f'Chunk {last_chunk} is not aligned with the range {first_block}-{last_block}. '
+                f'Perhaps part of the range {first_block}-{last_block} is controlled by another writer'
+            )
+
+        if last_chunk and not chunk_check(fs.ls(last_chunk.path())):
+            fs.delete(last_chunk.path())
+            last_chunk = next(reversed_chunks, None)
+
+        if last_chunk:
+            self._top = last_chunk.top
+            self._ranges = _get_top_ranges(fs, self._top)
+        else:
+            self._top = first_block
+            self._ranges = []
 
     @property
     def next_block(self) -> int:
@@ -160,8 +174,7 @@ class ChunkWriter:
         else:
             return None
 
-    @contextmanager
-    def write(self, first_block: int, last_block: int, last_hash: str) -> AbstractContextManager[Fs]:
+    def next_chunk(self, first_block: int, last_block: int, last_hash: str) -> DataChunk:
         assert self.next_block <= first_block <= last_block <= self.last_block
 
         if len(self._ranges) < 500 or self.last_block == last_block:
@@ -170,8 +183,11 @@ class ChunkWriter:
             top = first_block
             self._ranges = []
 
-        with self._fs.transact(DataChunk(first_block, last_block, last_hash, top).path()) as loc:
-            yield loc
-
         self._top = top
         self._ranges.append((first_block, last_block, last_hash))
+        return DataChunk(first_block, last_block, last_hash, top)
+
+
+
+class LayoutConflictException(Exception):
+    pass

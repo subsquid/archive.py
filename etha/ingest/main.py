@@ -1,16 +1,26 @@
 import argparse
-import asyncio
 import concurrent.futures
+import json
 import logging
+import math
 import os
-from typing import Optional
+import tempfile
+import time
+from functools import cached_property
+from typing import Optional, NamedTuple, AsyncIterator, Callable, Any
 
-from etha.util.asyncio import create_child_task, monitor_pipeline, run_async_program
-from etha.util.counters import Progress
+import pyarrow
+
+from etha.fs import create_fs, Fs, LocalFs
 from etha.ingest.ingest import Ingest
+from etha.ingest.model import Block
 from etha.ingest.rpc import RpcClient, RpcEndpoint
 from etha.ingest.tables import qty2int
-from etha.ingest.writer import BatchBuilder, WriteOptions, WriteService
+from etha.ingest.util import short_hash
+from etha.ingest.writer import ArrowBatchBuilder, ParquetWriter
+from etha.layout import ChunkWriter
+from etha.util.asyncio import run_async_program
+from etha.util.counters import Progress
 
 
 LOG = logging.getLogger(__name__)
@@ -158,6 +168,12 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
+        '--raw',
+        action='store_true',
+        help='use raw .jsonl.gz format'
+    )
+
+    program.add_argument(
         '--get-next-block',
         action='store_true',
         help='check the stored data, print the next block to write and exit'
@@ -179,7 +195,7 @@ def parse_cli_arguments():
     return program.parse_args()
 
 
-async def ingest(args):
+async def run(args):
     endpoints = [RpcEndpoint(**e) for e in args.endpoints]
 
     rpc = RpcClient(
@@ -193,47 +209,123 @@ async def ingest(args):
         chunk_size=args.write_chunk_size,
         first_block=args.first_block,
         last_block=args.last_block,
-        with_traces=args.with_traces
+        with_traces=args.with_traces,
+        with_statediffs=args.with_statediffs,
+        raw=args.raw
     )
 
     write_service = WriteService(write_options)
-    chunk_writer = write_service.chunk_writer()
-    chunk_writer.verify_last_chunk('blocks.parquet')
 
     if args.get_next_block:
-        print(chunk_writer.next_block)
+        print(write_service.next_block())
         return
 
-    if chunk_writer.next_block > chunk_writer.last_block:
+    if write_service.next_block() > write_service.last_block():
         return
 
     ingest = Ingest(
         rpc=rpc,
         finality_offset=args.best_block_offset,
-        from_block=chunk_writer.next_block,
+        from_block=write_service.next_block(),
         to_block=args.last_block,
-        last_hash=chunk_writer.last_hash,
+        last_hash=write_service.last_hash(),
         with_receipts=args.with_receipts,
         with_traces=args.with_traces,
         with_statediffs=args.with_statediffs,
         use_debug_api_for_statediffs=args.use_debug_api_for_statediffs
     )
 
-    await IngestionProcess(ingest, write_service).run()
+    await write_service.write(ingest.loop())
 
 
-class IngestionProcess:
-    def __init__(self, ingest: Ingest, write_service: WriteService):
-        self._running = False
-        self._ingest = ingest
-        self._write_service = write_service
-        self._progress = Progress(window_size=10, window_granularity_seconds=1)
-        self._progress.set_current_value(write_service.chunk_writer().next_block)
+class Batch(NamedTuple):
+    blocks: list[Block]
+    extra: dict
 
-    async def _ingest_loop(self):
-        bb = BatchBuilder()
-        writer = self._write_service.block_writer()
-        chunk_size = self._write_service.options.chunk_size
+
+WriteTask = tuple[Callable, Any, ...]
+
+
+class WriteOptions(NamedTuple):
+    dest: str
+    s3_endpoint: Optional[str] = None
+    chunk_size: int = 1024
+    first_block: int = 0
+    last_block: Optional[int] = None
+    with_traces: bool = False
+    with_statediffs: bool = False
+    raw: bool = False
+
+
+class WriteService:
+    def __init__(self, options: WriteOptions):
+        self.options = options
+
+    @cached_property
+    def fs(self) -> Fs:
+        return create_fs(self.options.dest, s3_endpoint=self.options.s3_endpoint)
+
+    @cached_property
+    def chunk_writer(self) -> ChunkWriter:
+        return ChunkWriter(
+            self.fs,
+            self.chunk_check,
+            first_block=self.options.first_block,
+            last_block=self.options.last_block
+        )
+
+    def chunk_check(self, filelist: list[str]) -> bool:
+        if self.options.raw:
+            return 'blocks.jsonl.gz' in filelist
+        else:
+            return 'blocks.parquet' in filelist
+
+    def next_block(self) -> int:
+        return self.chunk_writer.next_block
+
+    def last_block(self) -> int:
+        return self.chunk_writer.last_block
+
+    def last_hash(self) -> str | None:
+        return self.chunk_writer.last_hash
+
+    @cached_property
+    def progress(self) -> Progress:
+        progress = Progress(window_size=10, window_granularity_seconds=1)
+        progress.set_current_value(self.next_block())
+        return progress
+
+    def report(self) -> None:
+        LOG.info(
+            f'last block: {self.progress.get_current_value()}, '
+            f'progress: {round(self.progress.speed())} blocks/sec'
+        )
+
+    async def batches(
+            self,
+            strides: AsyncIterator[list[Block]]
+    ) -> AsyncIterator[Batch]:
+        last_report = 0
+        async for blocks in strides:
+            first_block = qty2int(blocks[0]['number'])
+            last_block = qty2int(blocks[-1]['number'])
+            extra = {'first_block': first_block, 'last_block': last_block}
+            LOG.debug('got stride', extra=extra)
+            yield Batch(blocks=blocks, extra=extra)
+            current_time = time.time()
+            self.progress.set_current_value(last_block, current_time)
+            if current_time - last_report > 5:
+                self.report()
+                last_report = current_time
+        if self.progress.has_news():
+            self.report()
+
+    async def write(self, strides: AsyncIterator[list[Block]]):
+        batches = self.batches(strides)
+        if self.options.raw:
+            tasks = self.raw_writer(batches)
+        else:
+            tasks = self.parquet_writer(batches)
 
         with concurrent.futures.ThreadPoolExecutor(
                 max_workers=1,
@@ -241,52 +333,83 @@ class IngestionProcess:
         ) as executor:
             prev_write: Optional[concurrent.futures.Future] = None
 
-            async for blocks in self._ingest.loop():
-                first_block = qty2int(blocks[0]['number'])
-                last_block = qty2int(blocks[-1]['number'])
-                extra = {'first_block': first_block, 'last_block': last_block}
-
-                LOG.debug('got stride', extra=extra)
-
-                for b in blocks:
-                    bb.append(b)
-
-                if bb.buffered_bytes() > chunk_size * 1024 * 1024:
-                    batch = bb.build()
-
-                    LOG.debug('time to write a chunk', extra=extra)
-                    if prev_write:
-                        prev_write.result()
-
-                    prev_write = executor.submit(writer.write, batch)
-                    LOG.debug('scheduled for writing', extra=extra)
-
-                self._progress.set_current_value(last_block)
+            async for t in tasks:
+                if prev_write:
+                    prev_write.result()
+                prev_write = executor.submit(*t)
 
             if prev_write:
                 prev_write.result()
 
-            if bb.buffered_bytes() > 0:
-                batch = bb.build()
-                LOG.debug('write accumulated data from the last strides')
-                writer.write(batch)
-
-    async def _report_loop(self):
+    async def raw_writer(self, batches: AsyncIterator[Batch]) -> AsyncIterator[WriteTask]:
+        chunk_size = self.options.chunk_size
         while True:
-            if self._progress.has_news():
-                LOG.info(', '.join([
-                    f'last block: {self._progress.get_current_value()}',
-                    f'progress: {round(self._progress.speed())} blocks/sec'
-                ]))
-            await asyncio.sleep(5)
+            written = 0
+            first_block = math.inf
+            tmp = tempfile.NamedTemporaryFile(delete=False)
+            try:
+                with tmp, pyarrow.CompressedOutputStream(tmp, 'gzip') as out:
+                    async for bb in batches:
+                        first_block = min(first_block, qty2int(bb.blocks[0]['number']))
+                        last_block = qty2int(bb.blocks[-1]['number'])
+                        last_hash = bb.blocks[-1]['hash']
 
-    async def run(self):
-        assert not self._running
-        self._running = True
-        ingest_task = create_child_task('ingest', self._ingest_loop())
-        report_task = create_child_task('report', self._report_loop())
-        await monitor_pipeline([ingest_task], service_task=report_task)
+                        for block in bb.blocks:
+                            line = json.dumps(block).encode('utf-8')
+                            out.write(line)
+                            out.write(b'\n')
+                            written += len(line) + 1
+
+                        if written > chunk_size:
+                            LOG.debug('time to write a chunk', extra=bb.extra)
+                            break
+
+                if written > 0:
+                    chunk = self.chunk_writer.next_chunk(first_block, last_block, short_hash(last_hash))
+                    dest = f'{chunk.path()}/blocks.jsonl.gz'
+                    if isinstance(self.fs, LocalFs):
+                        loc = self.fs.abs(dest)
+                        os.makedirs(os.path.dirname(loc), exist_ok=True)
+                        os.rename(tmp.name, loc)
+                    else:
+                        yield self.upload_temp_file, tmp.name, dest
+                else:
+                    return
+            except:
+                os.remove(tmp.name)
+                raise
+
+    def upload_temp_file(self, tmp: str, dest: str):
+        try:
+            self.fs.upload(tmp, dest)
+        finally:
+            os.remove(tmp)
+
+    async def parquet_writer(self, batches: AsyncIterator[Batch]) -> AsyncIterator[WriteTask]:
+        bb = ArrowBatchBuilder()
+        chunk_size = self.options.chunk_size
+
+        writer = ParquetWriter(
+            self.fs,
+            self.chunk_writer,
+            with_traces=self.options.with_traces,
+            with_statediffs=self.options.with_statediffs
+        )
+
+        async for blocks, extra in batches:
+            for b in blocks:
+                bb.append(b)
+
+            if bb.buffered_bytes() > chunk_size * 1024 * 1024:
+                LOG.debug('time to write a chunk', extra=extra)
+                batch = bb.build()
+                yield writer.write, batch
+
+        if bb.buffered_bytes() > 0:
+            batch = bb.build()
+            LOG.debug('flush buffered data from last strides')
+            writer.write(batch)
 
 
 def cli():
-    run_async_program(ingest, parse_cli_arguments())
+    run_async_program(run, parse_cli_arguments())

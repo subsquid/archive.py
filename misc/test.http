@@ -102,37 +102,35 @@ Content-Type: application/json
 }
 
 ###
-#POST {ETH_BLAST}
-#POST {ETH_ALCHEMY}
-#Content-Type: application/json
-#
-#{
-#  "id": "1",
-#  "jsonrpc": "2.0",
-#  "method": "debug_traceBlockByHash",
-#  "params": [
-#    "0x076ff40528862b59f3db258747491bc65b6f38feda1502bb7ebb36d39dcfa353",
-#    {
-#      "tracer": "prestateTracer",
-#      "tracerConfig": {
-#        "onlyTopCall": false,
-#        "diffMode": true
-#      }
-#    }
-#  ]
-#}
+POST {{eth_blast}}
+Content-Type: application/json
 
-##
-#POST https://eth-mainnet.blastapi.io/KEY
-##POST {ETH_ALCHEMY}
-#Content-Type: application/json
-#
-#{
-#  "id": "1",
-#  "jsonrpc": "2.0",
-#  "method": "trace_replayBlockTransactions",
-#  "params": [
-#    "0xf44af8",
-#    ["stateDiff"]
-#  ]
-#}
+{
+  "id": "1",
+  "jsonrpc": "2.0",
+  "method": "debug_traceBlockByHash",
+  "params": [
+    "0x076ff40528862b59f3db258747491bc65b6f38feda1502bb7ebb36d39dcfa353",
+    {
+      "tracer": "prestateTracer",
+      "tracerConfig": {
+        "onlyTopCall": false,
+        "diffMode": true
+      }
+    }
+  ]
+}
+
+###
+POST {{eth_blast}}
+Content-Type: application/json
+
+{
+  "id": "1",
+  "jsonrpc": "2.0",
+  "method": "trace_replayBlockTransactions",
+  "params": [
+    "0xf44af8",
+    ["trace"]
+  ]
+}
