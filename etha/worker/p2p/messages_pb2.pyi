@@ -6,26 +6,22 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Map
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Envelope(_message.Message):
-    __slots__ = ["dataset_state", "get_worker", "get_worker_error", "get_worker_result", "ping", "query", "query_error", "query_result", "state_update"]
+    __slots__ = ["dataset_state", "get_worker", "get_worker_result", "ping", "query", "query_result", "state_update"]
     DATASET_STATE_FIELD_NUMBER: _ClassVar[int]
-    GET_WORKER_ERROR_FIELD_NUMBER: _ClassVar[int]
     GET_WORKER_FIELD_NUMBER: _ClassVar[int]
     GET_WORKER_RESULT_FIELD_NUMBER: _ClassVar[int]
     PING_FIELD_NUMBER: _ClassVar[int]
-    QUERY_ERROR_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
     QUERY_RESULT_FIELD_NUMBER: _ClassVar[int]
     STATE_UPDATE_FIELD_NUMBER: _ClassVar[int]
     dataset_state: RangeSet
     get_worker: GetWorker
-    get_worker_error: QueryError
     get_worker_result: GetWorkerResult
     ping: Ping
     query: Query
-    query_error: QueryError
     query_result: QueryResult
     state_update: WorkerState
-    def __init__(self, ping: _Optional[_Union[Ping, _Mapping]] = ..., state_update: _Optional[_Union[WorkerState, _Mapping]] = ..., get_worker: _Optional[_Union[GetWorker, _Mapping]] = ..., get_worker_result: _Optional[_Union[GetWorkerResult, _Mapping]] = ..., get_worker_error: _Optional[_Union[QueryError, _Mapping]] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_result: _Optional[_Union[QueryResult, _Mapping]] = ..., query_error: _Optional[_Union[QueryError, _Mapping]] = ..., dataset_state: _Optional[_Union[RangeSet, _Mapping]] = ...) -> None: ...
+    def __init__(self, ping: _Optional[_Union[Ping, _Mapping]] = ..., state_update: _Optional[_Union[WorkerState, _Mapping]] = ..., get_worker: _Optional[_Union[GetWorker, _Mapping]] = ..., get_worker_result: _Optional[_Union[GetWorkerResult, _Mapping]] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_result: _Optional[_Union[QueryResult, _Mapping]] = ..., dataset_state: _Optional[_Union[RangeSet, _Mapping]] = ...) -> None: ...
 
 class GetWorker(_message.Message):
     __slots__ = ["dataset", "query_id", "start_block"]
@@ -38,14 +34,14 @@ class GetWorker(_message.Message):
     def __init__(self, query_id: _Optional[str] = ..., dataset: _Optional[str] = ..., start_block: _Optional[int] = ...) -> None: ...
 
 class GetWorkerResult(_message.Message):
-    __slots__ = ["encoded_dataset", "query_id", "worker_id"]
-    ENCODED_DATASET_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ["error", "query_id", "worker_id"]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
     QUERY_ID_FIELD_NUMBER: _ClassVar[int]
     WORKER_ID_FIELD_NUMBER: _ClassVar[int]
-    encoded_dataset: str
+    error: str
     query_id: str
     worker_id: str
-    def __init__(self, query_id: _Optional[str] = ..., worker_id: _Optional[str] = ..., encoded_dataset: _Optional[str] = ...) -> None: ...
+    def __init__(self, query_id: _Optional[str] = ..., worker_id: _Optional[str] = ..., error: _Optional[str] = ...) -> None: ...
 
 class Ping(_message.Message):
     __slots__ = ["pause", "state", "worker_id", "worker_url"]
@@ -69,25 +65,17 @@ class Query(_message.Message):
     query_id: str
     def __init__(self, query_id: _Optional[str] = ..., dataset: _Optional[str] = ..., query: _Optional[str] = ...) -> None: ...
 
-class QueryError(_message.Message):
-    __slots__ = ["error", "query_id"]
-    ERROR_FIELD_NUMBER: _ClassVar[int]
-    QUERY_ID_FIELD_NUMBER: _ClassVar[int]
-    error: str
-    query_id: str
-    def __init__(self, query_id: _Optional[str] = ..., error: _Optional[str] = ...) -> None: ...
-
 class QueryResult(_message.Message):
-    __slots__ = ["data", "last_processed_block", "query_id", "size"]
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    LAST_PROCESSED_BLOCK_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ["bad_request", "ok_data", "query_id", "server_error"]
+    BAD_REQUEST_FIELD_NUMBER: _ClassVar[int]
+    OK_DATA_FIELD_NUMBER: _ClassVar[int]
     QUERY_ID_FIELD_NUMBER: _ClassVar[int]
-    SIZE_FIELD_NUMBER: _ClassVar[int]
-    data: bytes
-    last_processed_block: int
+    SERVER_ERROR_FIELD_NUMBER: _ClassVar[int]
+    bad_request: str
+    ok_data: bytes
     query_id: str
-    size: int
-    def __init__(self, query_id: _Optional[str] = ..., last_processed_block: _Optional[int] = ..., size: _Optional[int] = ..., data: _Optional[bytes] = ...) -> None: ...
+    server_error: str
+    def __init__(self, query_id: _Optional[str] = ..., ok_data: _Optional[bytes] = ..., bad_request: _Optional[str] = ..., server_error: _Optional[str] = ...) -> None: ...
 
 class Range(_message.Message):
     __slots__ = ["begin", "end"]

@@ -3,9 +3,11 @@ import asyncio
 import logging
 import multiprocessing
 import os
+from json import JSONDecodeError
 from typing import AsyncIterator, Optional, Dict
 
 import grpc.aio
+from marshmallow import ValidationError
 
 from etha.query.model import query_schema
 from etha.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
@@ -18,7 +20,7 @@ from etha.worker.state.dataset import dataset_encode
 from etha.worker.state.intervals import to_range_set
 from etha.worker.state.manager import StateManager
 from etha.worker.transport import Transport
-from etha.worker.worker import Worker
+from etha.worker.worker import Worker, QueryError
 
 LOG = logging.getLogger(__name__)
 
@@ -120,7 +122,7 @@ class P2PTransport(Transport):
         envelope = msg_pb.Envelope(
             query_result=msg_pb.QueryResult(
                 query_id=query_id,
-                data=result
+                ok_data=result.encode()
             )
         )
         await self._send(envelope, peer_id=peer_id)
@@ -132,11 +134,19 @@ class P2PTransport(Transport):
             LOG.error(f"Unknown query: {query_id}")
             return
 
-        envelope = msg_pb.Envelope(
-            query_error=msg_pb.QueryError(
+        if isinstance(error, (JSONDecodeError, ValidationError, QueryError)):
+            result = msg_pb.QueryResult(
                 query_id=query_id,
-                error=str(error)
+                bad_request=str(error)
             )
+        else:
+            result = msg_pb.QueryResult(
+                query_id=query_id,
+                server_error=str(error)
+            )
+
+        envelope = msg_pb.Envelope(
+            query_result=result
         )
         await self._send(envelope, peer_id=peer_id)
 
