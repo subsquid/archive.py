@@ -1,11 +1,12 @@
 import asyncio
 import logging
 from functools import cached_property
-from typing import Optional, AsyncIterator, Literal
+from typing import Optional, AsyncIterator, Literal, Iterable, Coroutine
 
-from etha.ingest.model import Block, Log, Receipt, DebugFrameResult, DebugStateDiffResult, TraceTransactionReplay
+from etha.ingest.model import Block, Log, Receipt, DebugFrameResult, DebugStateDiffResult, TraceTransactionReplay, \
+    Transaction
 from etha.ingest.rpc import RpcClient
-from etha.ingest.util import short_hash, qty2int
+from etha.ingest.util import short_hash, qty2int, get_tx_status_from_traces
 
 
 LOG = logging.getLogger(__name__)
@@ -107,13 +108,13 @@ class Ingest:
             priority=from_block
         )
 
-        subtasks = [
-            asyncio.create_task(coro)
-            for coro in self._stride_subtasks(blocks)
-        ]
+        await _run_subtasks(self._stride_subtasks(blocks))
 
-        for sub in subtasks:
-            await sub
+        if self._with_traces and not self._with_receipts:
+            await _run_subtasks(
+                self._fetch_single_tx_receipt(tx)
+                for tx in _txs_with_missing_status(blocks)
+            )
 
         LOG.debug('stride is ready', extra=extra)
         return blocks
@@ -192,14 +193,25 @@ class Ingest:
             priority=priority
         )
 
-        receipts_map = {r['transactionHash']: r for r in receipts}
+        receipts_map = {
+            r['transactionHash']: r for r in receipts
+        }
 
         for block in blocks:
-            logs = block['logs_'] = []
             for tx in block['transactions']:
-                r = receipts_map[tx['hash']]
-                logs.extend(r['logs'])
-                tx['receipt_'] = r
+                tx['receipt_'] = receipts_map[tx['hash']]
+
+    async def _fetch_single_tx_receipt(self, tx: Transaction) -> None:
+        block_number = qty2int(tx['blockNumber'])
+
+        receipt: Receipt = await self._rpc.call(
+            'eth_getTransactionReceipt',
+            [tx['hash']],
+            priority=block_number
+        )
+
+        assert receipt['transactionHash'] == tx['hash']
+        tx['receipt_'] = receipt
 
     async def _fetch_debug_call_trace(self, block: Block) -> None:
         block_number = qty2int(block['number'])
@@ -286,7 +298,6 @@ class Ingest:
         if unassigned_replays:
             block['unknownTraceReplays_'] = unassigned_replays
 
-
     def _validate_blocks(self, blocks: list[Block]):
         for block in blocks:
             block_parent_hash = short_hash(block['parentHash'])
@@ -298,12 +309,14 @@ class Ingest:
             self._last_hash = block_hash
 
 
-def _get_trace_replay_tx_hash(rep: TraceTransactionReplay) -> str | None:
-    try:
-        return rep['transactionHash']
-    except KeyError:
-        tx_hash = None
-        for trace in (rep['trace'] or []):
-            assert tx_hash is None or tx_hash == trace['transactionHash']
-            tx_hash = trace['transactionHash']
-        return tx_hash
+def _txs_with_missing_status(blocks: list[Block]) -> Iterable[Transaction]:
+    for block in blocks:
+        for tx in block['transactions']:
+            if not get_tx_status_from_traces(tx):
+                yield tx
+
+
+async def _run_subtasks(coros: Iterable[Coroutine]) -> None:
+    subtasks = [asyncio.create_task(coro) for coro in coros]
+    for task in subtasks:
+        await task

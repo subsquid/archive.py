@@ -57,8 +57,13 @@ class ArrowBatchBuilder:
             elif diff := tx.get('traceReplay_', {}).get('stateDiff'):
                 self.statediff_table.trace_append(tx['blockNumber'], tx['transactionIndex'], diff)
 
-        for log in block.get('logs_', []):
-            self.log_table.append(log)
+        if 'logs_' in block:
+            for log in block['logs_']:
+                self.log_table.append(log)
+        else:
+            for tx in block['transactions']:
+                for log in tx['receipt_']['logs']:
+                    self.log_table.append(log)
 
     def build(self) -> ArrowDataBatch:
         bytesize = self.buffered_bytes()

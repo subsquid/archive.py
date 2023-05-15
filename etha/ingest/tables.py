@@ -5,8 +5,8 @@ import pyarrow
 from etha.ingest.column import Column
 from etha.ingest.model import Transaction, Log, Block, Qty, DebugFrame, DebugStateDiff, Address20, \
     Bytes, DebugStateMap, \
-    TraceStateDiff, TraceDiff, TraceTransactionReplay, TraceRec
-from etha.ingest.util import qty2int
+    TraceStateDiff, TraceDiff, TraceRec
+from etha.ingest.util import qty2int, get_tx_status_from_traces
 
 
 def qty():
@@ -132,16 +132,21 @@ class TxTableBuilder(TableBuilderBase):
             self.gas_used.append(receipt['gasUsed'])
             self.cumulative_gas_used.append(receipt['cumulativeGasUsed'])
             self.effective_gas_price.append(receipt['effectiveGasPrice'])
-            self.contract_address.append(receipt.get('contractAddress'))
             self.type.append(qty2int(receipt['type']))
             self.status.append(qty2int(receipt['status']))
+            self.contract_address.append(receipt.get('contractAddress'))
         else:
             self.gas_used.append(None)
             self.cumulative_gas_used.append(None)
             self.effective_gas_price.append(None)
-            self.contract_address.append(None)
             self.type.append(None)
-            self.status.append(None)
+            s = get_tx_status_from_traces(tx)
+            if s:
+                self.status.append(qty2int(s['status']))
+                self.contract_address.append(s.get('contractAddress'))
+            else:
+                self.status.append(None)
+                self.contract_address.append(None)
 
 
 class LogTableBuilder(TableBuilderBase):

@@ -20,21 +20,14 @@ write:
 
 ingest-eth:
 	@$(PY) -m etha.ingest --dest data/mainnet \
-		-e ${ETH_ALCHEMY} \
-		-c 20 \
-		-r 400 \
-		-m debug_traceBlockByHash \
-		-m trace_replayBlockTransactions \
 		-e ${ETH_BLAST} \
-		-c 20 \
-		-r 400 \
+		-c 30 \
+		-r 600 \
 		--batch-limit 100 \
-		--with-receipts \
 		--with-traces \
 		--with-statediffs \
 		--write-chunk-size 10 \
-		--use-trace-api \
-		--first-block 15000000
+		--first-block 16000000
 
 
 ingest-arb:

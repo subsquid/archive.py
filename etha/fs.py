@@ -2,7 +2,7 @@ import os
 import shutil
 import urllib.parse
 from contextlib import AbstractContextManager, contextmanager
-from typing import Optional, IO
+from typing import Optional
 
 import pyarrow.fs
 import pyarrow.parquet

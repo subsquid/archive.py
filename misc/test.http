@@ -129,8 +129,21 @@ Content-Type: application/json
   "jsonrpc": "2.0",
   "method": "trace_replayBlockTransactions",
   "params": [
-    "0xb71b00",
+    "0x1036640",
     ["trace"]
+  ]
+}
+
+###
+POST {{eth_blast}}
+Content-Type: application/json
+
+{
+  "id": "1",
+  "jsonrpc": "2.0",
+  "method": "eth_getTransactionReceipt",
+  "params": [
+    "0xa278205118a242c87943b9ed83aacafe9906002627612ac3672d8ea224e38181"
   ]
 }
 
