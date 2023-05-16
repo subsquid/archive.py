@@ -97,7 +97,7 @@ def extend_traces_table(batch: ArrowDataBatch) -> pyarrow.Table:
                 call_sighash.append(_to_sighash(inp))
             else:
                 call_sighash.append(None)
-        idx = traces.column_names.index('call_input') + 1
+        idx = traces.column_names.index('call_input')
         traces = traces.add_column(idx, 'call_sighash', call_sighash.build())
 
     return traces

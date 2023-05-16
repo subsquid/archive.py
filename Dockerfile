@@ -29,3 +29,13 @@ ENV PATH="/etha-worker/env/bin:${PATH}"
 ADD etha etha/
 ENTRYPOINT ["python3", "-m", "etha.worker"]
 EXPOSE 8000
+
+
+FROM conda AS migrate
+WORKDIR /etha-migrate
+ADD environments/ingest.yml environment.yml
+RUN /opt/conda/bin/conda env create --prefix env
+ENV PATH="/etha-migrate/env/bin:${PATH}"
+ADD etha etha/
+ADD migrate.py .
+ENTRYPOINT ["python3", "-m", "migrate"]
