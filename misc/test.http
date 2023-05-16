@@ -7,21 +7,15 @@ Content-Type: application/json
 Accept-Encoding: gzip
 
 {
-  "fromBlock": 5947000,
+  "fromBlock": 17090380,
   "fields": {
-    "block": {
-      "number": true,
-      "hash": true,
-      "parentHash": true,
-      "timestamp": true
-    },
     "log": {
       "data": true,
       "topics": true
     },
     "transaction": {
       "from": true,
-      "sighash": true
+      "hash": true
     }
   },
   "logs": [

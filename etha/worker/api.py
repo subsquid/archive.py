@@ -5,7 +5,6 @@ import falcon.asgi as fa
 import marshmallow as mm
 
 from etha.query.model import Query, query_schema
-from etha.worker.query import QueryResult
 from etha.worker.state.manager import StateManager
 from etha.worker.worker import QueryError, Worker
 

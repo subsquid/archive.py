@@ -2,8 +2,6 @@ import logging
 import os.path
 from typing import Optional
 
-
-from etha.util.asyncio import create_child_task, monitor_service_tasks
 from etha.worker.state.controller import RangeLock, StateController, State
 from etha.worker.state.dataset import Dataset, dataset_encode
 from etha.worker.state.sync import SyncProcess
@@ -38,7 +36,6 @@ class StateManager:
         assert not self._is_started
         self._is_started = True
         try:
-            data_sync_task = create_child_task('data_sync', self._sync.run())
-            await monitor_service_tasks([data_sync_task], log=LOG)
+            await self._sync.run()
         finally:
             self._sync.close()
