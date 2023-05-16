@@ -12,6 +12,7 @@ from etha.worker.state.manager import StateManager
 from etha.worker.transport import HttpTransport
 from etha.worker.worker import Worker
 
+
 class Server(uvicorn.Server):
     def install_signal_handlers(self) -> None:
         pass
