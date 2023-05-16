@@ -81,19 +81,24 @@ def extend_transactions_table(batch: ArrowDataBatch) -> pyarrow.Table:
 def extend_traces_table(batch: ArrowDataBatch) -> pyarrow.Table:
     traces = batch.traces
 
+    if 'revert_reason' not in traces.column_names:
+        revert_reason = pyarrow.array(
+            (None for _ in range(0, traces.shape[0])),
+            type=pyarrow.string()
+        )
+        traces = traces.add_column(6, 'revert_reason', revert_reason)
+
     if 'call_sighash' not in traces.column_names:
         call_sighash = Column(pyarrow.string())
-        revert_reason = Column(pyarrow.string())
-        for (type, input) in zip(traces['type'], traces['call_input']):
-            type = type.as_py()
-            input = input.as_py()
-            if type == 'call':
-                call_sighash.append(_to_sighash(input))
+        for ty, inp in zip(traces['type'], traces['call_input']):
+            ty = ty.as_py()
+            inp = inp.as_py()
+            if ty == 'call':
+                call_sighash.append(_to_sighash(inp))
             else:
                 call_sighash.append(None)
-            revert_reason.append(None)
-        traces = traces.add_column(6, 'revert_reason', revert_reason.build())
-        traces = traces.add_column(18, 'call_sighash', call_sighash.build())
+        idx = traces.column_names.index('call_input') + 1
+        traces = traces.add_column(idx, 'call_sighash', call_sighash.build())
 
     return traces
 
