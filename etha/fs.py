@@ -2,7 +2,7 @@ import os
 import shutil
 import urllib.parse
 from contextlib import AbstractContextManager, contextmanager
-from typing import Optional
+from typing import Optional, IO
 
 import pyarrow.fs
 import pyarrow.parquet
@@ -19,9 +19,9 @@ class Fs:
         raise NotImplementedError()
 
     def transact(self, dest_dir: str) -> AbstractContextManager['Fs']:
-        raise NotImplementedError
+        raise NotImplementedError()
 
-    def write_parquet(self, name: str, table, **kwargs):
+    def open(self, loc: str, mode: str) -> IO:
         raise NotImplementedError()
 
     def delete(self, loc: str):
@@ -31,6 +31,9 @@ class Fs:
         raise NotImplementedError()
 
     def upload(self, local_src: str, dest: str):
+        raise NotImplementedError()
+
+    def write_parquet(self, name: str, table, **kwargs):
         raise NotImplementedError()
 
 
