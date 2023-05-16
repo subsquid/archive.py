@@ -69,7 +69,7 @@ class Worker:
             raise QueryError(f'data for block {first_block} is not available')
 
         with data_range_lock as data_range:
-            args = self._sm.get_temp_dir(), self._sm.get_dataset_dir(dataset), data_range, query
+            args = self._sm.get_dataset_dir(dataset), data_range, query
             loop = asyncio.get_event_loop()
             future = loop.create_future()
 

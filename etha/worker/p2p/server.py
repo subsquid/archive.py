@@ -199,4 +199,4 @@ async def _main():
 
 
 def main():
-    run_async_program(main, log=LOG)
+    run_async_program(_main, log=LOG)
