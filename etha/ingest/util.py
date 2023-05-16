@@ -1,6 +1,6 @@
 from typing import TypedDict, NotRequired
 
-from etha.ingest.model import Qty, Hash32, Transaction, Address20, DebugFrame
+from etha.ingest.model import Qty, Hash32, Transaction, Address20
 
 
 def qty2int(v: Qty) -> int:

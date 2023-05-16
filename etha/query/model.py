@@ -79,6 +79,7 @@ class TraceFieldSelection(TypedDict, total=False):
     callValue: bool
     callGas: bool
     callInput: bool
+    callSighash: bool
     callType: bool
     callResultGasUsed: bool
     callResultOutput: bool
