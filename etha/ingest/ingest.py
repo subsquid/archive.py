@@ -6,7 +6,7 @@ from typing import Optional, AsyncIterator, Literal, Iterable, Coroutine
 from etha.ingest.model import Block, Log, Receipt, DebugFrame, DebugFrameResult, \
     DebugStateDiffResult, TraceTransactionReplay, Transaction
 from etha.ingest.rpc import RpcClient
-from etha.ingest.util import short_hash, qty2int, get_tx_status_from_traces
+from etha.ingest.util import short_hash, qty2int, get_tx_status_from_traces, logs_bloom
 
 
 LOG = logging.getLogger(__name__)
@@ -172,14 +172,15 @@ class Ingest:
             priority=priority
         )
 
-        block_map = {}
-        for block in blocks:
-            block['logs_'] = []
-            block_map[block['hash']] = block
-
+        logs_by_hash: dict[str, list[Log]] = {}
         for log in logs:
-            block = block_map[log['blockHash']]
-            block['logs_'].append(log)
+            block_logs = logs_by_hash.setdefault(log['blockHash'], [])
+            block_logs.append(log)
+
+        for block in blocks:
+            block_logs = logs_by_hash.get(block['hash'], [])
+            assert block['logsBloom'] == logs_bloom(block_logs)
+            block['logs_'] = block_logs
 
     async def _fetch_receipts(self, blocks: list[Block]) -> None:
         priority = qty2int(blocks[0]['number'])
@@ -193,11 +194,17 @@ class Ingest:
             priority=priority
         )
 
-        receipts_map = {
-            r['transactionHash']: r for r in receipts
-        }
+        receipts_map: dict[str, Receipt] = {}
+        logs_by_hash: dict[str, list[Log]] = {}
+        for r in receipts:
+            receipts_map[r['transactionHash']] = r
+            block_logs = logs_by_hash.setdefault(r['blockHash'], [])
+            for log in r['logs']:
+                block_logs.append(log)
 
         for block in blocks:
+            block_logs = logs_by_hash.get(block['hash'], [])
+            assert block['logsBloom'] == logs_bloom(block_logs)
             for tx in block['transactions']:
                 tx['receipt_'] = receipts_map[tx['hash']]
 

@@ -8,5 +8,6 @@ dependencies:
   - httpx
   - prometheus_client
   - pyarrow
+  - pycryptodome
   - python=3.11
   - s3fs>=2021.8.0
