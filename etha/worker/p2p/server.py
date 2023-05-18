@@ -64,13 +64,14 @@ class QueryInfo:
 
 
 class P2PTransport(Transport):
-    def __init__(self, channel: grpc.aio.Channel, router_id: str):
+    def __init__(self, channel: grpc.aio.Channel, router_id: str, send_metrics: bool = True):
         self._transport = P2PTransportStub(channel)
         self._router_id = router_id
         self._state_updates = asyncio.Queue(maxsize=100)
         self._query_tasks = asyncio.Queue(maxsize=100)
         self._query_info: 'Dict[str, QueryInfo]' = {}
         self._local_peer_id: 'Optional[str]' = None
+        self._send_metrics = send_metrics
 
     async def initialize(self) -> None:
         self._local_peer_id = (await self._transport.LocalPeerId(Empty())).peer_id
@@ -151,18 +152,19 @@ class P2PTransport(Transport):
         await self._send(envelope, peer_id=query_info.client_id)
 
         # Send execution metrics to the router
-        envelope = msg_pb.Envelope(
-            query_executed=msg_pb.QueryExecuted(
-                query=query,
-                client_id=query_info.client_id,
-                ok=msg_pb.InputAndOutput(
-                    output=hash_and_size(result_bytes),
-                    # TODO: Include size and hash of input data
-                ),
-                exec_time_ms=exec_time_ms,
+        if self._send_metrics:
+            envelope = msg_pb.Envelope(
+                query_executed=msg_pb.QueryExecuted(
+                    query=query,
+                    client_id=query_info.client_id,
+                    ok=msg_pb.InputAndOutput(
+                        output=hash_and_size(result_bytes),
+                        # TODO: Include size and hash of input data
+                    ),
+                    exec_time_ms=exec_time_ms,
+                )
             )
-        )
-        await self._send(envelope, peer_id=self._router_id)
+            await self._send(envelope, peer_id=self._router_id)
 
     async def send_query_error(self, query: msg_pb.Query, error: Exception) -> None:
         try:
@@ -187,16 +189,17 @@ class P2PTransport(Transport):
         await self._send(envelope, peer_id=query_info.client_id)
 
         # Send execution metrics to the router
-        envelope = msg_pb.Envelope(
-            query_executed=msg_pb.QueryExecuted(
-                query=query,
-                client_id=query_info.client_id,
-                bad_request=bad_request,
-                server_error=server_error,
-                exec_time_ms=exec_time_ms,
+        if self._send_metrics:
+            envelope = msg_pb.Envelope(
+                query_executed=msg_pb.QueryExecuted(
+                    query=query,
+                    client_id=query_info.client_id,
+                    bad_request=bad_request,
+                    server_error=server_error,
+                    exec_time_ms=exec_time_ms,
+                )
             )
-        )
-        await self._send(envelope, peer_id=self._router_id)
+            await self._send(envelope, peer_id=self._router_id)
 
 
 async def run_queries(transport: P2PTransport, worker: Worker):
@@ -238,12 +241,17 @@ async def _main():
         type=int,
         help='number of processes to use to execute data queries'
     )
+    program.add_argument(
+        '--no-metrics',
+        action='store_true',
+        help='disable sending query execution metrics to the router'
+    )
 
     args = program.parse_args()
 
     sm = StateManager(data_dir=args.data_dir or os.getcwd())
     async with grpc.aio.insecure_channel(args.proxy) as channel:
-        transport = P2PTransport(channel, args.router_id)
+        transport = P2PTransport(channel, args.router_id, send_metrics=(not args.no_metrics))
 
         with multiprocessing.Pool(processes=args.procs, initializer=init_child_process) as pool:
             worker = Worker(sm, pool, transport)
