@@ -1,8 +1,10 @@
 import argparse
 import asyncio
+import hashlib
 import logging
 import multiprocessing
 import os
+from datetime import datetime
 from json import JSONDecodeError
 from typing import AsyncIterator, Optional, Dict
 
@@ -42,13 +44,32 @@ def state_from_proto(state: msg_pb.WorkerState) -> State:
     }
 
 
+def hash_and_size(data: bytes) -> msg_pb.SizeAndHash:
+    hasher = hashlib.sha3_256()
+    hasher.update(data)
+    return msg_pb.SizeAndHash(
+        size=len(data),
+        sha3_256=hasher.digest()
+    )
+
+
+class QueryInfo:
+    def __init__(self, client_id: str):
+        self.client_id = client_id
+        self.start_time = datetime.now()
+
+    @property
+    def exec_time_ms(self) -> int:
+        return int((datetime.now() - self.start_time).total_seconds() * 1000)
+
+
 class P2PTransport(Transport):
     def __init__(self, channel: grpc.aio.Channel, router_id: str):
         self._transport = P2PTransportStub(channel)
         self._router_id = router_id
         self._state_updates = asyncio.Queue(maxsize=100)
         self._query_tasks = asyncio.Queue(maxsize=100)
-        self._query_peers: 'Dict[str, str]' = {}
+        self._query_info: 'Dict[str, QueryInfo]' = {}
         self._local_peer_id: 'Optional[str]' = None
 
     async def initialize(self) -> None:
@@ -71,7 +92,7 @@ class P2PTransport(Transport):
                     continue
                 await self._state_updates.put(envelope.state_update)
             elif msg_type == 'query':
-                self._query_peers[envelope.query.query_id] = msg.peer_id
+                self._query_info[envelope.query.query_id] = QueryInfo(msg.peer_id)
                 await self._query_tasks.put(envelope.query)
             else:
                 LOG.error(f"Unexpected message type received: {msg_type}")
@@ -112,43 +133,70 @@ class P2PTransport(Transport):
         while True:
             yield await self._query_tasks.get()
 
-    async def send_query_result(self, query_id: str, result: str) -> None:
+    async def send_query_result(self, query: msg_pb.Query, result: str) -> None:
         try:
-            peer_id = self._query_peers.pop(query_id)
+            query_info = self._query_info.pop(query.query_id)
         except KeyError:
-            LOG.error(f"Unknown query: {query_id}")
+            LOG.error(f"Unknown query: {query.query_id}")
             return
+        exec_time_ms = query_info.exec_time_ms
+
+        result_bytes = result.encode()
+        envelope = msg_pb.Envelope(
+            query_result=msg_pb.QueryResult(
+                query_id=query.query_id,
+                ok_data=result_bytes
+            )
+        )
+        await self._send(envelope, peer_id=query_info.client_id)
+
+        # Send execution metrics to the router
+        envelope = msg_pb.Envelope(
+            query_executed=msg_pb.QueryExecuted(
+                query=query,
+                client_id=query_info.client_id,
+                ok=msg_pb.InputAndOutput(
+                    output=hash_and_size(result_bytes),
+                    # TODO: Include size and hash of input data
+                ),
+                exec_time_ms=exec_time_ms,
+            )
+        )
+        await self._send(envelope, peer_id=self._router_id)
+
+    async def send_query_error(self, query: msg_pb.Query, error: Exception) -> None:
+        try:
+            query_info = self._query_info.pop(query.query_id)
+        except KeyError:
+            LOG.error(f"Unknown query: {query.query_id}")
+            return
+        exec_time_ms = query_info.exec_time_ms
+
+        if isinstance(error, (JSONDecodeError, ValidationError, QueryError)):
+            bad_request, server_error = str(error), None
+        else:
+            bad_request, server_error = None, str(error)
 
         envelope = msg_pb.Envelope(
             query_result=msg_pb.QueryResult(
-                query_id=query_id,
-                ok_data=result.encode()
+                query_id=query.query_id,
+                bad_request=bad_request,
+                server_error=server_error,
             )
         )
-        await self._send(envelope, peer_id=peer_id)
+        await self._send(envelope, peer_id=query_info.client_id)
 
-    async def send_query_error(self, query_id: str, error: Exception) -> None:
-        try:
-            peer_id = self._query_peers.pop(query_id)
-        except KeyError:
-            LOG.error(f"Unknown query: {query_id}")
-            return
-
-        if isinstance(error, (JSONDecodeError, ValidationError, QueryError)):
-            result = msg_pb.QueryResult(
-                query_id=query_id,
-                bad_request=str(error)
-            )
-        else:
-            result = msg_pb.QueryResult(
-                query_id=query_id,
-                server_error=str(error)
-            )
-
+        # Send execution metrics to the router
         envelope = msg_pb.Envelope(
-            query_result=result
+            query_executed=msg_pb.QueryExecuted(
+                query=query,
+                client_id=query_info.client_id,
+                bad_request=bad_request,
+                server_error=server_error,
+                exec_time_ms=exec_time_ms,
+            )
         )
-        await self._send(envelope, peer_id=peer_id)
+        await self._send(envelope, peer_id=self._router_id)
 
 
 async def run_queries(transport: P2PTransport, worker: Worker):
@@ -158,10 +206,10 @@ async def run_queries(transport: P2PTransport, worker: Worker):
                 query = query_schema.loads(query_task.query)
                 result = await worker.execute_query(query, query_task.dataset)
                 LOG.info(f"Query {query_task.query_id} success")
-                await transport.send_query_result(query_task.query_id, result)
+                await transport.send_query_result(query_task, result)
             except Exception as e:
                 LOG.exception(f"Query {query_task.query_id} execution failed")
-                await transport.send_query_error(query_task.query_id, e)
+                await transport.send_query_error(query_task, e)
         asyncio.create_task(task())
 
 
