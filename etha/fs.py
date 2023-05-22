@@ -79,6 +79,10 @@ class LocalFs(Fs):
     def cd(self, *segments) -> 'LocalFs':
         return LocalFs(self.abs(*segments))
 
+    def open(self, loc: str, mode: str) -> IO:
+        path = self.abs(loc)
+        return open(path, mode)
+
 
 class S3Fs(Fs):
     def __init__(self, s3: s3fs.S3FileSystem, bucket: str):
@@ -124,6 +128,10 @@ class S3Fs(Fs):
     def write_parquet(self, file: str, table, **kwargs):
         path = self._abs_path(file)
         pyarrow.parquet.write_table(table, path, filesystem=self._s3, **kwargs)
+
+    def open(self, loc: str, mode: str) -> IO:
+        path = self._abs_path(loc)
+        return self._s3.open(path, mode)
 
 
 def create_fs(url: str, s3_endpoint: Optional[str] = os.environ.get('AWS_S3_ENDPOINT')) -> Fs:
