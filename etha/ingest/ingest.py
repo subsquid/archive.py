@@ -3,8 +3,8 @@ import logging
 from functools import cached_property
 from typing import Optional, AsyncIterator, Literal, Iterable, Coroutine
 
-from etha.ingest.model import Block, Log, Receipt, DebugFrameResult, DebugStateDiffResult, TraceTransactionReplay, \
-    Transaction
+from etha.ingest.model import Block, Log, Receipt, DebugFrame, DebugFrameResult, \
+    DebugStateDiffResult, TraceTransactionReplay, Transaction
 from etha.ingest.rpc import RpcClient
 from etha.ingest.util import short_hash, qty2int, get_tx_status_from_traces
 
@@ -218,7 +218,7 @@ class Ingest:
         if block_number == 0:
             return
 
-        traces: list[DebugFrameResult] = await self._rpc.call('debug_traceBlockByHash', [
+        traces: list[DebugFrameResult | DebugFrame] = await self._rpc.call('debug_traceBlockByHash', [
             block['hash'],
             {
                 'tracer': 'callTracer',
@@ -232,7 +232,8 @@ class Ingest:
         transactions = block['transactions']
         assert len(transactions) == len(traces)
         for tx, trace in zip(transactions, traces):
-            assert 'result' in trace
+            if 'result' not in trace:
+                trace = {'result': trace}
             tx['debugFrame_'] = trace
 
     async def _fetch_debug_state_diff(self, block: Block) -> None:
