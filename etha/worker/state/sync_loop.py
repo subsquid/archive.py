@@ -1,3 +1,7 @@
+import logging
+
+log = logging.getLogger(__name__)
+
 
 def sync_loop(data_dir: str, updates_queue, new_chunks_queue):
     from etha.util.child_proc import init_child_process
@@ -7,7 +11,10 @@ def sync_loop(data_dir: str, updates_queue, new_chunks_queue):
 
     while True:
         upd = updates_queue.get()
-        StateFolder(data_dir).apply_update(
-            upd,
-            on_downloaded_chunk=lambda ds, chunk: new_chunks_queue.put((ds, chunk))
-        )
+        try:
+            StateFolder(data_dir).apply_update(
+                upd,
+                on_downloaded_chunk=lambda ds, chunk: new_chunks_queue.put((ds, chunk))
+            )
+        except Exception:
+            log.exception('Downloading data chunks failed')
