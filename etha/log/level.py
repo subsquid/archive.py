@@ -5,6 +5,9 @@ from functools import cache
 from typing import Callable
 
 
+_DEFAULTS = {'SQD_INFO': 'etha.*'}
+
+
 def _compile_level_config(config: str) -> Callable[[str], int]:
     variants = []
     for ns in config.split(','):
@@ -44,6 +47,8 @@ def _get_matchers():
     for level in ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL']:
         if env := os.getenv(f'SQD_{level}'):
             matcher = _compile_level_config(env)
+        elif env := _DEFAULTS.get(f'SQD_{level}'):
+            matcher = _compile_level_config(env)
         else:
             matcher = _no_match
         matchers.append(matcher)
@@ -51,7 +56,7 @@ def _get_matchers():
 
 
 def get_log_level(ns: str) -> int:
-    level = logging.INFO
+    level = logging.WARN
     specificity = 0
     matchers = _get_matchers()
     for index, matcher in enumerate(matchers):
