@@ -446,15 +446,8 @@ class WriteService:
 
 async def raw_ingest(fs: Fs) -> AsyncIterator[list[Block]]:
     for chunk in get_chunks(fs):
-        with fs.open(f'{chunk.path()}/blocks.jsonl.gz', 'rb') as f:
-            content = f.read()
-            data = gzip.decompress(content)
-            blocks: list[Block] = []
-            for line in data.splitlines():
-                block: Block = json.loads(line)
-                blocks.append(block)
-            data.splitlines()
-            yield blocks
+        with fs.open(f'{chunk.path()}/blocks.jsonl.gz', 'rb') as f, gzip.open(f) as lines:
+            yield [json.loads(line) for line in lines]
 
 
 def cli():
