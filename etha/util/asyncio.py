@@ -102,15 +102,17 @@ def wait_for_term_signal():
     return future
 
 
-def run_async_program(main, *args, log=LOG):
+def run_async_program(main, *args, shutdown_event: Optional[asyncio.Event] = None, log=LOG):
 
     async def run():
         signal_future = wait_for_term_signal()
-        program = asyncio.create_task(main(*args))
+        program = asyncio.create_task(main(*args, shutdown_event))
         await asyncio.wait([signal_future, program], return_when=asyncio.FIRST_COMPLETED)
 
         if signal_future.done() and not program.done():
             log.error(f'terminating program due to {signal_future.result()}')
+            if shutdown_event is not None:
+                shutdown_event.set()
             program.cancel()
 
         await program

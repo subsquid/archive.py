@@ -41,9 +41,10 @@ class Ingest:
         self._chain_height = 0
         self._strides = []
         self._stride_size = 20
+        self._closed = False
 
     async def loop(self) -> AsyncIterator[list[Block]]:
-        while not self._is_finished() or len(self._strides):
+        while not self._closed and not self._is_finished() or len(self._strides):
             try:
                 stride = self._strides.pop(0)
             except IndexError:
@@ -54,6 +55,10 @@ class Ingest:
                 self._validate_blocks(blocks)
                 self._schedule_strides()
                 yield blocks
+
+    def close(self):
+        self._closed = True
+        self._rpc.close()
 
     def _schedule_strides(self):
         while len(self._strides) < max(1, min(10, self._rpc.get_total_capacity())) \

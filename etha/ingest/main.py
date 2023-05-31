@@ -1,3 +1,4 @@
+import asyncio
 import argparse
 import concurrent.futures
 import json
@@ -207,7 +208,7 @@ def parse_cli_arguments():
     return program.parse_args()
 
 
-async def run(args):
+async def run(args, shutdown_event: asyncio.Event):
     endpoints = [RpcEndpoint(**e) for e in args.endpoints]
 
     rpc = RpcClient(
@@ -248,6 +249,11 @@ async def run(args):
         use_debug_api_for_statediffs=args.use_debug_api_for_statediffs,
         arbitrum=args.arbitrum
     )
+
+    async def on_shutdown():
+        await shutdown_event.wait()
+        ingest.close()
+    asyncio.create_task(on_shutdown())
 
     await write_service.write(ingest.loop())
 
@@ -426,4 +432,5 @@ class WriteService:
 
 
 def cli():
-    run_async_program(run, parse_cli_arguments())
+    shutdown_event = asyncio.Event()
+    run_async_program(run, parse_cli_arguments(), shutdown_event=shutdown_event)
