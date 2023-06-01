@@ -255,7 +255,11 @@ async def run(args, shutdown_event: asyncio.Event):
         ingest.close()
     asyncio.create_task(on_shutdown())
 
-    await write_service.write(ingest.loop())
+    try:
+        await write_service.write(ingest.loop())
+    except Exception as e:
+        ingest.close()
+        raise e
 
 
 class Batch(NamedTuple):
