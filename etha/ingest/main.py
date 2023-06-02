@@ -381,7 +381,7 @@ class WriteService:
                             out.write(b'\n')
                             written += len(line) + 1
 
-                        if written > chunk_size:
+                        if written > chunk_size * 1024 * 1024:
                             LOG.debug('time to write a chunk', extra=bb.extra)
                             break
 
