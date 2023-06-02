@@ -172,6 +172,12 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
+        '--polygon',
+        action='store_true',
+        help='set this flag when indexing Polygon'
+    )
+
+    program.add_argument(
         '--write-chunk-size',
         metavar='MB',
         type=int,
@@ -246,7 +252,8 @@ async def run(args):
         with_statediffs=args.with_statediffs,
         use_trace_api=args.use_trace_api,
         use_debug_api_for_statediffs=args.use_debug_api_for_statediffs,
-        arbitrum=args.arbitrum
+        arbitrum=args.arbitrum,
+        polygon=args.polygon,
     )
 
     await write_service.write(ingest.loop())

@@ -25,7 +25,8 @@ class Ingest:
         with_statediffs: bool = False,
         use_trace_api: bool = False,
         use_debug_api_for_statediffs: bool = False,
-        arbitrum: bool = False
+        arbitrum: bool = False,
+        polygon: bool = False,
     ):
         self._rpc = rpc
         self._finality_offset = finality_offset
@@ -35,6 +36,7 @@ class Ingest:
         self._use_trace_api = use_trace_api
         self._use_debug_api_for_statediffs = use_debug_api_for_statediffs
         self._arbitrum = arbitrum
+        self._polygon = polygon
         self._last_hash = last_hash
         self._height = from_block - 1
         self._end = to_block
@@ -172,9 +174,16 @@ class Ingest:
             priority=priority
         )
 
+        tx_by_index: dict[str, dict[str, Transaction]] = {}
+        for block in blocks:
+            tx_by_index[block['hash']] = {tx['transactionIndex']: tx for tx in block['transactions']}
+
         logs_by_hash: dict[str, list[Log]] = {}
         for log in logs:
             block_logs = logs_by_hash.setdefault(log['blockHash'], [])
+            tx = tx_by_index[log['blockHash']][log['transactionIndex']]
+            if self._polygon and _is_polygon_precompiled(tx):
+                continue
             block_logs.append(log)
 
         for block in blocks:
@@ -328,3 +337,8 @@ async def _run_subtasks(coros: Iterable[Coroutine]) -> None:
     subtasks = [asyncio.create_task(coro) for coro in coros]
     for task in subtasks:
         await task
+
+
+def _is_polygon_precompiled(tx: Transaction):
+    address = '0x0000000000000000000000000000000000000000'
+    return tx['from'] == address and tx['to'] == address
