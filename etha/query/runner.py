@@ -65,12 +65,9 @@ def perform_test():
         #         'stateDiffs': True
         #     }
         # ]
-        'traces': [
-            {
-                'callTo': ['0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'],
-                'subtraces': True
-            }
-        ]
+        'stateDiffs': [{
+            'address': ['0xc146da54b5c22c68f6f692714837ad3d492b36f6']
+        }]
     })
 
     from etha.fs import LocalFs

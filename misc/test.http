@@ -69,20 +69,18 @@ GET https://v2.archive.subsquid.io/worker/2/status
 GET https://v2.archive.subsquid.io/network/ethereum-mainnet/height
 
 ### Routing request
-GET https://v2.archive.subsquid.io/network/ethereum-mainnet/16284160/worker
+GET https://v2.archive.subsquid.io/network/ethereum-mainnet/16000000/worker
 
 ###
-POST https://v2.archive.subsquid.io/worker/0/query/czM6Ly9ldGhhLW1haW5uZXQ
+POST https://v2.archive.subsquid.io/worker/3/query/czM6Ly9ldGhlcmV1bS1tYWlubmV0
 Content-Type: application/json
 
 {
   "fromBlock": 16000000,
-  "logs": [
-    {
-      "address": ["0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"]
-    }
+  "toBlock": 16000010,
+  "stateDiffs": [
+    {}
   ],
-  "transactions": [],
   "fields": {
     "block": {
       "timestamp": true

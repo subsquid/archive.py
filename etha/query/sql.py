@@ -78,10 +78,11 @@ class _SqlQueryBuilder:
                              table: str,
                              columns: Iterable[str],
                              relations: Iterable[str],
-                             where: Callable[[Any], Iterable[WhereExp]]
+                             where: Callable[[Any], Iterable[WhereExp]],
+                             requests_field: str | None = None
                              ):
         requests: list[dict] | None
-        requests = self.q.get(table)
+        requests = self.q.get(requests_field or table)
         if not requests:
             return
 
@@ -331,6 +332,7 @@ class _SqlQueryBuilder:
     def add_requested_statediffs(self):
         self.add_request_relation(
             table='statediffs',
+            requests_field='stateDiffs',
             columns=['block_number', 'transaction_index', 'address', 'key'],
             relations=['transaction'],
             where=self.statediff_where

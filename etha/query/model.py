@@ -202,7 +202,7 @@ class StateDiffRequestSchema(mm.Schema):
     address = mm.fields.List(mm.fields.Str())
     key = mm.fields.List(mm.fields.Str())
     kind = mm.fields.List(mm.fields.Str())
-    transaction =  mm.fields.Boolean()
+    transaction = mm.fields.Boolean()
 
 
 class QuerySchema(mm.Schema):
