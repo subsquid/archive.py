@@ -27,6 +27,7 @@ class Ingest:
         use_debug_api_for_statediffs: bool = False,
         arbitrum: bool = False,
         polygon: bool = False,
+        moonriver: bool = False,
     ):
         self._rpc = rpc
         self._finality_offset = finality_offset
@@ -37,6 +38,7 @@ class Ingest:
         self._use_debug_api_for_statediffs = use_debug_api_for_statediffs
         self._arbitrum = arbitrum
         self._polygon = polygon
+        self._moonriver = moonriver
         self._last_hash = last_hash
         self._height = from_block - 1
         self._end = to_block
@@ -212,10 +214,13 @@ class Ingest:
                 block_logs.append(log)
 
         for block in blocks:
-            block_logs = logs_by_hash.get(block['hash'], [])
-            assert block['logsBloom'] == logs_bloom(block_logs)
             for tx in block['transactions']:
                 tx['receipt_'] = receipts_map[tx['hash']]
+
+            block_logs = logs_by_hash.get(block['hash'], [])
+            if self._moonriver and qty2int(block['number']) == 2077599:
+                continue
+            assert block['logsBloom'] == logs_bloom(block_logs)
 
     async def _fetch_single_tx_receipt(self, tx: Transaction) -> None:
         block_number = qty2int(tx['blockNumber'])
@@ -246,6 +251,12 @@ class Ingest:
         ], priority=block_number)
 
         transactions = block['transactions']
+
+        if self._moonriver and qty2int(block['number']) == 2077600:
+            # first 23 transactions are duplicated from the previous block
+            transactions = transactions[23:]
+            assert len(transactions) == 8
+
         assert len(transactions) == len(traces)
         for tx, trace in zip(transactions, traces):
             if 'result' not in trace:

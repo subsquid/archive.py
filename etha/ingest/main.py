@@ -178,6 +178,12 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
+        '--moonriver',
+        action='store_true',
+        help='set this flag when indexing Moonriver'
+    )
+
+    program.add_argument(
         '--write-chunk-size',
         metavar='MB',
         type=int,
@@ -254,6 +260,7 @@ async def run(args):
         use_debug_api_for_statediffs=args.use_debug_api_for_statediffs,
         arbitrum=args.arbitrum,
         polygon=args.polygon,
+        moonriver=args.moonriver,
     )
 
     await write_service.write(ingest.loop())
