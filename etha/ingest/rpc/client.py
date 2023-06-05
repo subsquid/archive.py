@@ -11,7 +11,6 @@ from etha.ingest.rpc.connection import RpcConnection, RpcEndpoint, RpcEndpointMe
 
 
 LOG = logging.getLogger(__name__)
-# LOG.setLevel(logging.INFO)
 
 
 RpcBatchCallItem = tuple[str, Optional[list[Any]]]
@@ -53,6 +52,7 @@ class RpcClient:
         self._back_queue = []
         self._scheduling_soon = False
         self._scheduling_timer = None
+        self._closed = False
 
     def metrics(self) -> list[RpcEndpointMetrics]:
         return [con.metrics() for con in self._connections]
@@ -138,6 +138,9 @@ class RpcClient:
         self._schedule_soon()
 
         return _combine_list_futures(futures)
+
+    def close(self):
+        self._closed = True
 
     @cached_property
     def _max_batch_size(self) -> int:
@@ -243,15 +246,20 @@ class RpcClient:
 
     def _send(self, con: RpcConnection, item: _ReqItem, current_time: float):
         def callback(fut):
-            ex = fut.exception()
-            if ex is None:
-                result = fut.result()
-                item.future.set_result(result)
-            elif isinstance(ex, RpcRetryException):
-                self._push(item)
+            try:
+                ex = fut.exception()
+            except asyncio.CancelledError as e:
+                if not self._closed:
+                    raise e
             else:
-                item.future.set_exception(ex)
-            self._schedule_soon()
+                if ex is None:
+                    result = fut.result()
+                    item.future.set_result(result)
+                elif isinstance(ex, RpcRetryException):
+                    self._push(item)
+                else:
+                    item.future.set_exception(ex)
+                self._schedule_soon()
 
         future = con.request(item.id, item.request, current_time=current_time)
         future.add_done_callback(callback)
