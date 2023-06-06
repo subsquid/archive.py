@@ -19,6 +19,7 @@ from etha.ingest.rpc import RpcClient, RpcEndpoint
 from etha.ingest.tables import qty2int
 from etha.ingest.util import short_hash
 from etha.ingest.writer import ArrowBatchBuilder, ParquetWriter
+from etha.ingest.metrics import Metrics
 from etha.layout import ChunkWriter
 from etha.util.asyncio import run_async_program
 from etha.util.counters import Progress
@@ -247,6 +248,12 @@ async def run(args, shutdown_event: asyncio.Event):
 
     if write_service.next_block() > write_service.last_block():
         return
+
+    if args.prom_port:
+        metrics = Metrics()
+        metrics.add_rpc_metrics(rpc)
+        metrics.add_progress(write_service.progress, write_service.chunk_writer)
+        metrics.serve(args.prom_port)
 
     ingest = Ingest(
         rpc=rpc,
