@@ -10,12 +10,14 @@ from etha.ingest.util import short_hash, qty2int, get_tx_status_from_traces, log
 
 
 LOG = logging.getLogger(__name__)
+MOONRIVER_GENESIS = '0xce24348303f7a60c4d2d3c82adddf55ca57af89cd9e2cd4b863906ef53b89b3c'
 
 
 class Ingest:
     def __init__(
         self,
         rpc: RpcClient,
+        genesis_hash: str,
         finality_offset: int = 10,
         from_block: int = 0,
         to_block: Optional[int] = None,
@@ -27,9 +29,9 @@ class Ingest:
         use_debug_api_for_statediffs: bool = False,
         arbitrum: bool = False,
         polygon: bool = False,
-        moonriver: bool = False,
     ):
         self._rpc = rpc
+        self._genesis_hash = genesis_hash
         self._finality_offset = finality_offset
         self._with_receipts = with_receipts
         self._with_traces = with_traces
@@ -38,7 +40,6 @@ class Ingest:
         self._use_debug_api_for_statediffs = use_debug_api_for_statediffs
         self._arbitrum = arbitrum
         self._polygon = polygon
-        self._moonriver = moonriver
         self._last_hash = last_hash
         self._height = from_block - 1
         self._end = to_block
@@ -219,13 +220,26 @@ class Ingest:
                 block_logs.append(log)
 
         for block in blocks:
+            block_logs = logs_by_hash.get(block['hash'], [])
+
+            if self._genesis_hash == MOONRIVER_GENESIS and qty2int(block['number']) == 2077599:
+                block_logs = []
+                for tx in block['transactions']:
+                    receipt = receipts_map[tx['hash']]
+                    receipt['blockHash'] = block['hash']
+                    receipt['blockNumber'] = block['number']
+                    for log in receipt['logs']:
+                        log['blockHash'] = block['hash']
+                        log['blockNumber'] = block['number']
+                        block_logs.append(log)
+
+            if self._genesis_hash == MOONRIVER_GENESIS and qty2int(block['number']) == 2077600:
+                block['transactions'] = block['transactions'][23:]
+                assert len(block['transactions']) == 8
+
+            assert block['logsBloom'] == logs_bloom(block_logs)
             for tx in block['transactions']:
                 tx['receipt_'] = receipts_map[tx['hash']]
-
-            block_logs = logs_by_hash.get(block['hash'], [])
-            if self._moonriver and qty2int(block['number']) == 2077599:
-                continue
-            assert block['logsBloom'] == logs_bloom(block_logs)
 
     async def _fetch_single_tx_receipt(self, tx: Transaction) -> None:
         block_number = qty2int(tx['blockNumber'])
@@ -256,12 +270,6 @@ class Ingest:
         ], priority=block_number)
 
         transactions = block['transactions']
-
-        if self._moonriver and qty2int(block['number']) == 2077600:
-            # first 23 transactions are duplicated from the previous block
-            transactions = transactions[23:]
-            assert len(transactions) == 8
-
         assert len(transactions) == len(traces)
         for tx, trace in zip(transactions, traces):
             if 'result' not in trace:

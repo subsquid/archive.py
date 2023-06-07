@@ -180,12 +180,6 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
-        '--moonriver',
-        action='store_true',
-        help='set this flag when indexing Moonriver'
-    )
-
-    program.add_argument(
         '--write-chunk-size',
         metavar='MB',
         type=int,
@@ -255,8 +249,10 @@ async def run(args, shutdown_event: asyncio.Event):
         metrics.add_progress(write_service.progress, write_service.chunk_writer)
         metrics.serve(args.prom_port)
 
+    genesis: Block = await rpc.call('eth_getBlockByNumber', ['0x0', False])
     ingest = Ingest(
         rpc=rpc,
+        genesis_hash=genesis['hash'],
         finality_offset=args.best_block_offset,
         from_block=write_service.next_block(),
         to_block=args.last_block,
@@ -268,7 +264,6 @@ async def run(args, shutdown_event: asyncio.Event):
         use_debug_api_for_statediffs=args.use_debug_api_for_statediffs,
         arbitrum=args.arbitrum,
         polygon=args.polygon,
-        moonriver=args.moonriver,
     )
 
     async def on_shutdown():
