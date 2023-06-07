@@ -15,6 +15,7 @@ from etha.worker.state.intervals import to_range_set
 from etha.worker.state.manager import StateManager
 from etha.worker.transport import Transport
 from etha.worker.worker import Worker
+from etha.worker.metrics import Metrics
 
 
 LOG = logging.getLogger(__name__)
@@ -123,10 +124,12 @@ async def serve(args):
         worker_url=args.worker_url,
         router_url=args.router,
     )
+    metrics = Metrics()
+    metrics.add_state(sm)
 
     with multiprocessing.Pool(processes=args.procs, initializer=init_child_process) as pool:
         worker = Worker(sm, pool, transport)
-        app = create_app(sm, worker)
+        app = create_app(sm, worker, metrics)
         server_conf = uvicorn.Config(
             app,
             port=args.port,
