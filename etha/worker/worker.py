@@ -33,7 +33,7 @@ class Worker:
         state_updates = self._transport.state_updates()
         while not self._shutdown:
             desired_state = await anext(state_updates)
-            LOG.info('state update', extra={'desired_state': desired_state})
+            LOG.info('state ping', extra={'desired_state': desired_state})
             self._sm.update_state(desired_state)
 
     async def _ping_loop(self):

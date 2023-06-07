@@ -1,10 +1,14 @@
 __pycache__
 
-/.idea
-/env
+/.pdm-python
+/.venv
 /.envrc
-/data
-/.vscode
+/build
 
-*.temp.*
-*.private.*
+# temp project directories
+/data
+/scratch
+
+# IDEs
+/.idea
+/.vscode

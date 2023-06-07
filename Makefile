@@ -1,26 +1,14 @@
-PY = env/bin/python3
-
-
-init:
-	@if [ -e env ]; then \
-  		conda env update -f environments/dev.yml --prefix env --prune; \
-	else \
-  		conda env create -f environments/dev.yml --prefix env; \
-	fi
-
-
-build-ingest:
+image-ingest:
 	docker buildx build --target ingest --platform linux/amd64 . --load
 
 
-write:
-	@rm -rf data/parquet
-	@cat data/blocks.jsonl | $(PY) -m etha.ingest.main --dest data/parquet
+image-worker:
+	docker buildx build --target worker --platform linux/amd64 . --load
 
 
 ingest-eth:
-	@$(PY) -m etha.ingest --dest data/mainnet \
-		-e ${ETH_BLAST} \
+	@python3 -m etha.ingest --dest data/mainnet \
+		-e ${ETH_NODE} \
 		-c 30 \
 		-r 600 \
 		--batch-limit 100 \
@@ -31,8 +19,8 @@ ingest-eth:
 
 
 ingest-arb:
-	@$(PY) -m etha.ingest --dest data/arb-one \
-		-e ${ARB_BLAST} \
+	@python3 -m etha.ingest --dest data/arb-one \
+		-e ${ARB_NODE} \
 		-c 20 \
 		-r 400 \
 		--batch-limit 100 \
@@ -46,11 +34,8 @@ ingest-arb:
 
 
 ingest-poly:
-	@$(PY) -m etha.ingest --dest data/poly \
-		-e ${POLY_POKT} \
-		-c 10 \
-		-m eth_getTransactionReceipt \
-		-e ${POLY_BLAST} \
+	@python3 -m etha.ingest --dest data/poly \
+		-e ${POLY_NODE} \
 		-c 10 \
 		-r 1000 \
 		--write-chunk-size 1024 \
@@ -59,11 +44,11 @@ ingest-poly:
 
 
 router:
-	@$(PY) -m etha.worker.fake_router
+	@python3 -m etha.worker.fake_router
 
 
 worker:
-	@$(PY) -m etha.worker \
+	@python3 -m etha.worker \
 		--router http://localhost:5555 \
 		--worker-id 1 \
 		--worker-url http://localhost:8000 \
@@ -71,4 +56,4 @@ worker:
 		--procs 2
 
 
-.PHONY: init build-ingest write ingest-eth ingest-arb ingest-poly router worker
+.PHONY: image-ingest image-worker ingest-eth ingest-arb ingest-poly router worker
