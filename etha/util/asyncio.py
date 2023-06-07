@@ -75,12 +75,12 @@ async def monitor_pipeline(tasks: list[asyncio.Task], service_task: Optional[asy
 
         for task in pending_tasks:
             if task.done():
+                log.debug('task %s finished', task.get_name())
                 exception = task.exception()
                 if exception:
                     await teardown(ts, log)
                     raise exception
             else:
-                log.debug('task %s finished', task.get_name())
                 new_pending_tasks.append(task)
 
         pending_tasks = new_pending_tasks
@@ -102,17 +102,15 @@ def wait_for_term_signal():
     return future
 
 
-def run_async_program(main, *args, shutdown_event: Optional[asyncio.Event] = None, log=LOG):
+def run_async_program(main, *args, log=LOG):
 
     async def run():
         signal_future = wait_for_term_signal()
-        program = asyncio.create_task(main(*args, shutdown_event))
+        program = asyncio.create_task(main(*args))
         await asyncio.wait([signal_future, program], return_when=asyncio.FIRST_COMPLETED)
 
         if signal_future.done() and not program.done():
             log.error(f'terminating program due to {signal_future.result()}')
-            if shutdown_event is not None:
-                shutdown_event.set()
             program.cancel()
 
         await program

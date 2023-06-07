@@ -7,7 +7,6 @@ import marshmallow as mm
 from etha.query.model import Query, query_schema
 from etha.worker.state.manager import StateManager
 from etha.worker.worker import QueryError, Worker
-from etha.worker.metrics import Metrics
 
 
 def max_body(limit: int):
@@ -68,18 +67,8 @@ class QueryResource:
         res.content_type = 'application/json'
 
 
-class MetricsResource:
-    def __init__(self, metrics: Metrics):
-        self.metrics = metrics
-
-    async def on_get(self, req: fa.Request, res: fa.Response):
-        res.data = self.metrics.collect()
-        res.set_header('content-type', 'text/plain')
-
-
-def create_app(sm: StateManager, worker: Worker, metrics: Metrics) -> fa.App:
+def create_app(sm: StateManager, worker: Worker) -> fa.App:
     app = fa.App()
     app.add_route('/status', StatusResource(sm))
     app.add_route('/query/{dataset}', QueryResource(worker))
-    app.add_route('/metrics', MetricsResource(metrics))
     return app

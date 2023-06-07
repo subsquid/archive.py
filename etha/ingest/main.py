@@ -215,7 +215,7 @@ def parse_cli_arguments():
     return program.parse_args()
 
 
-async def run(args, shutdown_event: asyncio.Event):
+async def run(args):
     endpoints = [RpcEndpoint(**e) for e in args.endpoints]
 
     rpc = RpcClient(
@@ -266,16 +266,10 @@ async def run(args, shutdown_event: asyncio.Event):
         polygon=args.polygon,
     )
 
-    async def on_shutdown():
-        await shutdown_event.wait()
-        ingest.close()
-    asyncio.create_task(on_shutdown())
-
     try:
         await write_service.write(ingest.loop())
-    except Exception as e:
+    finally:
         ingest.close()
-        raise e
 
 
 class Batch(NamedTuple):
@@ -452,5 +446,4 @@ class WriteService:
 
 
 def cli():
-    shutdown_event = asyncio.Event()
-    run_async_program(run, parse_cli_arguments(), shutdown_event=shutdown_event)
+    run_async_program(run, parse_cli_arguments())
