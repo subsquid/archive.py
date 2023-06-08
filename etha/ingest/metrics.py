@@ -46,7 +46,7 @@ class _ProgressCollector(Collector):
         )
         last_block = CounterMetricFamily(
             'sqd_last_block',
-            'Last indexed block',
+            'Last ingested block',
             self._progress.get_current_value()
         )
         last_saved_block = CounterMetricFamily(

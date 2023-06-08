@@ -6,49 +6,47 @@ from typing import Optional, AsyncIterator, Literal, Iterable, Coroutine
 from etha.ingest.model import Block, Log, Receipt, DebugFrame, DebugFrameResult, \
     DebugStateDiffResult, TraceTransactionReplay, Transaction
 from etha.ingest.rpc import RpcClient
-from etha.ingest.util import short_hash, qty2int, get_tx_status_from_traces, logs_bloom
+from etha.ingest.util import qty2int, get_tx_status_from_traces, logs_bloom
 
 
 LOG = logging.getLogger(__name__)
-MOONRIVER_GENESIS = '0xce24348303f7a60c4d2d3c82adddf55ca57af89cd9e2cd4b863906ef53b89b3c'
 
 
 class Ingest:
     def __init__(
         self,
         rpc: RpcClient,
-        genesis_hash: str,
-        finality_offset: int = 10,
+        finality_confirmation: int,
         from_block: int = 0,
         to_block: Optional[int] = None,
-        last_hash: Optional[str] = None,
         with_receipts: bool = False,
         with_traces: bool = False,
         with_statediffs: bool = False,
         use_trace_api: bool = False,
-        use_debug_api_for_statediffs: bool = False,
-        arbitrum: bool = False,
-        polygon: bool = False,
+        use_debug_api_for_statediffs: bool = False
     ):
         self._rpc = rpc
-        self._genesis_hash = genesis_hash
-        self._finality_offset = finality_offset
+        self._finality_confirmation = finality_confirmation
         self._with_receipts = with_receipts
         self._with_traces = with_traces
         self._with_statediffs = with_statediffs
         self._use_trace_api = use_trace_api
         self._use_debug_api_for_statediffs = use_debug_api_for_statediffs
-        self._arbitrum = arbitrum
-        self._polygon = polygon
-        self._last_hash = last_hash
         self._height = from_block - 1
         self._end = to_block
         self._chain_height = 0
         self._strides = []
         self._stride_size = 20
         self._closed = False
+        self._running = False
+        self._is_arbitrum_one = False
+        self._is_moonriver = False
+        self._is_polygon = False
 
     async def loop(self) -> AsyncIterator[list[Block]]:
+        assert not self._running
+        self._running = True
+        await self._detect_special_chains()
         while not self._closed and not self._is_finished() or len(self._strides):
             try:
                 stride = self._strides.pop(0)
@@ -57,13 +55,19 @@ class Ingest:
                 self._schedule_strides()
             else:
                 blocks = await stride
-                self._validate_blocks(blocks)
                 self._schedule_strides()
                 yield blocks
 
     def close(self):
         self._closed = True
         self._rpc.close()
+
+    async def _detect_special_chains(self) -> None:
+        genesis: Block = await self._rpc.call('eth_getBlockByNumber', ['0x0', False])
+        genesis_hash = genesis['hash']
+        self._is_arbitrum_one = genesis_hash == '0x7ee576b35482195fc49205cec9af72ce14f003b9ae69f6ba0faef4514be8b442'
+        self._is_moonriver = genesis_hash == '0xce24348303f7a60c4d2d3c82adddf55ca57af89cd9e2cd4b863906ef53b89b3c'
+        self._is_polygon = genesis_hash == '0xa9c28ce2141b56c474f1dc504bee9b01eb1bd7d1a507580d5519d4437a97de1b'
 
     def _schedule_strides(self):
         while len(self._strides) < max(1, min(10, self._rpc.get_total_capacity())) \
@@ -103,7 +107,7 @@ class Ingest:
     async def _get_chain_height(self) -> int:
         hex_height = await self._rpc.call('eth_blockNumber')
         height = int(hex_height, 0)
-        return max(height - self._finality_offset, 0)
+        return max(height - self._finality_confirmation, 0)
 
     async def _fetch_stride(self, from_block: int, to_block: int) -> list[Block]:
         extra = {'first_block': from_block, 'last_block': to_block}
@@ -137,7 +141,7 @@ class Ingest:
 
         if self._trace_tracers:
             for block in blocks:
-                if self._arbitrum:
+                if self._is_arbitrum_one:
                     bn = qty2int(block['number'])
                     if 1 < bn < 22207815:
                         yield self._fetch_trace_replay(
@@ -165,7 +169,7 @@ class Ingest:
         if self._with_traces:
             tracers.append('trace')
 
-        if self._with_statediffs and not self._arbitrum:
+        if self._with_statediffs and not self._is_arbitrum_one:
             tracers.append('stateDiff')
 
         return tracers
@@ -190,7 +194,7 @@ class Ingest:
         for log in logs:
             block_logs = logs_by_hash.setdefault(log['blockHash'], [])
             tx = tx_by_index[log['blockHash']][log['transactionIndex']]
-            if self._polygon and _is_polygon_precompiled(tx):
+            if self._is_polygon and _is_polygon_precompiled(tx):
                 continue
             block_logs.append(log)
 
@@ -220,10 +224,10 @@ class Ingest:
                 block_logs.append(log)
 
         for block in blocks:
-            if self._genesis_hash == MOONRIVER_GENESIS and qty2int(block['number']) == 2077599:
+            if self._is_moonriver and qty2int(block['number']) == 2077599:
                 _fix_moonriver_2077599(block, receipts_map, logs_by_hash)
 
-            if self._genesis_hash == MOONRIVER_GENESIS and qty2int(block['number']) == 2077600:
+            if self._is_moonriver and qty2int(block['number']) == 2077600:
                 _fix_moonriver_2077600(block)
 
             block_logs = logs_by_hash.get(block['hash'], [])
@@ -259,7 +263,7 @@ class Ingest:
             }
         ], priority=block_number)
 
-        if self._genesis_hash == MOONRIVER_GENESIS and qty2int(block['number']) == 2077600:
+        if self._is_moonriver and qty2int(block['number']) == 2077600:
             _fix_moonriver_2077600(block)
 
         transactions = block['transactions']
@@ -331,16 +335,6 @@ class Ingest:
 
         if unassigned_replays:
             block['unknownTraceReplays_'] = unassigned_replays
-
-    def _validate_blocks(self, blocks: list[Block]):
-        for block in blocks:
-            block_parent_hash = short_hash(block['parentHash'])
-            block_hash = short_hash(block['hash'])
-
-            if self._last_hash and self._last_hash != block_parent_hash:
-                raise Exception(f'broken chain: block {block_hash} is not a direct child of {self._last_hash}')
-
-            self._last_hash = block_hash
 
 
 def _txs_with_missing_status(blocks: list[Block]) -> Iterable[Transaction]:

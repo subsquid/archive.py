@@ -1,7 +1,5 @@
-import bisect
 import math
 import re
-from contextlib import AbstractContextManager, contextmanager
 from typing import Iterable, NamedTuple, Optional, Callable
 
 from etha.fs import Fs
@@ -109,12 +107,17 @@ def get_chunks_in_reversed_order(fs: Fs, first_block: int = 0, last_block: int =
         if top > last_block:
             continue
 
-        for beg, end, hash_ in _get_top_ranges(fs, top):
+        for beg, end, hash_ in reversed(_get_top_ranges(fs, top)):
             if beg > last_block:
                 continue
             if end < first_block:
                 return
             yield DataChunk(beg, end, hash_, top)
+
+
+def get_last_chunk(fs: Fs, first_block: int = 0, last_block: int = math.inf) -> DataChunk | None:
+    for chunk in get_chunks_in_reversed_order(fs, first_block, last_block):
+        return chunk
 
 
 class ChunkWriter:
@@ -156,6 +159,7 @@ class ChunkWriter:
         if last_chunk:
             self._top = last_chunk.top
             self._ranges = _get_top_ranges(fs, self._top)
+            assert self._ranges, 'data is not supposed to be changed by external process during writing'
         else:
             self._top = first_block
             self._ranges = []
