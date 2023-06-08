@@ -220,23 +220,13 @@ class Ingest:
                 block_logs.append(log)
 
         for block in blocks:
-            block_logs = logs_by_hash.get(block['hash'], [])
-
             if self._genesis_hash == MOONRIVER_GENESIS and qty2int(block['number']) == 2077599:
-                block_logs = []
-                for tx in block['transactions']:
-                    receipt = receipts_map[tx['hash']]
-                    receipt['blockHash'] = block['hash']
-                    receipt['blockNumber'] = block['number']
-                    for log in receipt['logs']:
-                        log['blockHash'] = block['hash']
-                        log['blockNumber'] = block['number']
-                        block_logs.append(log)
+                _fix_moonriver_2077599(block, receipts_map, logs_by_hash)
 
             if self._genesis_hash == MOONRIVER_GENESIS and qty2int(block['number']) == 2077600:
-                block['transactions'] = block['transactions'][23:]
-                assert len(block['transactions']) == 8
+                _fix_moonriver_2077600(block)
 
+            block_logs = logs_by_hash.get(block['hash'], [])
             assert block['logsBloom'] == logs_bloom(block_logs)
             for tx in block['transactions']:
                 tx['receipt_'] = receipts_map[tx['hash']]
@@ -268,6 +258,9 @@ class Ingest:
                 }
             }
         ], priority=block_number)
+
+        if self._genesis_hash == MOONRIVER_GENESIS and qty2int(block['number']) == 2077600:
+            _fix_moonriver_2077600(block)
 
         transactions = block['transactions']
         assert len(transactions) == len(traces)
@@ -366,3 +359,24 @@ async def _run_subtasks(coros: Iterable[Coroutine]) -> None:
 def _is_polygon_precompiled(tx: Transaction):
     address = '0x0000000000000000000000000000000000000000'
     return tx['from'] == address and tx['to'] == address
+
+
+def _fix_moonriver_2077599(block: Block, receipts_map: dict[str, Receipt], logs_by_hash: dict[str, list[Log]]):
+    block_logs = []
+    for tx in block['transactions']:
+        receipt = receipts_map[tx['hash']]
+        receipt['blockHash'] = block['hash']
+        receipt['blockNumber'] = block['number']
+        for log in receipt['logs']:
+            log['blockHash'] = block['hash']
+            log['blockNumber'] = block['number']
+            block_logs.append(log)
+    logs_by_hash[block['hash']] = block_logs
+
+
+def _fix_moonriver_2077600(block: Block):
+    if len(block['transactions']) == 31:
+        block['transactions'] = block['transactions'][23:]
+    else:
+        # transactions were already cut in a different method
+        assert len(block['transactions']) == 8

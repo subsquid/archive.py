@@ -16,6 +16,7 @@ dependencies = [
 ingest = [
     "httpx == 0.*",
     "pycryptodome>=3.18.0",
+    "prometheus-client==0.17.*",
 ]
 http-worker = [
     "duckdb == 0.8.0",
