@@ -9,6 +9,7 @@ import tempfile
 import time
 from functools import cached_property
 from typing import Optional, NamedTuple, AsyncIterator, Callable, Any
+import gzip
 
 import pyarrow
 
@@ -20,7 +21,7 @@ from etha.ingest.tables import qty2int
 from etha.ingest.util import short_hash
 from etha.ingest.writer import ArrowBatchBuilder, ParquetWriter
 from etha.ingest.metrics import Metrics
-from etha.layout import ChunkWriter
+from etha.layout import ChunkWriter, get_chunks
 from etha.util.asyncio import run_async_program
 from etha.util.counters import Progress
 
@@ -194,6 +195,12 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
+        '--raw-source',
+        metavar='PATH',
+        help='source dir to read data from'
+    )
+
+    program.add_argument(
         '--get-next-block',
         action='store_true',
         help='check the stored data, print the next block to write and exit'
@@ -242,14 +249,28 @@ async def run(args):
 
     if write_service.next_block() > write_service.last_block():
         return
-
+      
+    
     if args.prom_port:
         metrics = Metrics()
         metrics.add_rpc_metrics(rpc)
         metrics.add_progress(write_service.progress, write_service.chunk_writer)
         metrics.serve(args.prom_port)
 
+    if not args.raw and args.raw_source:
+        raw_fs = create_fs(args.raw_source)
+        LOG.info('syncing from raw source')
+        await write_service.write(raw_ingest(raw_fs))
+        LOG.info('finished syncing from raw source')
+
+        write_options = WriteOptions(**{
+            **write_options._asdict(),
+            'first_block': write_service.next_block()
+        })
+        write_service = WriteService(write_options)
+
     genesis: Block = await rpc.call('eth_getBlockByNumber', ['0x0', False])
+
     ingest = Ingest(
         rpc=rpc,
         genesis_hash=genesis['hash'],
@@ -443,6 +464,12 @@ class WriteService:
             batch = bb.build()
             LOG.debug('flush buffered data from last strides')
             writer.write(batch)
+
+
+async def raw_ingest(fs: Fs) -> AsyncIterator[list[Block]]:
+    for chunk in get_chunks(fs):
+        with fs.open(f'{chunk.path()}/blocks.jsonl.gz', 'rb') as f, gzip.open(f) as lines:
+            yield [json.loads(line) for line in lines]
 
 
 def cli():
