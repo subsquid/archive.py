@@ -1,3 +1,4 @@
+import asyncio
 import argparse
 import concurrent.futures
 import json
@@ -19,6 +20,7 @@ from etha.ingest.rpc import RpcClient, RpcEndpoint
 from etha.ingest.tables import qty2int
 from etha.ingest.util import short_hash
 from etha.ingest.writer import ArrowBatchBuilder, ParquetWriter
+from etha.ingest.metrics import Metrics
 from etha.layout import ChunkWriter, get_chunks
 from etha.util.asyncio import run_async_program
 from etha.util.counters import Progress
@@ -173,6 +175,12 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
+        '--polygon',
+        action='store_true',
+        help='set this flag when indexing Polygon'
+    )
+
+    program.add_argument(
         '--write-chunk-size',
         metavar='MB',
         type=int,
@@ -241,6 +249,13 @@ async def run(args):
 
     if write_service.next_block() > write_service.last_block():
         return
+      
+    
+    if args.prom_port:
+        metrics = Metrics()
+        metrics.add_rpc_metrics(rpc)
+        metrics.add_progress(write_service.progress, write_service.chunk_writer)
+        metrics.serve(args.prom_port)
 
     if not args.raw and args.raw_source:
         raw_fs = create_fs(args.raw_source)
@@ -254,8 +269,11 @@ async def run(args):
         })
         write_service = WriteService(write_options)
 
+    genesis: Block = await rpc.call('eth_getBlockByNumber', ['0x0', False])
+
     ingest = Ingest(
         rpc=rpc,
+        genesis_hash=genesis['hash'],
         finality_offset=args.best_block_offset,
         from_block=write_service.next_block(),
         to_block=args.last_block,
@@ -265,10 +283,14 @@ async def run(args):
         with_statediffs=args.with_statediffs,
         use_trace_api=args.use_trace_api,
         use_debug_api_for_statediffs=args.use_debug_api_for_statediffs,
-        arbitrum=args.arbitrum
+        arbitrum=args.arbitrum,
+        polygon=args.polygon,
     )
 
-    await write_service.write(ingest.loop())
+    try:
+        await write_service.write(ingest.loop())
+    finally:
+        ingest.close()
 
 
 class Batch(NamedTuple):
@@ -393,7 +415,7 @@ class WriteService:
                             out.write(b'\n')
                             written += len(line) + 1
 
-                        if written > chunk_size:
+                        if written > chunk_size * 1024 * 1024:
                             LOG.debug('time to write a chunk', extra=bb.extra)
                             break
 

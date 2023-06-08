@@ -6,15 +6,16 @@ from prometheus_client.registry import REGISTRY, Collector
 
 from etha.util.counters import Progress
 from etha.ingest.rpc import RpcClient
+from etha.ingest.writer import ChunkWriter
 
 
 class Metrics:
     def __init__(self):
         self._metrics = set()
 
-    def add_progress(self, progress: Progress):
+    def add_progress(self, progress: Progress, writer: ChunkWriter):
         self._add('progress')
-        collector = _ProgressCollector(progress)
+        collector = _ProgressCollector(progress, writer)
         REGISTRY.register(collector)
 
     def add_rpc_metrics(self, client: RpcClient):
@@ -33,8 +34,9 @@ class Metrics:
 
 
 class _ProgressCollector(Collector):
-    def __init__(self, progress: Progress):
+    def __init__(self, progress: Progress, writer: ChunkWriter):
         self._progress = progress
+        self._writer = writer
 
     def collect(self) -> Iterable[Metric]:
         progress = GaugeMetricFamily(
@@ -44,10 +46,15 @@ class _ProgressCollector(Collector):
         )
         last_block = CounterMetricFamily(
             'sqd_last_block',
-            'Last saved block',
+            'Last indexed block',
             self._progress.get_current_value()
         )
-        return [progress, last_block]
+        last_saved_block = CounterMetricFamily(
+            'sqd_last_saved_block',
+            'Last saved block',
+            self._writer.next_block - 1,
+        )
+        return [progress, last_block, last_saved_block]
 
 
 class _RpcCollector(Collector):

@@ -75,12 +75,12 @@ async def monitor_pipeline(tasks: list[asyncio.Task], service_task: Optional[asy
 
         for task in pending_tasks:
             if task.done():
+                log.debug('task %s finished', task.get_name())
                 exception = task.exception()
                 if exception:
                     await teardown(ts, log)
                     raise exception
             else:
-                log.debug('task %s finished', task.get_name())
                 new_pending_tasks.append(task)
 
         pending_tasks = new_pending_tasks

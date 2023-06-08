@@ -1,30 +1,39 @@
-[tool.poetry]
+[project]
 name = "subsquid-eth-archive"
 description = "Subsquid stage 2 ingester and worker"
 version = "0.1.0"
-authors = ["Subsquid Labs GmbH <contact@subsquid.io>"]
+authors = [{name = "Subsquid Labs GmbH", email = "contact@subsquid.io"}]
 readme = "README.md"
-packages = [{include = "etha"}]
+requires-python = ">=3.11"
 
-[tool.poetry.dependencies]
-python = "^3.11"
+dependencies = [
+    "marshmallow == 3.*",
+    "pyarrow == 10.*",
+    "s3fs >= 2021.8.0"
+]
 
-duckdb = { version = "^0.7.1", optional = true }
-falcon = { version = "^3.1", optional = true }
-grpcio = { version = "^1.51", optional = true }
-httpx = { version = "^0.23", optional = true }
-marshmallow = "^3.19"
-prometheus-client = { version = "^0.16", optional = true }
-protobuf = { version = "^4.23", optional = true }
-pyarrow = "^10.0"
-s3fs = "^2021.8.0"
-uvicorn = {version = "^0.17", optional = true }
-
-[tool.poetry.extras]
-p2p-worker = ["duckdb", "grpcio", "protobuf"]
-http-worker = ["duckdb", "falcon", "httpx", "uvicorn"]
-ingester = ["prometheus-client"]
+[project.optional-dependencies]
+ingest = [
+    "httpx == 0.*",
+    "pycryptodome>=3.18.0",
+]
+http-worker = [
+    "duckdb == 0.8.0",
+    "falcon == 3.*",
+    "httpx == 0.*",
+    "uvicorn == 0.*"
+]
+p2p-worker = [
+    "duckdb == 0.8.0",
+    "grpcio == 1.*",
+    "protobuf == 4.*"
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.pdm.dev-dependencies]
+dev = [
+    "locust>=2.15.1",
+]

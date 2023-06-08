@@ -4,14 +4,16 @@ Subsquid archive for ethereum compatible chains.
 
 ## Hacking
 
-This project requires [conda(1)](https://docs.conda.io/en/latest/miniconda.html).
-
-Assuming it is in the path, run:
+This project uses [pdm(1)](https://pdm.fming.dev/latest/). 
+If you are familiar with it - you know what to do. 
+Otherwise, below is a recommended way to get started.
 
 ```shell
-make init
-```
+# create a virtual environment in .venv
+pdm venv create /path/to/python3.11/bin/python
 
-The above command will create a ready to use python environment in `.env` dir.
+# install all dependencies
+pdm sync -G:all
+```
 
 Use `.env/bin/python3` to run executables and set it up as a python interpreter for your IDE.

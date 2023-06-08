@@ -6,16 +6,18 @@ from typing import Optional, AsyncIterator, Literal, Iterable, Coroutine
 from etha.ingest.model import Block, Log, Receipt, DebugFrame, DebugFrameResult, \
     DebugStateDiffResult, TraceTransactionReplay, Transaction
 from etha.ingest.rpc import RpcClient
-from etha.ingest.util import short_hash, qty2int, get_tx_status_from_traces
+from etha.ingest.util import short_hash, qty2int, get_tx_status_from_traces, logs_bloom
 
 
 LOG = logging.getLogger(__name__)
+MOONRIVER_GENESIS = '0xce24348303f7a60c4d2d3c82adddf55ca57af89cd9e2cd4b863906ef53b89b3c'
 
 
 class Ingest:
     def __init__(
         self,
         rpc: RpcClient,
+        genesis_hash: str,
         finality_offset: int = 10,
         from_block: int = 0,
         to_block: Optional[int] = None,
@@ -25,9 +27,11 @@ class Ingest:
         with_statediffs: bool = False,
         use_trace_api: bool = False,
         use_debug_api_for_statediffs: bool = False,
-        arbitrum: bool = False
+        arbitrum: bool = False,
+        polygon: bool = False,
     ):
         self._rpc = rpc
+        self._genesis_hash = genesis_hash
         self._finality_offset = finality_offset
         self._with_receipts = with_receipts
         self._with_traces = with_traces
@@ -35,15 +39,17 @@ class Ingest:
         self._use_trace_api = use_trace_api
         self._use_debug_api_for_statediffs = use_debug_api_for_statediffs
         self._arbitrum = arbitrum
+        self._polygon = polygon
         self._last_hash = last_hash
         self._height = from_block - 1
         self._end = to_block
         self._chain_height = 0
         self._strides = []
         self._stride_size = 20
+        self._closed = False
 
     async def loop(self) -> AsyncIterator[list[Block]]:
-        while not self._is_finished() or len(self._strides):
+        while not self._closed and not self._is_finished() or len(self._strides):
             try:
                 stride = self._strides.pop(0)
             except IndexError:
@@ -54,6 +60,10 @@ class Ingest:
                 self._validate_blocks(blocks)
                 self._schedule_strides()
                 yield blocks
+
+    def close(self):
+        self._closed = True
+        self._rpc.close()
 
     def _schedule_strides(self):
         while len(self._strides) < max(1, min(10, self._rpc.get_total_capacity())) \
@@ -172,14 +182,22 @@ class Ingest:
             priority=priority
         )
 
-        block_map = {}
+        tx_by_index: dict[str, dict[str, Transaction]] = {}
         for block in blocks:
-            block['logs_'] = []
-            block_map[block['hash']] = block
+            tx_by_index[block['hash']] = {tx['transactionIndex']: tx for tx in block['transactions']}
 
+        logs_by_hash: dict[str, list[Log]] = {}
         for log in logs:
-            block = block_map[log['blockHash']]
-            block['logs_'].append(log)
+            block_logs = logs_by_hash.setdefault(log['blockHash'], [])
+            tx = tx_by_index[log['blockHash']][log['transactionIndex']]
+            if self._polygon and _is_polygon_precompiled(tx):
+                continue
+            block_logs.append(log)
+
+        for block in blocks:
+            block_logs = logs_by_hash.get(block['hash'], [])
+            assert block['logsBloom'] == logs_bloom(block_logs)
+            block['logs_'] = block_logs
 
     async def _fetch_receipts(self, blocks: list[Block]) -> None:
         priority = qty2int(blocks[0]['number'])
@@ -193,11 +211,33 @@ class Ingest:
             priority=priority
         )
 
-        receipts_map = {
-            r['transactionHash']: r for r in receipts
-        }
+        receipts_map: dict[str, Receipt] = {}
+        logs_by_hash: dict[str, list[Log]] = {}
+        for r in receipts:
+            receipts_map[r['transactionHash']] = r
+            block_logs = logs_by_hash.setdefault(r['blockHash'], [])
+            for log in r['logs']:
+                block_logs.append(log)
 
         for block in blocks:
+            block_logs = logs_by_hash.get(block['hash'], [])
+
+            if self._genesis_hash == MOONRIVER_GENESIS and qty2int(block['number']) == 2077599:
+                block_logs = []
+                for tx in block['transactions']:
+                    receipt = receipts_map[tx['hash']]
+                    receipt['blockHash'] = block['hash']
+                    receipt['blockNumber'] = block['number']
+                    for log in receipt['logs']:
+                        log['blockHash'] = block['hash']
+                        log['blockNumber'] = block['number']
+                        block_logs.append(log)
+
+            if self._genesis_hash == MOONRIVER_GENESIS and qty2int(block['number']) == 2077600:
+                block['transactions'] = block['transactions'][23:]
+                assert len(block['transactions']) == 8
+
+            assert block['logsBloom'] == logs_bloom(block_logs)
             for tx in block['transactions']:
                 tx['receipt_'] = receipts_map[tx['hash']]
 
@@ -321,3 +361,8 @@ async def _run_subtasks(coros: Iterable[Coroutine]) -> None:
     subtasks = [asyncio.create_task(coro) for coro in coros]
     for task in subtasks:
         await task
+
+
+def _is_polygon_precompiled(tx: Transaction):
+    address = '0x0000000000000000000000000000000000000000'
+    return tx['from'] == address and tx['to'] == address

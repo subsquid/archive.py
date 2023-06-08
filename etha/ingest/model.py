@@ -99,7 +99,7 @@ DebugFrame = TypedDict('DebugFrame', {
     'output': Bytes,
     'error': NotRequired[str],
     'revertReason': NotRequired[str],
-    'calls': NotRequired[list['CallFrame']]
+    'calls': NotRequired[list['DebugFrame']]
 })
 
 
