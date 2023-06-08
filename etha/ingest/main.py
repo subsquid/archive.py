@@ -168,18 +168,6 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
-        '--arbitrum',
-        action='store_true',
-        help='set this flag when indexing Arbitrum One'
-    )
-
-    program.add_argument(
-        '--polygon',
-        action='store_true',
-        help='set this flag when indexing Polygon'
-    )
-
-    program.add_argument(
         '--write-chunk-size',
         metavar='MB',
         type=int,
