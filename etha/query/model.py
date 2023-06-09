@@ -134,6 +134,7 @@ class TraceRequest(TypedDict, total=False):
     rewardAuthor: list[str]
     transaction: bool
     subtraces: bool
+    parents: bool
 
 
 class StateDiffRequest(TypedDict, total=False):
@@ -196,6 +197,7 @@ class TraceRequestSchema(mm.Schema):
     rewardAuthor = mm.fields.List(mm.fields.Str())
     transaction = mm.fields.Boolean()
     subtraces = mm.fields.Boolean()
+    parents = mm.fields.Boolean()
 
 
 class StateDiffRequestSchema(mm.Schema):

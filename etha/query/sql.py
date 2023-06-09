@@ -237,7 +237,7 @@ class _SqlQueryBuilder:
         self.add_request_relation(
             table='traces',
             columns=['block_number', 'transaction_index', 'trace_address'],
-            relations=['transaction', 'subtraces'],
+            relations=['transaction', 'subtraces', 'parents'],
             where=self.trace_where
         )
 
@@ -257,6 +257,13 @@ class _SqlQueryBuilder:
                     join_condition='s.transaction_index = p.transaction_index AND '
                                    'len(s.trace_address) > len(p.trace_address) AND '
                                    's.trace_address[1:len(p.trace_address)] = p.trace_address'
+                ),
+                _Ref(
+                    table='traces',
+                    request_field='parents',
+                    join_condition='s.transaction_index = p.transaction_index AND '
+                                   'len(s.trace_address) < len(p.trace_address) AND '
+                                   's.trace_address = p.trace_address[1:len(s.trace_address)]'
                 )
             ],
             children=[]
