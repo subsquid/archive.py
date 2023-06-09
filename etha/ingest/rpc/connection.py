@@ -75,7 +75,6 @@ class RpcConnection:
         self.endpoint = endpoint
         self._online_callback = online_callback
         self._client = httpx.AsyncClient(
-            base_url=endpoint.url,
             timeout=httpx.Timeout(
                 connect=5,
                 write=5,
@@ -157,7 +156,7 @@ class RpcConnection:
     async def _perform_request(self, req_id: Any, request: Union[RpcRequest, BatchRpcRequest], timer: _Timer) -> Any:
         LOG.debug('rpc send', extra={**self._extra, 'rpc_req': req_id})
 
-        http_response = await self._client.post('/', json=request, headers={
+        http_response = await self._client.post(self.endpoint.url, json=request, headers={
             'accept': 'application/json',
             'accept-encoding': 'gzip, br',
             'content-type': 'application/json',
