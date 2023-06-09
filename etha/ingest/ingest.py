@@ -67,6 +67,7 @@ class Ingest:
         genesis_hash = genesis['hash']
         self._is_arbitrum_one = genesis_hash == '0x7ee576b35482195fc49205cec9af72ce14f003b9ae69f6ba0faef4514be8b442'
         self._is_moonriver = genesis_hash == '0xce24348303f7a60c4d2d3c82adddf55ca57af89cd9e2cd4b863906ef53b89b3c'
+        self._is_moonbase = genesis_hash == '0x33638dde636f9264b6472b9d976d58e757fe88badac53f204f3f530ecc5aacfa'
         self._is_polygon = genesis_hash == '0xa9c28ce2141b56c474f1dc504bee9b01eb1bd7d1a507580d5519d4437a97de1b'
 
     def _schedule_strides(self):
@@ -155,7 +156,11 @@ class Ingest:
                     yield self._fetch_trace_replay(block, self._trace_tracers)
                 else:
                     if self._with_traces:
-                        yield self._fetch_debug_call_trace(block)
+                        if self._is_moonbase and qty2int(block['number']) < 610936:
+                            # traces on moonbase aren't available before moonbase@400 runtime upgrade
+                            pass
+                        else:
+                            yield self._fetch_debug_call_trace(block)
                     if self._with_statediffs:
                         if self._use_debug_api_for_statediffs:
                             yield self._fetch_debug_state_diff(block)
