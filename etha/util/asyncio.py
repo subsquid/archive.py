@@ -30,7 +30,9 @@ async def monitor_service_tasks(tasks: list[asyncio.Task], log=LOG) -> None:
                 exception = task.exception() or Exception(f'task {task.get_name()} unexpectedly terminated')
 
     await teardown(reversed(tasks), log)
-    raise exception
+
+    if exception:
+        raise exception
 
 
 async def teardown(tasks: Iterable[asyncio.Task], log=LOG) -> None:
@@ -119,6 +121,6 @@ def run_async_program(main, *args, log=LOG):
         asyncio.run(run())
     except asyncio.CancelledError:
         sys.exit(1)
-    except:
-        log.exception('program crashed')
+    except Exception as ex:
+        log.critical('program crashed', exc_info=ex)
         sys.exit(1)
