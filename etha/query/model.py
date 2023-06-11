@@ -111,6 +111,9 @@ class FieldSelection(TypedDict, total=False):
 class LogRequest(TypedDict, total=False):
     address: list[str]
     topic0: list[str]
+    topic1: list[str]
+    topic2: list[str]
+    topic3: list[str]
     transaction: bool
 
 
@@ -174,6 +177,9 @@ class FieldSelectionSchema(mm.Schema):
 class LogRequestSchema(mm.Schema):
     address = mm.fields.List(mm.fields.Str())
     topic0 = mm.fields.List(mm.fields.Str())
+    topic1 = mm.fields.List(mm.fields.Str())
+    topic2 = mm.fields.List(mm.fields.Str())
+    topic3 = mm.fields.List(mm.fields.Str())
     transaction = mm.fields.Boolean()
 
 

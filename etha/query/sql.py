@@ -179,6 +179,9 @@ class _SqlQueryBuilder:
     def log_where(self, req: LogRequest) -> Iterable[WhereExp]:
         yield self.in_condition('address', req.get('address'))
         yield self.in_condition('topic0', req.get('topic0'))
+        yield self.in_condition('topic1', req.get('topic1'))
+        yield self.in_condition('topic2', req.get('topic2'))
+        yield self.in_condition('topic3', req.get('topic3'))
 
     def add_requested_logs(self) -> None:
         self.add_request_relation(
