@@ -220,11 +220,18 @@ class Ingest:
             priority=priority
         )
 
+        tx_by_index: dict[str, dict[str, Transaction]] = {}
+        for block in blocks:
+            tx_by_index[block['hash']] = {tx['transactionIndex']: tx for tx in block['transactions']}
+
         receipts_map: dict[str, Receipt] = {}
         logs_by_hash: dict[str, list[Log]] = {}
         for r in receipts:
             receipts_map[r['transactionHash']] = r
             block_logs = logs_by_hash.setdefault(r['blockHash'], [])
+            tx = tx_by_index[r['blockHash']][r['transactionIndex']]
+            if self._is_polygon and _is_polygon_precompiled(tx):
+                continue
             for log in r['logs']:
                 block_logs.append(log)
 
@@ -272,6 +279,8 @@ class Ingest:
             _fix_moonriver_2077600(block)
 
         transactions = block['transactions']
+        if self._is_polygon:
+            transactions = [tx for tx in transactions if not _is_polygon_precompiled(tx)]
         assert len(transactions) == len(traces)
         for tx, trace in zip(transactions, traces):
             if 'result' not in trace:
