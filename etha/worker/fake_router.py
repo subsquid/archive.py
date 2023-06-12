@@ -6,7 +6,7 @@ import falcon
 class PingResource:
     def on_post(self, req: falcon.Request, res: falcon.Response):
         res.media = {
-            's3://etha-mainnet': [(17090380, 17098719)]
+            's3://ethereum-mainnet': [(17090380, 17098719)]
         }
 
 
