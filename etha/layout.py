@@ -120,6 +120,12 @@ def get_last_chunk(fs: Fs, first_block: int = 0, last_block: int = math.inf) -> 
         return chunk
 
 
+def get_filelist(fs: Fs) -> list[str]:
+    for chunk in get_chunks(fs):
+        return fs.cd(chunk.path()).ls()
+    return []
+
+
 class ChunkWriter:
     def __init__(
             self,

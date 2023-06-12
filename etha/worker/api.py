@@ -5,6 +5,7 @@ import falcon.asgi as fa
 import marshmallow as mm
 
 from etha.query.model import Query, query_schema
+from etha.query.sql import DataIsNotAvailable
 from etha.worker.state.manager import StateManager
 from etha.worker.worker import QueryError, Worker
 
@@ -59,7 +60,7 @@ class QueryResource:
 
         try:
             res.text = await self._worker.execute_query(query, dataset)
-        except QueryError as e:
+        except (QueryError, DataIsNotAvailable) as e:
             raise falcon.HTTPBadRequest(description=str(e))
         except Exception as e:
             raise falcon.HTTPInternalServerError(description=str(e))

@@ -16,8 +16,8 @@ class VariableMap(TypedDict):
 
 
 class SqlQuery:
-    def __init__(self, q: Query):
-        builder = _SqlQueryBuilder(q)
+    def __init__(self, q: Query, filelist: list[str]):
+        builder = _SqlQueryBuilder(q, filelist)
         self.sql = builder.sql
         self.params = builder.params
         self._variables = builder.variables
@@ -50,8 +50,9 @@ class _Ref(NamedTuple):
 
 
 class _SqlQueryBuilder:
-    def __init__(self, q: Query, size_limit=1_000_000):
+    def __init__(self, q: Query, filelist: list[str], size_limit=1_000_000):
         self.q = q
+        self.filelist = filelist
         self.params = []
         self.variables = {}
         self.relations = {}
@@ -72,6 +73,9 @@ class _SqlQueryBuilder:
 
     def use_table(self, name: str) -> None:
         if name not in self.relations:
+            file = f'{name}.parquet'
+            if file not in self.filelist:
+                raise DataIsNotAvailable(f'{name} type of data is not supported by this archive')
             self.relations[name] = f'SELECT * FROM read_parquet({self.new_variable(name)})'
 
     def add_request_relation(self,
@@ -599,3 +603,7 @@ FROM selected_blocks AS b
             return Bin('=', col, self.new_param(variants[0]))
         else:
             return Bin('IN', col, f"(SELECT UNNEST({self.new_param(variants)}))")
+
+
+class DataIsNotAvailable(Exception):
+    pass

@@ -36,6 +36,9 @@ class Fs:
     def write_parquet(self, name: str, table, **kwargs):
         raise NotImplementedError()
 
+    def cd(self, *segments) -> 'Fs':
+        raise NotImplementedError()
+
 
 class LocalFs(Fs):
     def __init__(self, root: str):
@@ -97,8 +100,9 @@ class S3Fs(Fs):
         path = self._bucket
 
         for seg in segments:
+            assert seg and seg[-1] != '/'
             if seg.startswith('/'):
-                path = seg
+                path = seg[1:]
             else:
                 path += '/' + seg
 
@@ -132,6 +136,9 @@ class S3Fs(Fs):
     def open(self, loc: str, mode: str) -> IO:
         path = self._abs_path(loc)
         return self._s3.open(path, mode)
+
+    def cd(self, *segments) -> 'S3Fs':
+        return S3Fs(self._s3, self._abs_path(*segments))
 
 
 def create_fs(url: str, s3_endpoint: Optional[str] = os.environ.get('AWS_S3_ENDPOINT')) -> Fs:
