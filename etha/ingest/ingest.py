@@ -152,7 +152,6 @@ class Ingest:
                         )
                     elif bn >= 22207818:
                         yield self._fetch_debug_call_trace(block)
-                        yield self._fetch_debug_state_diff(block)
                 elif self._use_trace_api:
                     yield self._fetch_trace_replay(block, self._trace_tracers)
                 else:
