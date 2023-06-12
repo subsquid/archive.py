@@ -1,6 +1,13 @@
-# py-eth-archive
+# archive.py
 
-Subsquid archive for ethereum compatible chains.
+Stage 2 subsquid archive tools for ethereum compatible chains.
+
+## Disclaimer
+
+This project is under active development, has non-obvious usage requirements, 
+drastic changes are expected in the near future.
+
+We share it for the purpose of transparency and as a reference.
 
 ## Hacking
 
