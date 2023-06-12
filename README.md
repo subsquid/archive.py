@@ -1,6 +1,6 @@
 # archive.py
 
-Stage 2 subsquid archive tools for ethereum compatible chains.
+ArrowSquid archive tools for ethereum compatible chains.
 
 ## Disclaimer
 
