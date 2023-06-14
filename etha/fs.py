@@ -1,5 +1,6 @@
 import os
 import shutil
+import tempfile
 import urllib.parse
 from contextlib import AbstractContextManager, contextmanager
 from typing import Optional, IO
@@ -129,9 +130,15 @@ class S3Fs(Fs):
     def upload(self, local_src: str, dest: str):
         self._s3.upload(local_src, self._abs_path(dest), recursive=True)
 
-    def write_parquet(self, file: str, table, **kwargs):
-        path = self._abs_path(file)
-        pyarrow.parquet.write_table(table, path, filesystem=self._s3, **kwargs)
+    def write_parquet(self, dest: str, table, **kwargs):
+        # Save via temporary local file to work around - https://github.com/fsspec/s3fs/issues/749
+        tmp = tempfile.NamedTemporaryFile(delete=False)
+        try:
+            with tmp:
+                pyarrow.parquet.write_table(table, tmp, **kwargs)
+            self.upload(tmp.name, dest)
+        finally:
+            os.remove(tmp.name)
 
     def open(self, loc: str, mode: str) -> IO:
         path = self._abs_path(loc)
