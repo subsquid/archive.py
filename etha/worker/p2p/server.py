@@ -9,6 +9,7 @@ from json import JSONDecodeError
 from typing import AsyncIterator, Optional, Dict
 
 import grpc.aio
+from grpc import Compression
 from marshmallow import ValidationError
 
 from etha.query.model import query_schema
@@ -25,6 +26,8 @@ from etha.worker.transport import Transport
 from etha.worker.worker import Worker, QueryError
 
 LOG = logging.getLogger(__name__)
+
+MAX_MESSAGE_LENGTH = 20 * 1024 * 1024  # 20 MiB
 
 
 def state_to_proto(state: State) -> msg_pb.WorkerState:
@@ -250,8 +253,16 @@ async def _main():
     args = program.parse_args()
 
     sm = StateManager(data_dir=args.data_dir or os.getcwd())
-    async with grpc.aio.insecure_channel(args.proxy) as channel:
-        transport = P2PTransport(channel, args.router_id, send_metrics=(not args.no_metrics))
+    channel = grpc.aio.insecure_channel(
+        args.proxy,
+        compression=Compression.Gzip,
+        options=(
+            ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
+            ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH),
+        ),
+    )
+    async with channel as chan:
+        transport = P2PTransport(chan, args.router_id, send_metrics=(not args.no_metrics))
 
         with multiprocessing.Pool(processes=args.procs, initializer=init_child_process) as pool:
             worker = Worker(sm, pool, transport)
