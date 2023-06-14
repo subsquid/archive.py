@@ -19,13 +19,13 @@ ingest = [
     "prometheus-client==0.17.*",
 ]
 http-worker = [
-    "duckdb == 0.8.0",
+    "duckdb == 0.8.1",
     "falcon == 3.*",
     "httpx == 0.*",
     "uvicorn == 0.*"
 ]
 p2p-worker = [
-    "duckdb == 0.8.0",
+    "duckdb == 0.8.1",
     "grpcio == 1.*",
     "protobuf == 4.*"
 ]
