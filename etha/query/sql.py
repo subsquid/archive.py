@@ -75,7 +75,7 @@ class _SqlQueryBuilder:
         if name not in self.relations:
             file = f'{name}.parquet'
             if file not in self.filelist:
-                raise DataIsNotAvailable(f'{name} type of data is not supported by this archive')
+                raise DataIsNotAvailable(f'"{name}" data is not supported by this archive')
             self.relations[name] = f'SELECT * FROM read_parquet({self.new_variable(name)})'
 
     def add_request_relation(self,
