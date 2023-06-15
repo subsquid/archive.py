@@ -27,7 +27,8 @@ from etha.worker.worker import Worker, QueryError
 
 LOG = logging.getLogger(__name__)
 
-MAX_MESSAGE_LENGTH = 20 * 1024 * 1024  # 20 MiB
+# This is the maximum *decompressed* size of the message
+MAX_MESSAGE_LENGTH = 100 * 1024 * 1024  # 100 MiB
 
 
 def state_to_proto(state: State) -> msg_pb.WorkerState:
