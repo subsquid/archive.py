@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import gzip
 import hashlib
 import logging
 import multiprocessing
@@ -9,7 +10,6 @@ from json import JSONDecodeError
 from typing import AsyncIterator, Optional, Dict
 
 import grpc.aio
-from grpc import Compression
 from marshmallow import ValidationError
 
 from etha.query.model import query_schema
@@ -150,7 +150,7 @@ class P2PTransport(Transport):
         envelope = msg_pb.Envelope(
             query_result=msg_pb.QueryResult(
                 query_id=query.query_id,
-                ok_data=result_bytes
+                ok_data=gzip.compress(result_bytes),
             )
         )
         await self._send(envelope, peer_id=query_info.client_id)
@@ -256,7 +256,6 @@ async def _main():
     sm = StateManager(data_dir=args.data_dir or os.getcwd())
     channel = grpc.aio.insecure_channel(
         args.proxy,
-        compression=Compression.Gzip,
         options=(
             ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
             ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH),
