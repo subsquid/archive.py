@@ -41,6 +41,7 @@ class Ingest:
         self._running = False
         self._is_arbitrum_one = False
         self._is_moonriver = False
+        self._is_moonbase = False
         self._is_polygon = False
 
     async def loop(self) -> AsyncIterator[list[Block]]:
@@ -123,6 +124,11 @@ class Ingest:
             priority=from_block
         )
 
+        if self._is_moonbase:
+            for block in blocks:
+                if qty2int(block['number']) == 2285348:
+                    _fix_moonbase_2285348(block)
+
         await _run_subtasks(self._stride_subtasks(blocks))
 
         if self._with_traces and not self._with_receipts:
@@ -198,9 +204,16 @@ class Ingest:
         logs_by_hash: dict[str, list[Log]] = {}
         for log in logs:
             block_logs = logs_by_hash.setdefault(log['blockHash'], [])
-            tx = tx_by_index[log['blockHash']][log['transactionIndex']]
+            tx = tx_by_index[log['blockHash']].get(log['transactionIndex'])
+
+            if self._is_moonbase and tx is None and qty2int(log['blockNumber']) == 2285348:
+                continue
+
+            assert tx is not None
+
             if self._is_polygon and _is_polygon_precompiled(tx):
                 continue
+
             block_logs.append(log)
 
         for block in blocks:
@@ -228,10 +241,18 @@ class Ingest:
         logs_by_hash: dict[str, list[Log]] = {}
         for r in receipts:
             receipts_map[r['transactionHash']] = r
-            block_logs = logs_by_hash.setdefault(r['blockHash'], [])
-            tx = tx_by_index[r['blockHash']][r['transactionIndex']]
+            tx = tx_by_index[r['blockHash']].get(r['transactionIndex'])
+
+            if self._is_moonbase and tx is None and qty2int(r['blockNumber']) == 2285348:
+                _fix_moonbase_2285348_receipt(r)
+                tx = tx_by_index[r['blockHash']].get(r['transactionIndex'])
+
+            assert tx is not None
+
             if self._is_polygon and _is_polygon_precompiled(tx):
                 continue
+
+            block_logs = logs_by_hash.setdefault(r['blockHash'], [])
             for log in r['logs']:
                 block_logs.append(log)
 
@@ -388,3 +409,16 @@ def _fix_moonriver_2077600(block: Block):
     else:
         # transactions were already cut in a different method
         assert len(block['transactions']) == 8
+
+
+def _fix_moonbase_2285348(block: Block):
+    assert len(block['transactions']) == 13
+    block['transactions'] = block['transactions'][6:]
+
+
+def _fix_moonbase_2285348_receipt(receipt: Receipt):
+    receipt['blockNumber'] = hex(2285347)
+    receipt['blockHash'] = '0x1839f342b4e0163e747e67705b4a7590067ce338bee8f6ea07a24a62aa5b3831'
+    for log in receipt['logs']:
+        log['blockNumber'] = hex(2285347)
+        log['blockHash'] = '0x1839f342b4e0163e747e67705b4a7590067ce338bee8f6ea07a24a62aa5b3831'
