@@ -20,7 +20,13 @@ def execute_query(dataset_dir: str, data_range: Range, q: Query) -> str:
         size = 0
 
         for chunk in get_chunks(LocalFs(dataset_dir), first_block=first_block, last_block=last_block):
-            for row in runner.visit(chunk):
+            try:
+                rows = runner.visit(chunk)
+            except Exception as e:
+                e.add_note(f'data chunk: ${chunk.path()}')
+                raise e
+
+            for row in rows:
                 line = row.as_py()
                 yield line
                 size += len(line)
