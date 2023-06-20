@@ -616,6 +616,7 @@ FROM selected_blocks AS b
 
 
 def _trace_topic_projection(prefix: str, topic: str, topic_fields: list[str]) -> str:
+    assert topic_fields
     components = []
     for f in topic_fields:
         alias = remove_camel_prefix(f, topic)
@@ -625,7 +626,10 @@ def _trace_topic_projection(prefix: str, topic: str, topic_fields: list[str]) ->
             "'{}'::json ELSE "
             f"json_object('{alias}', {ref}) END"
         )
-    return f'json_merge_patch({", ".join(components)})'
+    if len(components) == 1:
+        return components[0]
+    else:
+        return f'json_merge_patch({", ".join(components)})'
 
 
 

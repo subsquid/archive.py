@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 import falcon
@@ -8,6 +9,9 @@ from etha.query.model import Query, query_schema
 from etha.query.sql import DataIsNotAvailable
 from etha.worker.state.manager import StateManager
 from etha.worker.worker import QueryError, Worker
+
+
+LOG = logging.getLogger(__name__)
 
 
 def max_body(limit: int):
@@ -63,6 +67,7 @@ class QueryResource:
         except (QueryError, DataIsNotAvailable) as e:
             raise falcon.HTTPBadRequest(description=str(e))
         except Exception as e:
+            LOG.exception('server error')
             raise falcon.HTTPInternalServerError(description=str(e))
 
         res.content_type = 'application/json'
