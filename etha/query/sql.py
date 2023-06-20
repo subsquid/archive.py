@@ -292,7 +292,15 @@ class _SqlQueryBuilder:
         suicide_fields = [f for f in fields if f.startswith('suicide')]
         reward_fields = [f for f in fields if f.startswith('reward')]
 
-        all_action_fields = set(chain(create_action_fields, call_action_fields, suicide_fields, reward_fields))
+        all_action_fields = set(chain(
+            create_result_fields,
+            create_action_fields,
+            call_result_fields,
+            call_action_fields,
+            suicide_fields,
+            reward_fields
+        ))
+
         rest_fields = [f for f in fields if f not in all_action_fields]
 
         topics = []
@@ -312,20 +320,14 @@ class _SqlQueryBuilder:
         if topics:
             cases = []
 
-            def topic_projection(_topic: str, _topic_fields: list[str]) -> str:
-                return json_project(
-                    (remove_camel_prefix(f, _topic), f'{prefix}{to_snake_case(f)}')
-                    for f in _topic_fields
-                )
-
             for topic, action_fields, result_fields in topics:
                 ext = []
 
                 if action_fields:
-                    ext.append(('action', topic_projection(topic, action_fields)))
+                    ext.append(('action', _trace_topic_projection(prefix, topic, action_fields)))
 
                 if result_fields:
-                    ext.append(('result', topic_projection(f'{topic}Result', result_fields)))
+                    ext.append(('result', _trace_topic_projection(prefix, f'{topic}Result', result_fields)))
 
                 proj = chain(rest_fields, ext)
 
@@ -334,7 +336,15 @@ class _SqlQueryBuilder:
                 )
 
             when_exps = ' '.join(cases)
-            return f'CASE {when_exps} ELSE {json_project(rest_fields, prefix)} END'
+            exp = f'CASE {when_exps} ELSE {json_project(rest_fields, prefix)} END'
+            if create_result_fields or call_result_fields:
+                return f"list_transform([{exp}], o -> " \
+                       "CASE len(json_keys(o, '$.result')) " \
+                       "WHEN 0 THEN json_merge_patch(o, '{\"result\": null}') " \
+                       "ELSE o END" \
+                       ")[1]"
+            else:
+                return exp
         else:
             return json_project(rest_fields, prefix)
 
@@ -603,6 +613,20 @@ FROM selected_blocks AS b
             return Bin('=', col, self.new_param(variants[0]))
         else:
             return Bin('IN', col, f"(SELECT UNNEST({self.new_param(variants)}))")
+
+
+def _trace_topic_projection(prefix: str, topic: str, topic_fields: list[str]) -> str:
+    components = []
+    for f in topic_fields:
+        alias = remove_camel_prefix(f, topic)
+        ref = f'{prefix}"{to_snake_case(f)}"'
+        components.append(
+            f"CASE WHEN {ref} is null THEN "
+            "'{}'::json ELSE "
+            f"json_object('{alias}', {ref}) END"
+        )
+    return f'json_merge_patch({", ".join(components)})'
+
 
 
 class DataIsNotAvailable(Exception):
