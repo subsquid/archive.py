@@ -4,7 +4,7 @@ from multiprocessing.pool import Pool
 
 from etha.query.model import Query
 from etha.util.asyncio import create_child_task, monitor_service_tasks
-from etha.worker.query import execute_query
+from etha.worker.query import execute_query, QueryResult
 from etha.worker.state.dataset import dataset_decode
 from etha.worker.state.manager import StateManager
 from etha.worker.transport import Transport
@@ -53,7 +53,7 @@ class Worker:
         except:
             LOG.exception('failed to send a pause ping')
 
-    async def execute_query(self, query: Query, dataset: str) -> str:
+    async def execute_query(self, query: Query, dataset: str, profiling: bool = False) -> QueryResult:
         try:
             dataset = dataset_decode(dataset)
         except ValueError:
@@ -69,7 +69,7 @@ class Worker:
             raise QueryError(f'data for block {first_block} is not available')
 
         with data_range_lock as data_range:
-            args = self._sm.get_dataset_dir(dataset), data_range, query
+            args = self._sm.get_dataset_dir(dataset), data_range, query, profiling
             loop = asyncio.get_event_loop()
             future = loop.create_future()
 

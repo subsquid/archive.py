@@ -1,3 +1,6 @@
+import tempfile
+from typing import Optional
+
 import duckdb
 import pyarrow
 
@@ -15,7 +18,19 @@ class QueryRunner:
         self._dataset_dir = dataset_dir
         self._query = SqlQuery(q, get_filelist(LocalFs(dataset_dir)))
 
-    def visit(self, chunk: DataChunk) -> pyarrow.ChunkedArray:
+    def visit(self, chunk: DataChunk, profiling: bool = False) -> (pyarrow.ChunkedArray, Optional[str]):
         self._query.set_chunk(self._dataset_dir, chunk)
-        CON.execute(self._query.sql, self._query.params)
-        return CON.fetch_arrow_table().column(0)
+
+        if profiling:
+            with tempfile.NamedTemporaryFile(mode='r', suffix='.json', delete=False) as profile_out:
+                CON.execute(f"PRAGMA enable_profiling='json'; PRAGMA profile_output='{profile_out.name}';")
+                CON.execute(self._query.sql, self._query.params)
+                result = CON.fetch_arrow_table().column(0)
+                CON.execute(f"PRAGMA disable_profiling;")
+                profile_json = profile_out.read()
+                return result, profile_json
+        else:
+            CON.execute(self._query.sql, self._query.params)
+            result = CON.fetch_arrow_table().column(0)
+            return result, None
+

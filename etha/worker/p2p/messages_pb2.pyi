@@ -7,10 +7,8 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Map
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Envelope(_message.Message):
-    __slots__ = ["dataset_state", "get_worker", "get_worker_result", "ping", "query", "query_executed", "query_finished", "query_result", "query_submitted", "state_update"]
+    __slots__ = ["dataset_state", "ping", "query", "query_executed", "query_finished", "query_result", "query_submitted", "state_update"]
     DATASET_STATE_FIELD_NUMBER: _ClassVar[int]
-    GET_WORKER_FIELD_NUMBER: _ClassVar[int]
-    GET_WORKER_RESULT_FIELD_NUMBER: _ClassVar[int]
     PING_FIELD_NUMBER: _ClassVar[int]
     QUERY_EXECUTED_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
@@ -19,8 +17,6 @@ class Envelope(_message.Message):
     QUERY_SUBMITTED_FIELD_NUMBER: _ClassVar[int]
     STATE_UPDATE_FIELD_NUMBER: _ClassVar[int]
     dataset_state: RangeSet
-    get_worker: GetWorker
-    get_worker_result: GetWorkerResult
     ping: Ping
     query: Query
     query_executed: QueryExecuted
@@ -28,35 +24,23 @@ class Envelope(_message.Message):
     query_result: QueryResult
     query_submitted: QuerySubmitted
     state_update: WorkerState
-    def __init__(self, ping: _Optional[_Union[Ping, _Mapping]] = ..., state_update: _Optional[_Union[WorkerState, _Mapping]] = ..., get_worker: _Optional[_Union[GetWorker, _Mapping]] = ..., get_worker_result: _Optional[_Union[GetWorkerResult, _Mapping]] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_result: _Optional[_Union[QueryResult, _Mapping]] = ..., dataset_state: _Optional[_Union[RangeSet, _Mapping]] = ..., query_submitted: _Optional[_Union[QuerySubmitted, _Mapping]] = ..., query_finished: _Optional[_Union[QueryFinished, _Mapping]] = ..., query_executed: _Optional[_Union[QueryExecuted, _Mapping]] = ...) -> None: ...
-
-class GetWorker(_message.Message):
-    __slots__ = ["dataset", "query_id", "start_block"]
-    DATASET_FIELD_NUMBER: _ClassVar[int]
-    QUERY_ID_FIELD_NUMBER: _ClassVar[int]
-    START_BLOCK_FIELD_NUMBER: _ClassVar[int]
-    dataset: str
-    query_id: str
-    start_block: int
-    def __init__(self, query_id: _Optional[str] = ..., dataset: _Optional[str] = ..., start_block: _Optional[int] = ...) -> None: ...
-
-class GetWorkerResult(_message.Message):
-    __slots__ = ["error", "query_id", "worker_id"]
-    ERROR_FIELD_NUMBER: _ClassVar[int]
-    QUERY_ID_FIELD_NUMBER: _ClassVar[int]
-    WORKER_ID_FIELD_NUMBER: _ClassVar[int]
-    error: str
-    query_id: str
-    worker_id: str
-    def __init__(self, query_id: _Optional[str] = ..., worker_id: _Optional[str] = ..., error: _Optional[str] = ...) -> None: ...
+    def __init__(self, ping: _Optional[_Union[Ping, _Mapping]] = ..., state_update: _Optional[_Union[WorkerState, _Mapping]] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_result: _Optional[_Union[QueryResult, _Mapping]] = ..., dataset_state: _Optional[_Union[RangeSet, _Mapping]] = ..., query_submitted: _Optional[_Union[QuerySubmitted, _Mapping]] = ..., query_finished: _Optional[_Union[QueryFinished, _Mapping]] = ..., query_executed: _Optional[_Union[QueryExecuted, _Mapping]] = ...) -> None: ...
 
 class InputAndOutput(_message.Message):
-    __slots__ = ["input", "output"]
-    INPUT_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ["num_read_chunks", "output"]
+    NUM_READ_CHUNKS_FIELD_NUMBER: _ClassVar[int]
     OUTPUT_FIELD_NUMBER: _ClassVar[int]
-    input: SizeAndHash
+    num_read_chunks: int
     output: SizeAndHash
-    def __init__(self, input: _Optional[_Union[SizeAndHash, _Mapping]] = ..., output: _Optional[_Union[SizeAndHash, _Mapping]] = ...) -> None: ...
+    def __init__(self, num_read_chunks: _Optional[int] = ..., output: _Optional[_Union[SizeAndHash, _Mapping]] = ...) -> None: ...
+
+class OkResult(_message.Message):
+    __slots__ = ["data", "exec_plan"]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    EXEC_PLAN_FIELD_NUMBER: _ClassVar[int]
+    data: bytes
+    exec_plan: bytes
+    def __init__(self, data: _Optional[bytes] = ..., exec_plan: _Optional[bytes] = ...) -> None: ...
 
 class Ping(_message.Message):
     __slots__ = ["pause", "state", "worker_id", "worker_url"]
@@ -71,14 +55,16 @@ class Ping(_message.Message):
     def __init__(self, worker_id: _Optional[str] = ..., worker_url: _Optional[str] = ..., state: _Optional[_Union[WorkerState, _Mapping]] = ..., pause: bool = ...) -> None: ...
 
 class Query(_message.Message):
-    __slots__ = ["dataset", "query", "query_id"]
+    __slots__ = ["dataset", "profiling", "query", "query_id"]
     DATASET_FIELD_NUMBER: _ClassVar[int]
+    PROFILING_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
     QUERY_ID_FIELD_NUMBER: _ClassVar[int]
     dataset: str
+    profiling: bool
     query: str
     query_id: str
-    def __init__(self, query_id: _Optional[str] = ..., dataset: _Optional[str] = ..., query: _Optional[str] = ...) -> None: ...
+    def __init__(self, query_id: _Optional[str] = ..., dataset: _Optional[str] = ..., query: _Optional[str] = ..., profiling: bool = ...) -> None: ...
 
 class QueryExecuted(_message.Message):
     __slots__ = ["bad_request", "client_id", "exec_time_ms", "ok", "query", "server_error"]
@@ -115,16 +101,16 @@ class QueryFinished(_message.Message):
     def __init__(self, query_id: _Optional[str] = ..., worker_id: _Optional[str] = ..., exec_time_ms: _Optional[int] = ..., ok: _Optional[_Union[SizeAndHash, _Mapping]] = ..., bad_request: _Optional[str] = ..., server_error: _Optional[str] = ..., timeout: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ...) -> None: ...
 
 class QueryResult(_message.Message):
-    __slots__ = ["bad_request", "ok_data", "query_id", "server_error"]
+    __slots__ = ["bad_request", "ok", "query_id", "server_error"]
     BAD_REQUEST_FIELD_NUMBER: _ClassVar[int]
-    OK_DATA_FIELD_NUMBER: _ClassVar[int]
+    OK_FIELD_NUMBER: _ClassVar[int]
     QUERY_ID_FIELD_NUMBER: _ClassVar[int]
     SERVER_ERROR_FIELD_NUMBER: _ClassVar[int]
     bad_request: str
-    ok_data: bytes
+    ok: OkResult
     query_id: str
     server_error: str
-    def __init__(self, query_id: _Optional[str] = ..., ok_data: _Optional[bytes] = ..., bad_request: _Optional[str] = ..., server_error: _Optional[str] = ...) -> None: ...
+    def __init__(self, query_id: _Optional[str] = ..., ok: _Optional[_Union[OkResult, _Mapping]] = ..., bad_request: _Optional[str] = ..., server_error: _Optional[str] = ...) -> None: ...
 
 class QuerySubmitted(_message.Message):
     __slots__ = ["query", "worker_id"]

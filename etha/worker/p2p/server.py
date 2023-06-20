@@ -18,6 +18,7 @@ from etha.util.child_proc import init_child_process
 from etha.worker.p2p import messages_pb2 as msg_pb
 from etha.worker.p2p.p2p_transport_pb2 import Message, Empty
 from etha.worker.p2p.p2p_transport_pb2_grpc import P2PTransportStub
+from etha.worker.query import QueryResult
 from etha.worker.state.controller import State
 from etha.worker.state.dataset import dataset_encode
 from etha.worker.state.intervals import to_range_set
@@ -138,7 +139,7 @@ class P2PTransport(Transport):
         while True:
             yield await self._query_tasks.get()
 
-    async def send_query_result(self, query: msg_pb.Query, result: str) -> None:
+    async def send_query_result(self, query: msg_pb.Query, result: QueryResult) -> None:
         try:
             query_info = self._query_info.pop(query.query_id)
         except KeyError:
@@ -146,11 +147,15 @@ class P2PTransport(Transport):
             return
         exec_time_ms = query_info.exec_time_ms
 
-        result_bytes = result.encode()
+        result_bytes = gzip.compress(result.result.encode())
+        exec_plan = gzip.compress(result.exec_plan.encode()) if result.exec_plan is not None else None
         envelope = msg_pb.Envelope(
             query_result=msg_pb.QueryResult(
                 query_id=query.query_id,
-                ok_data=gzip.compress(result_bytes),
+                ok=msg_pb.OkResult(
+                    data=result_bytes,
+                    exec_plan=exec_plan,
+                )
             )
         )
         await self._send(envelope, peer_id=query_info.client_id)
@@ -162,8 +167,8 @@ class P2PTransport(Transport):
                     query=query,
                     client_id=query_info.client_id,
                     ok=msg_pb.InputAndOutput(
+                        num_read_chunks=result.num_read_chunks,
                         output=hash_and_size(result_bytes),
-                        # TODO: Include size and hash of input data
                     ),
                     exec_time_ms=exec_time_ms,
                 )
@@ -211,7 +216,7 @@ async def run_queries(transport: P2PTransport, worker: Worker):
         async def task():
             try:
                 query = query_schema.loads(query_task.query)
-                result = await worker.execute_query(query, query_task.dataset)
+                result = await worker.execute_query(query, query_task.dataset, query_task.profiling)
                 LOG.info(f"Query {query_task.query_id} success")
                 await transport.send_query_result(query_task, result)
             except Exception as e:
