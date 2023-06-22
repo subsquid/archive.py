@@ -63,7 +63,8 @@ class QueryResource:
         query: Query = await get_json(req, query_schema)
 
         try:
-            res.text = await self._worker.execute_query(query, dataset)
+            query_result = await self._worker.execute_query(query, dataset)
+            res.text = query_result.result
         except (QueryError, DataIsNotAvailable) as e:
             raise falcon.HTTPBadRequest(description=str(e))
         except Exception as e:
