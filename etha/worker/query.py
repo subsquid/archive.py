@@ -30,7 +30,12 @@ def execute_query(dataset_dir: str, data_range: Range, q: Query, profiling: bool
         size = 0
 
         for chunk in get_chunks(LocalFs(dataset_dir), first_block=first_block, last_block=last_block):
-            rows, exec_plan = runner.visit(chunk, profiling=profiling)
+            try:
+                rows, exec_plan = runner.visit(chunk, profiling=profiling)
+            except Exception as e:
+                e.add_note(f'data chunk: ${chunk.path()}')
+                raise e
+
             if profiling:
                 exec_plans.append(exec_plan)
             num_read_chunks += 1

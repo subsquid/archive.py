@@ -17,6 +17,7 @@ class QueryRunner:
     def __init__(self, dataset_dir: str, q: Query):
         self._dataset_dir = dataset_dir
         self._query = SqlQuery(q, get_filelist(LocalFs(dataset_dir)))
+        # print(self._query.sql)
 
     def visit(self, chunk: DataChunk, profiling: bool = False) -> (pyarrow.ChunkedArray, Optional[str]):
         self._query.set_chunk(self._dataset_dir, chunk)
