@@ -7,6 +7,7 @@ from etha.ingest.model import Block, Log, Receipt, DebugFrame, DebugFrameResult,
     DebugStateDiffResult, TraceTransactionReplay, Transaction
 from etha.ingest.rpc import RpcClient
 from etha.ingest.util import qty2int, get_tx_status_from_traces, logs_bloom
+from etha.ingest.moonbase import fix_and_exclude_invalid_moonbase_blocks
 
 
 LOG = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ class Ingest:
         self._running = False
         self._is_arbitrum_one = False
         self._is_moonriver = False
+        self._is_moonbase = False
         self._is_polygon = False
 
     async def loop(self) -> AsyncIterator[list[Block]]:
@@ -135,6 +137,9 @@ class Ingest:
         return blocks
 
     def _stride_subtasks(self, blocks: list[Block]):
+        if self._is_moonbase:
+            blocks = fix_and_exclude_invalid_moonbase_blocks(blocks, self._with_receipts, self._with_traces)
+
         if self._with_receipts:
             yield self._fetch_receipts(blocks)
         else:
