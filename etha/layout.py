@@ -1,6 +1,8 @@
 import math
 import re
 from typing import Iterable, NamedTuple, Optional, Callable
+import asyncio
+import itertools
 
 from etha.fs import Fs
 
@@ -124,6 +126,23 @@ def get_filelist(fs: Fs) -> list[str]:
     for chunk in get_chunks(fs):
         return fs.cd(chunk.path()).ls()
     return []
+
+
+async def stream_chunks(fs: Fs, first_block: int = 0, last_block: int = math.inf):
+    while True:
+        chunks = get_chunks(fs, first_block, last_block)
+        chunk = next(chunks, None)
+
+        if chunk is None:
+            await asyncio.sleep(30)
+            continue
+
+        for chunk in itertools.chain([chunk], chunks):
+            if last_block < chunk.first_block:
+                return
+
+            first_block = min(chunk.last_block + 1, last_block)
+            yield chunk
 
 
 class ChunkWriter:
