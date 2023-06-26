@@ -3,8 +3,12 @@ import re
 from typing import Iterable, NamedTuple, Optional, Callable
 import asyncio
 import itertools
+import logging
 
 from etha.fs import Fs
+
+
+LOG = logging.getLogger(__name__)
 
 
 def _format_block(block_number: int):
@@ -134,7 +138,8 @@ async def stream_chunks(fs: Fs, first_block: int = 0, last_block: int = math.inf
         chunk = next(chunks, None)
 
         if chunk is None:
-            await asyncio.sleep(30)
+            LOG.info('no chunks were found. waiting 5 min for a new try')
+            await asyncio.sleep(5 * 60)
             continue
 
         for chunk in itertools.chain([chunk], chunks):
