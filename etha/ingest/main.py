@@ -1,5 +1,5 @@
-import asyncio
 import argparse
+import asyncio
 import concurrent.futures
 import gzip
 import json
@@ -21,7 +21,7 @@ from etha.ingest.rpc import RpcClient, RpcEndpoint
 from etha.ingest.tables import qty2int
 from etha.ingest.util import short_hash
 from etha.ingest.writer import ArrowBatchBuilder, ParquetWriter
-from etha.layout import ChunkWriter, stream_chunks
+from etha.layout import ChunkWriter, get_chunks, DataChunk
 from etha.util.asyncio import run_async_program
 from etha.util.counters import Progress
 
@@ -285,19 +285,33 @@ async def raw_ingest(src: str, first_block: int = 0, last_block: int = math.inf)
     fs = create_fs(src)
     loop = asyncio.get_event_loop()
 
-    def load_chunk(fs, chunk):
-        with fs.open(f'{chunk.path()}/blocks.jsonl.gz', 'rb') as f, gzip.open(f) as lines:
-            blocks = []
-            for line in lines:
-                block: Block = json.loads(line)
-                height = qty2int(block['number'])
-                if first_block <= height <= last_block:
-                    blocks.append(block)
-            return blocks
-
     async for chunk in stream_chunks(fs, first_block, last_block):
-        blocks = await loop.run_in_executor(None, load_chunk, fs, chunk)
+        blocks = await loop.run_in_executor(None, load_chunk, fs, chunk, first_block, last_block)
         yield blocks
+
+
+async def stream_chunks(fs: Fs, first_block: int = 0, last_block: int = math.inf) -> AsyncIterator[DataChunk]:
+    while first_block <= last_block:
+        pos = first_block
+
+        for chunk in get_chunks(fs, first_block=first_block, last_block=last_block):
+            yield chunk
+            first_block = chunk.last_block + 1
+
+        if pos == first_block:
+            LOG.info('no chunks were found. waiting 5 min for a new try')
+            await asyncio.sleep(5 * 60)
+
+
+def load_chunk(fs: Fs, chunk: DataChunk, first_block: int, last_block: int) -> list[Block]:
+    with fs.open(f'{chunk.path()}/blocks.jsonl.gz', 'rb') as f, gzip.open(f) as lines:
+        blocks = []
+        for line in lines:
+            block: Block = json.loads(line)
+            height = qty2int(block['number'])
+            if first_block <= height <= last_block:
+                blocks.append(block)
+        return blocks
 
 
 class Batch(NamedTuple):
