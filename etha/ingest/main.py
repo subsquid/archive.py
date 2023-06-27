@@ -1,3 +1,4 @@
+import asyncio
 import argparse
 import concurrent.futures
 import gzip
@@ -20,7 +21,7 @@ from etha.ingest.rpc import RpcClient, RpcEndpoint
 from etha.ingest.tables import qty2int
 from etha.ingest.util import short_hash
 from etha.ingest.writer import ArrowBatchBuilder, ParquetWriter
-from etha.layout import ChunkWriter, get_chunks
+from etha.layout import ChunkWriter, stream_chunks
 from etha.util.asyncio import run_async_program
 from etha.util.counters import Progress
 
@@ -248,35 +249,13 @@ async def run(args):
             metrics.add_rpc_metrics(rpc)
         metrics.serve(args.prom_port)
 
-    ingest_chain = []
-
     if args.raw_src:
-        ingest_chain.append(lambda f, l: raw_ingest(args.raw_src, first_block=f, last_block=l))
+        strides = raw_ingest(args.raw_src, write_service.next_block(), write_service.last_block())
+    else:
+        assert rpc, 'no endpoints were specified'
+        strides = rpc_ingest(args, rpc, write_service.next_block(), write_service.last_block())
 
-    if rpc:
-        ingest_chain.append(lambda f, l: rpc_ingest(args, rpc, first_block=f, last_block=l))
-
-    await write_service.write(
-        run_ingestion_chain(
-            ingest_chain,
-            write_service.next_block(),
-            write_service.last_block()
-        )
-    )
-
-
-async def run_ingestion_chain(
-        chain: list[Callable[[int, int], AsyncIterator[list[Block]]]],
-        first_block: int,
-        last_block: int
-) -> AsyncIterator[list[Block]]:
-    for ingest in chain:
-        if first_block > last_block:
-            return
-
-        async for blocks in ingest(first_block, last_block):
-            first_block = qty2int(blocks[-1]['number']) + 1
-            yield blocks
+    await write_service.write(strides)
 
 
 async def rpc_ingest(args, rpc: RpcClient, first_block: int, last_block: int | None = None) -> AsyncIterator[list[Block]]:
@@ -304,13 +283,21 @@ async def rpc_ingest(args, rpc: RpcClient, first_block: int, last_block: int | N
 async def raw_ingest(src: str, first_block: int = 0, last_block: int = math.inf) -> AsyncIterator[list[Block]]:
     LOG.info(f'ingesting pre-fetched data from {src}')
     fs = create_fs(src)
-    for chunk in get_chunks(fs, first_block=first_block, last_block=last_block):
+    loop = asyncio.get_event_loop()
+
+    def load_chunk(fs, chunk):
         with fs.open(f'{chunk.path()}/blocks.jsonl.gz', 'rb') as f, gzip.open(f) as lines:
+            blocks = []
             for line in lines:
                 block: Block = json.loads(line)
                 height = qty2int(block['number'])
                 if first_block <= height <= last_block:
-                    yield [block]
+                    blocks.append(block)
+            return blocks
+
+    async for chunk in stream_chunks(fs, first_block, last_block):
+        blocks = await loop.run_in_executor(None, load_chunk, fs, chunk)
+        yield blocks
 
 
 class Batch(NamedTuple):

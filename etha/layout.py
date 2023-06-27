@@ -1,8 +1,14 @@
 import math
 import re
 from typing import Iterable, NamedTuple, Optional, Callable
+import asyncio
+import itertools
+import logging
 
 from etha.fs import Fs
+
+
+LOG = logging.getLogger(__name__)
 
 
 def _format_block(block_number: int):
@@ -124,6 +130,24 @@ def get_filelist(fs: Fs) -> list[str]:
     for chunk in get_chunks(fs):
         return fs.cd(chunk.path()).ls()
     return []
+
+
+async def stream_chunks(fs: Fs, first_block: int = 0, last_block: int = math.inf):
+    while True:
+        chunks = get_chunks(fs, first_block, last_block)
+        chunk = next(chunks, None)
+
+        if chunk is None:
+            LOG.info('no chunks were found. waiting 5 min for a new try')
+            await asyncio.sleep(5 * 60)
+            continue
+
+        for chunk in itertools.chain([chunk], chunks):
+            if last_block < chunk.first_block:
+                return
+
+            first_block = min(chunk.last_block + 1, last_block)
+            yield chunk
 
 
 class ChunkWriter:
