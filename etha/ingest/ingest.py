@@ -234,9 +234,15 @@ class Ingest:
         for r in receipts:
             receipts_map[r['transactionHash']] = r
             block_logs = logs_by_hash.setdefault(r['blockHash'], [])
+
+            if self._is_moonbase and r['transactionHash'] == '0x48ad1dca229ffc5a418143b003a79dbc11be0d379a3339ee9da9c887e6584283':
+                continue
+
             tx = tx_by_index[r['blockHash']][r['transactionIndex']]
+
             if self._is_polygon and _is_polygon_precompiled(tx):
                 continue
+
             for log in r['logs']:
                 block_logs.append(log)
 
@@ -250,6 +256,8 @@ class Ingest:
             block_logs = logs_by_hash.get(block['hash'], [])
             assert block['logsBloom'] == logs_bloom(block_logs)
             for tx in block['transactions']:
+                if self._is_moonbase and tx['hash'] == '0x48ad1dca229ffc5a418143b003a79dbc11be0d379a3339ee9da9c887e6584283' and block['number'] == hex(2529846):
+                    continue
                 tx['receipt_'] = receipts_map[tx['hash']]
 
     async def _fetch_single_tx_receipt(self, tx: Transaction) -> None:
@@ -286,6 +294,8 @@ class Ingest:
         transactions = block['transactions']
         if self._is_polygon:
             transactions = [tx for tx in transactions if not _is_polygon_precompiled(tx)]
+        if self._is_moonbase and (block['number'] == hex(2529846) or block['number'] == hex(2529877)):
+            transactions = [tx for tx in transactions if tx['hash'] != '0x48ad1dca229ffc5a418143b003a79dbc11be0d379a3339ee9da9c887e6584283']
         assert len(transactions) == len(traces)
         for tx, trace in zip(transactions, traces):
             if 'result' not in trace:
