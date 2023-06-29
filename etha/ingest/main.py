@@ -250,6 +250,7 @@ async def run(args):
         metrics.serve(args.prom_port)
 
     if args.raw_src:
+        assert not args.raw, '--raw and --raw-src are mutually excluded args'
         strides = raw_ingest(args.raw_src, write_service.next_block(), write_service.last_block())
     else:
         assert rpc, 'no endpoints were specified'
