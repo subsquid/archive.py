@@ -62,8 +62,9 @@ class ArrowBatchBuilder:
                 self.log_table.append(log)
         else:
             for tx in block['transactions']:
-                for log in tx['receipt_']['logs']:
-                    self.log_table.append(log)
+                if receipt := tx.get('receipt_'):
+                    for log in receipt['logs']:
+                        self.log_table.append(log)
 
     def build(self) -> ArrowDataBatch:
         bytesize = self.buffered_bytes()
