@@ -229,7 +229,7 @@ class TraceTableBuilder(TableBuilderBase):
                 self.create_from.append(action['from'])
                 self.create_value.append(action['value'])
                 self.create_gas.append(action['gas'])
-                self.create_init.append(action['init'])
+                self.create_init.append(action.get('init'))
                 if result := rec.get('result'):
                     self.create_result_gas_used.append(result['gasUsed'])
                     self.create_result_code.append(result['code'])
