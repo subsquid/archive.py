@@ -261,6 +261,8 @@ class Ingest:
             for tx in block['transactions']:
                 if self._is_moonbase and tx['hash'] == '0x48ad1dca229ffc5a418143b003a79dbc11be0d379a3339ee9da9c887e6584283' and block['number'] == hex(2529846):
                     continue
+                if self._is_arbitrum_one and tx['hash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800' and block['number'] == hex(4527955):
+                    continue
                 tx['receipt_'] = receipts_map[tx['hash']]
 
     async def _fetch_single_tx_receipt(self, tx: Transaction) -> None:
