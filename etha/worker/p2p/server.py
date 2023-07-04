@@ -233,12 +233,12 @@ async def _main():
         '--proxy',
         metavar='URL',
         default='localhost:50051',
-        help='URL of the P2P proxy service to connect to'
+        help='URL of the P2P proxy (subsquid network rpc node) to connect to'
     )
     program.add_argument(
-        '--router-id',
+        '--scheduler-id',
         required=True,
-        help='Peer ID of the router'
+        help='Peer ID of the scheduler'
     )
     program.add_argument(
         '--data-dir',
