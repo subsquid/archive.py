@@ -44,6 +44,7 @@ class Ingest:
         self._is_moonriver = False
         self._is_moonbase = False
         self._is_polygon = False
+        self._is_polygon_testnet = False
 
     async def loop(self) -> AsyncIterator[list[Block]]:
         assert not self._running
@@ -71,6 +72,7 @@ class Ingest:
         self._is_moonriver = genesis_hash == '0xce24348303f7a60c4d2d3c82adddf55ca57af89cd9e2cd4b863906ef53b89b3c'
         self._is_moonbase = genesis_hash == '0x33638dde636f9264b6472b9d976d58e757fe88badac53f204f3f530ecc5aacfa'
         self._is_polygon = genesis_hash == '0xa9c28ce2141b56c474f1dc504bee9b01eb1bd7d1a507580d5519d4437a97de1b'
+        self._is_polygon_testnet = genesis_hash == '0x7b66506a9ebdbf30d32b43c5f15a3b1216269a1ec3a75aa3182b86176a2b1ca7'
 
     def _schedule_strides(self):
         while len(self._strides) < max(1, min(10, self._rpc.get_total_capacity())) \
@@ -243,7 +245,7 @@ class Ingest:
 
             tx = tx_by_index[r['blockHash']][r['transactionIndex']]
 
-            if self._is_polygon and _is_polygon_precompiled(tx):
+            if (self._is_polygon or self._is_polygon_testnet) and _is_polygon_precompiled(tx):
                 continue
 
             for log in r['logs']:
@@ -297,7 +299,7 @@ class Ingest:
             _fix_moonriver_2077600(block)
 
         transactions = block['transactions']
-        if self._is_polygon:
+        if self._is_polygon or self._is_polygon_testnet:
             transactions = [tx for tx in transactions if not _is_polygon_precompiled(tx)]
         if self._is_moonbase and (block['number'] == hex(2529846) or block['number'] == hex(2529877)):
             transactions = [tx for tx in transactions if tx['hash'] != '0x48ad1dca229ffc5a418143b003a79dbc11be0d379a3339ee9da9c887e6584283']
