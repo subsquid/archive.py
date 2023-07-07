@@ -116,12 +116,13 @@ class P2PTransport(Transport):
         )
         await self._transport.SendMessage(msg)
 
-    async def send_ping(self, range_set: State, pause=False) -> None:
+    async def send_ping(self, state: State, stored_bytes: int, pause=False) -> None:
         if self._local_peer_id is None:
             await self.initialize()
         envelope = msg_pb.Envelope(ping=msg_pb.Ping(
             worker_id=self._local_peer_id,
-            state=state_to_proto(range_set)
+            state=state_to_proto(state),
+            stored_bytes=stored_bytes
         ))
         await self._send(envelope, peer_id=self._scheduler_id)
 

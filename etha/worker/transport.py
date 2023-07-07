@@ -7,7 +7,7 @@ from etha.worker.state.controller import State
 class Transport(abc.ABC):
 
     @abc.abstractmethod
-    async def send_ping(self, state: State, pause=False) -> None:
+    async def send_ping(self, state: State, stored_bytes: int, pause=False) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod

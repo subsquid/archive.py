@@ -14,7 +14,8 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0emessages.proto\x12\x08messages\x1a\x1bgoogle/protobuf/empty.proto\"\xf9\x02\n\x08\x45nvelope\x12\x1e\n\x04ping\x18\x01 \x01(\x0b\x32\x0e.messages.PingH\x00\x12-\n\x0cstate_update\x18\x02 \x01(\x0b\x32\x15.messages.WorkerStateH\x00\x12 \n\x05query\x18\x05 \x01(\x0b\x32\x0f.messages.QueryH\x00\x12-\n\x0cquery_result\x18\x06 \x01(\x0b\x32\x15.messages.QueryResultH\x00\x12+\n\rdataset_state\x18\x07 \x01(\x0b\x32\x12.messages.RangeSetH\x00\x12\x33\n\x0fquery_submitted\x18\x08 \x01(\x0b\x32\x18.messages.QuerySubmittedH\x00\x12\x31\n\x0equery_finished\x18\t \x01(\x0b\x32\x17.messages.QueryFinishedH\x00\x12\x31\n\x0equery_executed\x18\n \x01(\x0b\x32\x17.messages.QueryExecutedH\x00\x42\x05\n\x03msg\"#\n\x05Range\x12\r\n\x05\x62\x65gin\x18\x01 \x01(\r\x12\x0b\n\x03\x65nd\x18\x02 \x01(\r\"+\n\x08RangeSet\x12\x1f\n\x06ranges\x18\x01 \x03(\x0b\x32\x0f.messages.Range\"\x89\x01\n\x0bWorkerState\x12\x35\n\x08\x64\x61tasets\x18\x01 \x03(\x0b\x32#.messages.WorkerState.DatasetsEntry\x1a\x43\n\rDatasetsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12!\n\x05value\x18\x02 \x01(\x0b\x32\x12.messages.RangeSet:\x02\x38\x01\"b\n\x04Ping\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x12\n\nworker_url\x18\x02 \x01(\t\x12$\n\x05state\x18\x03 \x01(\x0b\x32\x15.messages.WorkerState\x12\r\n\x05pause\x18\x04 \x01(\x08\"L\n\x05Query\x12\x10\n\x08query_id\x18\x01 \x01(\t\x12\x0f\n\x07\x64\x61taset\x18\x02 \x01(\t\x12\r\n\x05query\x18\x03 \x01(\t\x12\x11\n\tprofiling\x18\x04 \x01(\x08\"z\n\x0bQueryResult\x12\x10\n\x08query_id\x18\x01 \x01(\t\x12 \n\x02ok\x18\x02 \x01(\x0b\x32\x12.messages.OkResultH\x00\x12\x15\n\x0b\x62\x61\x64_request\x18\x03 \x01(\tH\x00\x12\x16\n\x0cserver_error\x18\x04 \x01(\tH\x00\x42\x08\n\x06result\">\n\x08OkResult\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x12\x16\n\texec_plan\x18\x02 \x01(\x0cH\x00\x88\x01\x01\x42\x0c\n\n_exec_plan\"C\n\x0eQuerySubmitted\x12\x1e\n\x05query\x18\x01 \x01(\x0b\x32\x0f.messages.Query\x12\x11\n\tworker_id\x18\x02 \x01(\t\"\xd3\x01\n\rQueryFinished\x12\x10\n\x08query_id\x18\x01 \x01(\t\x12\x11\n\tworker_id\x18\x02 \x01(\t\x12\x14\n\x0c\x65xec_time_ms\x18\x03 \x01(\r\x12#\n\x02ok\x18\x04 \x01(\x0b\x32\x15.messages.SizeAndHashH\x00\x12\x15\n\x0b\x62\x61\x64_request\x18\x05 \x01(\tH\x00\x12\x16\n\x0cserver_error\x18\x06 \x01(\tH\x00\x12)\n\x07timeout\x18\x07 \x01(\x0b\x32\x16.google.protobuf.EmptyH\x00\x42\x08\n\x06result\"\xb9\x01\n\rQueryExecuted\x12\x1e\n\x05query\x18\x01 \x01(\x0b\x32\x0f.messages.Query\x12\x11\n\tclient_id\x18\x02 \x01(\t\x12\x14\n\x0c\x65xec_time_ms\x18\x03 \x01(\r\x12&\n\x02ok\x18\x04 \x01(\x0b\x32\x18.messages.InputAndOutputH\x00\x12\x15\n\x0b\x62\x61\x64_request\x18\x05 \x01(\tH\x00\x12\x16\n\x0cserver_error\x18\x06 \x01(\tH\x00\x42\x08\n\x06result\"P\n\x0eInputAndOutput\x12\x17\n\x0fnum_read_chunks\x18\x01 \x01(\r\x12%\n\x06output\x18\x02 \x01(\x0b\x32\x15.messages.SizeAndHash\"-\n\x0bSizeAndHash\x12\x0c\n\x04size\x18\x01 \x01(\r\x12\x10\n\x08sha3_256\x18\x02 \x01(\x0c\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+  b'\n\x0emessages.proto\x12\x08messages\x1a\x1bgoogle/protobuf/empty.proto\"\xf9\x02\n\x08\x45nvelope\x12\x1e\n\x04ping\x18\x01 \x01(\x0b\x32\x0e.messages.PingH\x00\x12-\n\x0cstate_update\x18\x02 \x01(\x0b\x32\x15.messages.WorkerStateH\x00\x12 \n\x05query\x18\x05 \x01(\x0b\x32\x0f.messages.QueryH\x00\x12-\n\x0cquery_result\x18\x06 \x01(\x0b\x32\x15.messages.QueryResultH\x00\x12+\n\rdataset_state\x18\x07 \x01(\x0b\x32\x12.messages.RangeSetH\x00\x12\x33\n\x0fquery_submitted\x18\x08 \x01(\x0b\x32\x18.messages.QuerySubmittedH\x00\x12\x31\n\x0equery_finished\x18\t \x01(\x0b\x32\x17.messages.QueryFinishedH\x00\x12\x31\n\x0equery_executed\x18\n \x01(\x0b\x32\x17.messages.QueryExecutedH\x00\x42\x05\n\x03msg\"#\n\x05Range\x12\r\n\x05\x62\x65gin\x18\x01 \x01(\r\x12\x0b\n\x03\x65nd\x18\x02 \x01(\r\"+\n\x08RangeSet\x12\x1f\n\x06ranges\x18\x01 \x03(\x0b\x32\x0f.messages.Range\"\x89\x01\n\x0bWorkerState\x12\x35\n\x08\x64\x61tasets\x18\x01 \x03(\x0b\x32#.messages.WorkerState.DatasetsEntry\x1a\x43\n\rDatasetsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12!\n\x05value\x18\x02 \x01(\x0b\x32\x12.messages.RangeSet:\x02\x38\x01\"x\n\x04Ping\x12\x11\n\tworker_id\x18\x01 \x01(\t\x12\x12\n\nworker_url\x18\x02 \x01(\t\x12$\n\x05state\x18\x03 \x01(\x0b\x32\x15.messages.WorkerState\x12\r\n\x05pause\x18\x04 \x01(\x08\x12\x14\n\x0cstored_bytes\x18\x05 \x01(\x04\"L\n\x05Query\x12\x10\n\x08query_id\x18\x01 \x01(\t\x12\x0f\n\x07\x64\x61taset\x18\x02 \x01(\t\x12\r\n\x05query\x18\x03 \x01(\t\x12\x11\n\tprofiling\x18\x04 \x01(\x08\"z\n\x0bQueryResult\x12\x10\n\x08query_id\x18\x01 \x01(\t\x12 \n\x02ok\x18\x02 \x01(\x0b\x32\x12.messages.OkResultH\x00\x12\x15\n\x0b\x62\x61\x64_request\x18\x03 \x01(\tH\x00\x12\x16\n\x0cserver_error\x18\x04 \x01(\tH\x00\x42\x08\n\x06result\">\n\x08OkResult\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x12\x16\n\texec_plan\x18\x02 \x01(\x0cH\x00\x88\x01\x01\x42\x0c\n\n_exec_plan\"C\n\x0eQuerySubmitted\x12\x1e\n\x05query\x18\x01 \x01(\x0b\x32\x0f.messages.Query\x12\x11\n\tworker_id\x18\x02 \x01(\t\"\xd3\x01\n\rQueryFinished\x12\x10\n\x08query_id\x18\x01 \x01(\t\x12\x11\n\tworker_id\x18\x02 \x01(\t\x12\x14\n\x0c\x65xec_time_ms\x18\x03 \x01(\r\x12#\n\x02ok\x18\x04 \x01(\x0b\x32\x15.messages.SizeAndHashH\x00\x12\x15\n\x0b\x62\x61\x64_request\x18\x05 \x01(\tH\x00\x12\x16\n\x0cserver_error\x18\x06 \x01(\tH\x00\x12)\n\x07timeout\x18\x07 \x01(\x0b\x32\x16.google.protobuf.EmptyH\x00\x42\x08\n\x06result\"\xb9\x01\n\rQueryExecuted\x12\x1e\n\x05query\x18\x01 \x01(\x0b\x32\x0f.messages.Query\x12\x11\n\tclient_id\x18\x02 \x01(\t\x12\x14\n\x0c\x65xec_time_ms\x18\x03 \x01(\r\x12&\n\x02ok\x18\x04 \x01(\x0b\x32\x18.messages.InputAndOutputH\x00\x12\x15\n\x0b\x62\x61\x64_request\x18\x05 \x01(\tH\x00\x12\x16\n\x0cserver_error\x18\x06 \x01(\tH\x00\x42\x08\n\x06result\"P\n\x0eInputAndOutput\x12\x17\n\x0fnum_read_chunks\x18\x01 \x01(\r\x12%\n\x06output\x18\x02 \x01(\x0b\x32\x15.messages.SizeAndHash\"-\n\x0bSizeAndHash\x12\x0c\n\x04size\x18\x01 \x01(\r\x12\x10\n\x08sha3_256\x18\x02 \x01(\x0c\x62\x06proto3')
 
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, globals())
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'messages_pb2', globals())
@@ -24,31 +25,31 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _WORKERSTATE_DATASETSENTRY._options = None
   _WORKERSTATE_DATASETSENTRY._serialized_options = b'8\001'
   _ENVELOPE._serialized_start=58
-  _ENVELOPE._serialized_end=435
-  _RANGE._serialized_start=437
-  _RANGE._serialized_end=472
-  _RANGESET._serialized_start=474
-  _RANGESET._serialized_end=517
-  _WORKERSTATE._serialized_start=520
-  _WORKERSTATE._serialized_end=657
-  _WORKERSTATE_DATASETSENTRY._serialized_start=590
-  _WORKERSTATE_DATASETSENTRY._serialized_end=657
-  _PING._serialized_start=659
-  _PING._serialized_end=757
-  _QUERY._serialized_start=759
-  _QUERY._serialized_end=835
-  _QUERYRESULT._serialized_start=837
-  _QUERYRESULT._serialized_end=959
-  _OKRESULT._serialized_start=961
-  _OKRESULT._serialized_end=1023
-  _QUERYSUBMITTED._serialized_start=1025
-  _QUERYSUBMITTED._serialized_end=1092
-  _QUERYFINISHED._serialized_start=1095
-  _QUERYFINISHED._serialized_end=1306
-  _QUERYEXECUTED._serialized_start=1309
-  _QUERYEXECUTED._serialized_end=1494
-  _INPUTANDOUTPUT._serialized_start=1496
-  _INPUTANDOUTPUT._serialized_end=1576
-  _SIZEANDHASH._serialized_start=1578
-  _SIZEANDHASH._serialized_end=1623
+  _ENVELOPE._serialized_end = 435
+  _RANGE._serialized_start = 437
+  _RANGE._serialized_end = 472
+  _RANGESET._serialized_start = 474
+  _RANGESET._serialized_end = 517
+  _WORKERSTATE._serialized_start = 520
+  _WORKERSTATE._serialized_end = 657
+  _WORKERSTATE_DATASETSENTRY._serialized_start = 590
+  _WORKERSTATE_DATASETSENTRY._serialized_end = 657
+  _PING._serialized_start = 659
+  _PING._serialized_end = 779
+  _QUERY._serialized_start = 781
+  _QUERY._serialized_end = 857
+  _QUERYRESULT._serialized_start = 859
+  _QUERYRESULT._serialized_end = 981
+  _OKRESULT._serialized_start = 983
+  _OKRESULT._serialized_end = 1045
+  _QUERYSUBMITTED._serialized_start = 1047
+  _QUERYSUBMITTED._serialized_end = 1114
+  _QUERYFINISHED._serialized_start = 1117
+  _QUERYFINISHED._serialized_end = 1328
+  _QUERYEXECUTED._serialized_start = 1331
+  _QUERYEXECUTED._serialized_end = 1516
+  _INPUTANDOUTPUT._serialized_start = 1518
+  _INPUTANDOUTPUT._serialized_end = 1598
+  _SIZEANDHASH._serialized_start = 1600
+  _SIZEANDHASH._serialized_end = 1645
 # @@protoc_insertion_point(module_scope)

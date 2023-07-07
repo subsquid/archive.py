@@ -40,16 +40,18 @@ class Worker:
         try:
             while not self._shutdown:
                 state = self._sm.get_state()
-                await self._transport.send_ping(state)
+                stored_bytes = self._sm.stored_bytes
+                await self._transport.send_ping(state, stored_bytes)
                 await asyncio.sleep(PING_INTERVAL_SEC)
         finally:
             await self._pause_ping()
 
     async def _pause_ping(self):
         state = self._sm.get_state()
+        stored_bytes = self._sm.stored_bytes
         try:
             async with asyncio.timeout(1):
-                await self._transport.send_ping(state, pause=True)
+                await self._transport.send_ping(state, stored_bytes, pause=True)
         except:
             LOG.exception('failed to send a pause ping')
 
