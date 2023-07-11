@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os.path
 from typing import Optional
@@ -16,15 +17,18 @@ class StateManager:
         self._controller = StateController(self._sync)
         self._is_started = False
 
-    @property
-    def stored_bytes(self) -> int:
-        stored_bytes = 0
-        for root, _, files in os.walk(self._data_dir):
-            for file in files:
-                path = os.path.join(root, file)
-                if os.path.isfile(path):
-                    stored_bytes += os.path.getsize(path)
-        return stored_bytes
+    async def get_stored_bytes(self) -> int:
+        def compute():
+            stored_bytes = 0
+            for root, _, files in os.walk(self._data_dir):
+                for file in files:
+                    path = os.path.join(root, file)
+                    if os.path.isfile(path):
+                        stored_bytes += os.path.getsize(path)
+            return stored_bytes
+
+        # The walk is quite heavy, so let's not block the thread
+        return await asyncio.get_event_loop().run_in_executor(None, compute)
 
     def get_dataset_dir(self, dataset: Dataset) -> str:
         return os.path.join(self._data_dir, dataset_encode(dataset))

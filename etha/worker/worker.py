@@ -40,7 +40,7 @@ class Worker:
         try:
             while not self._shutdown:
                 state = self._sm.get_state()
-                stored_bytes = self._sm.stored_bytes
+                stored_bytes = await self._sm.get_stored_bytes()
                 await self._transport.send_ping(state, stored_bytes)
                 await asyncio.sleep(PING_INTERVAL_SEC)
         finally:
@@ -48,7 +48,7 @@ class Worker:
 
     async def _pause_ping(self):
         state = self._sm.get_state()
-        stored_bytes = self._sm.stored_bytes
+        stored_bytes = await self._sm.get_stored_bytes()
         try:
             async with asyncio.timeout(1):
                 await self._transport.send_ping(state, stored_bytes, pause=True)
