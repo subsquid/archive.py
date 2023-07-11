@@ -69,9 +69,9 @@ class QueryInfo:
 
 
 class P2PTransport(Transport):
-    def __init__(self, channel: grpc.aio.Channel, router_id: str, send_metrics: bool = True):
+    def __init__(self, channel: grpc.aio.Channel, scheduler_id: str, send_metrics: bool = True):
         self._transport = P2PTransportStub(channel)
-        self._router_id = router_id
+        self._scheduler_id = scheduler_id
         self._state_updates = asyncio.Queue(maxsize=100)
         self._query_tasks = asyncio.Queue(maxsize=100)
         self._query_info: 'Dict[str, QueryInfo]' = {}
@@ -93,7 +93,7 @@ class P2PTransport(Transport):
             msg_type = envelope.WhichOneof('msg')
 
             if msg_type == 'state_update':
-                if msg.peer_id != self._router_id:
+                if msg.peer_id != self._scheduler_id:
                     LOG.error(f"Wrong message origin: {msg.peer_id}")
                     continue
                 await self._state_updates.put(envelope.state_update)
@@ -116,14 +116,15 @@ class P2PTransport(Transport):
         )
         await self._transport.SendMessage(msg)
 
-    async def send_ping(self, range_set: State, pause=False) -> None:
+    async def send_ping(self, state: State, stored_bytes: int, pause=False) -> None:
         if self._local_peer_id is None:
             await self.initialize()
         envelope = msg_pb.Envelope(ping=msg_pb.Ping(
             worker_id=self._local_peer_id,
-            state=state_to_proto(range_set)
+            state=state_to_proto(state),
+            stored_bytes=stored_bytes
         ))
-        await self._send(envelope, peer_id=self._router_id)
+        await self._send(envelope, peer_id=self._scheduler_id)
 
         for dataset, range_set in envelope.ping.state.datasets.items():
             envelope = msg_pb.Envelope(dataset_state=range_set)
@@ -160,7 +161,7 @@ class P2PTransport(Transport):
         )
         await self._send(envelope, peer_id=query_info.client_id)
 
-        # Send execution metrics to the router
+        # Send execution metrics to the scheduler
         if self._send_metrics:
             envelope = msg_pb.Envelope(
                 query_executed=msg_pb.QueryExecuted(
@@ -173,7 +174,7 @@ class P2PTransport(Transport):
                     exec_time_ms=exec_time_ms,
                 )
             )
-            await self._send(envelope, peer_id=self._router_id)
+            await self._send(envelope, peer_id=self._scheduler_id)
 
     async def send_query_error(self, query: msg_pb.Query, error: Exception) -> None:
         try:
@@ -197,7 +198,7 @@ class P2PTransport(Transport):
         )
         await self._send(envelope, peer_id=query_info.client_id)
 
-        # Send execution metrics to the router
+        # Send execution metrics to the scheduler
         if self._send_metrics:
             envelope = msg_pb.Envelope(
                 query_executed=msg_pb.QueryExecuted(
@@ -208,7 +209,7 @@ class P2PTransport(Transport):
                     exec_time_ms=exec_time_ms,
                 )
             )
-            await self._send(envelope, peer_id=self._router_id)
+            await self._send(envelope, peer_id=self._scheduler_id)
 
 
 async def run_queries(transport: P2PTransport, worker: Worker):
@@ -233,12 +234,12 @@ async def _main():
         '--proxy',
         metavar='URL',
         default='localhost:50051',
-        help='URL of the P2P proxy service to connect to'
+        help='URL of the P2P proxy (subsquid network rpc node) to connect to'
     )
     program.add_argument(
-        '--router-id',
+        '--scheduler-id',
         required=True,
-        help='Peer ID of the router'
+        help='Peer ID of the scheduler'
     )
     program.add_argument(
         '--data-dir',
@@ -253,7 +254,7 @@ async def _main():
     program.add_argument(
         '--no-metrics',
         action='store_true',
-        help='disable sending query execution metrics to the router'
+        help='disable sending query execution metrics to the scheduler'
     )
 
     args = program.parse_args()
@@ -267,7 +268,7 @@ async def _main():
         ),
     )
     async with channel as chan:
-        transport = P2PTransport(chan, args.router_id, send_metrics=(not args.no_metrics))
+        transport = P2PTransport(chan, args.scheduler_id, send_metrics=(not args.no_metrics))
 
         with multiprocessing.Pool(processes=args.procs, initializer=init_child_process) as pool:
             worker = Worker(sm, pool, transport)

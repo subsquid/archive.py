@@ -16,7 +16,6 @@ from etha.worker.state.manager import StateManager
 from etha.worker.transport import Transport
 from etha.worker.worker import Worker
 
-
 LOG = logging.getLogger(__name__)
 
 
@@ -27,7 +26,7 @@ class HttpTransport(Transport):
         self._router_url = router_url
         self._state_updates = asyncio.Queue(maxsize=100)
 
-    async def send_ping(self, state: State, pause=False):
+    async def send_ping(self, state: State, stored_bytes: int, pause=False):
         ping_msg = {
             'worker_id': self._worker_id,
             'worker_url': self._worker_url + '/query',
