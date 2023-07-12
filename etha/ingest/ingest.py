@@ -7,7 +7,7 @@ from etha.ingest.model import Block, Log, Receipt, DebugFrame, DebugFrameResult,
     DebugStateDiffResult, TraceTransactionReplay, Transaction
 from etha.ingest.rpc import RpcClient
 from etha.ingest.util import qty2int, get_tx_status_from_traces, logs_bloom
-from etha.ingest.moonbase import fix_and_exclude_invalid_moonbase_blocks
+from etha.ingest.moonbase import fix_and_exclude_invalid_moonbase_blocks, is_moonbase_traceless
 
 
 LOG = logging.getLogger(__name__)
@@ -237,7 +237,10 @@ class Ingest:
             receipts_map[r['transactionHash']] = r
             block_logs = logs_by_hash.setdefault(r['blockHash'], [])
 
-            if self._is_moonbase and r['transactionHash'] == '0x48ad1dca229ffc5a418143b003a79dbc11be0d379a3339ee9da9c887e6584283':
+            if self._is_moonbase and (
+                r['transactionHash'] == '0x48ad1dca229ffc5a418143b003a79dbc11be0d379a3339ee9da9c887e6584283' or
+                r['transactionHash'] == '0xf39b2cbe70decd96bf39b2f23683786e026dfc74b7e9e6c84ac43388214f1273'
+            ):
                 continue
 
             if self._is_arbitrum_one and r['transactionHash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800':
@@ -261,7 +264,10 @@ class Ingest:
             block_logs = logs_by_hash.get(block['hash'], [])
             assert block['logsBloom'] == logs_bloom(block_logs)
             for tx in block['transactions']:
-                if self._is_moonbase and tx['hash'] == '0x48ad1dca229ffc5a418143b003a79dbc11be0d379a3339ee9da9c887e6584283' and block['number'] == hex(2529846):
+                if self._is_moonbase and (
+                    (tx['hash'] == '0x48ad1dca229ffc5a418143b003a79dbc11be0d379a3339ee9da9c887e6584283' and block['number'] == hex(2529846)) or
+                    (tx['hash'] == '0xf39b2cbe70decd96bf39b2f23683786e026dfc74b7e9e6c84ac43388214f1273' and block['number'] == hex(2721741))
+                ):
                     continue
                 if self._is_arbitrum_one and tx['hash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800' and block['number'] == hex(4527955):
                     continue
@@ -301,8 +307,8 @@ class Ingest:
         transactions = block['transactions']
         if self._is_polygon or self._is_polygon_testnet:
             transactions = [tx for tx in transactions if not _is_polygon_precompiled(tx)]
-        if self._is_moonbase and (block['number'] == hex(2529846) or block['number'] == hex(2529877)):
-            transactions = [tx for tx in transactions if tx['hash'] != '0x48ad1dca229ffc5a418143b003a79dbc11be0d379a3339ee9da9c887e6584283']
+        if self._is_moonbase:
+            transactions = [tx for tx in transactions if not is_moonbase_traceless(tx, block)]
         assert len(transactions) == len(traces)
         for tx, trace in zip(transactions, traces):
             if 'result' not in trace:

@@ -1,4 +1,4 @@
-from etha.ingest.model import Block
+from etha.ingest.model import Block, Transaction
 
 
 def fix_and_exclude_invalid_moonbase_blocks(blocks: list[Block], with_receipts: bool, with_traces: bool):
@@ -8,6 +8,15 @@ def fix_and_exclude_invalid_moonbase_blocks(blocks: list[Block], with_receipts: 
             blocks[idx] = _moonbase_2285347(with_receipts, with_traces)
         elif block['number'] == hex(2285348):
             blocks[idx] = _moonbase_2285348(with_receipts, with_traces)
+        elif block['number'] == hex(2726849):
+            block['transactions'] = [tx for tx in block['transactions'] if tx['hash'] != '0xf39b2cbe70decd96bf39b2f23683786e026dfc74b7e9e6c84ac43388214f1273']
+            blocks_.append(block)
+        elif block['number'] == hex(2727206):
+            block['transactions'] = [tx for tx in block['transactions'] if tx['hash'] != '0x00c57e61b6ffa3d32deaa3a2ecd636045cbdf5d7191ab738ef83af10c633046b']
+            blocks_.append(block)
+        elif block['number'] == hex(2727227):
+            block['transactions'] = [tx for tx in block['transactions'] if tx['hash'] != '0xf39b2cbe70decd96bf39b2f23683786e026dfc74b7e9e6c84ac43388214f1273']
+            blocks_.append(block)
         else:
             blocks_.append(block)
     return blocks_
@@ -31,3 +40,25 @@ def _moonbase_2285348(with_receipts: bool, with_traces: bool) -> Block:
         if not with_traces:
             tx.pop('debugFrame_', None)
     return block
+
+
+def is_moonbase_traceless(tx: Transaction, block: Block) -> bool:
+    if block['number'] == hex(2529846) or block['number'] == hex(2529877):
+        return tx['hash'] == '0x48ad1dca229ffc5a418143b003a79dbc11be0d379a3339ee9da9c887e6584283'
+    elif block['number'] == hex(2721741):
+        return tx['hash'] == '0xf39b2cbe70decd96bf39b2f23683786e026dfc74b7e9e6c84ac43388214f1273'
+    elif block['number'] == hex(2721744):
+        return tx['hash'] == '0x20133dd46049004d1ca916c6fc67847c76cf5a2b05d7abfdbc8bf2eb9f6b9c70'
+    elif block['number'] == hex(2721775):
+        return tx['hash'] == '0xeb220c75489e3b22f312a2363b203a28a5505fa59d5f01943600bb871dbf9903'
+    elif block['number'] == hex(2721832):
+        return tx['hash'] == '0x422ea1439f2d5e5344b64ca4e413a90cfb0572f4b080d382223049c3f4819129'
+    elif block['number'] == hex(2721875):
+        return tx['hash'] == '0x00c57e61b6ffa3d32deaa3a2ecd636045cbdf5d7191ab738ef83af10c633046b'
+    elif block['number'] == hex(2726876):
+        return tx['hash'] == '0xef8dca3bd8adfd88b59b0df69a17b39219df202e9f1604f378b97dd06d3e1586'
+    elif block['number'] == hex(2726937):
+        return tx['hash'] == '0xf1df4ec7220b3eb8090b178b819c5bdb4005f5af317c58c25e2821bdc11b41a8'
+    elif block['number'] == hex(2727072):
+        return tx['hash'] == '0xc8b8bda37f30135417ff49201a05aa514946746f4934ea59808dd407448680ab'
+    return False
