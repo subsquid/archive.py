@@ -45,6 +45,7 @@ class Ingest:
         self._is_moonbase = False
         self._is_polygon = False
         self._is_polygon_testnet = False
+        self._is_optimism = False
 
     async def loop(self) -> AsyncIterator[list[Block]]:
         assert not self._running
@@ -73,6 +74,7 @@ class Ingest:
         self._is_moonbase = genesis_hash == '0x33638dde636f9264b6472b9d976d58e757fe88badac53f204f3f530ecc5aacfa'
         self._is_polygon = genesis_hash == '0xa9c28ce2141b56c474f1dc504bee9b01eb1bd7d1a507580d5519d4437a97de1b'
         self._is_polygon_testnet = genesis_hash == '0x7b66506a9ebdbf30d32b43c5f15a3b1216269a1ec3a75aa3182b86176a2b1ca7'
+        self._is_optimism = genesis_hash == '0x7ca38a1916c42007829c55e69d3e9a73265554b586a499015373241b8a3fa48b'
 
     def _schedule_strides(self):
         while len(self._strides) < max(1, min(10, self._rpc.get_total_capacity())) \
@@ -246,6 +248,12 @@ class Ingest:
             if self._is_arbitrum_one and r['transactionHash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800':
                 continue
 
+            if self._is_optimism and (
+                (r['transactionHash'] == '0x9ed8f713b2cc6439657db52dcd2fdb9cc944915428f3c6e2a7703e242b259cb9' and r['blockHash'] not in tx_by_index) or
+                (r['transactionHash'] == '0xc033250c5a45f9d104fc28640071a776d146d48403cf5e95ed0015c712e26cb6' and r['blockHash'] not in tx_by_index)
+            ):
+                continue
+
             tx = tx_by_index[r['blockHash']][r['transactionIndex']]
 
             if (self._is_polygon or self._is_polygon_testnet) and _is_polygon_precompiled(tx):
@@ -270,6 +278,11 @@ class Ingest:
                 ):
                     continue
                 if self._is_arbitrum_one and tx['hash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800' and block['number'] == hex(4527955):
+                    continue
+                if self._is_optimism and (
+                    (tx['hash'] == '0x9ed8f713b2cc6439657db52dcd2fdb9cc944915428f3c6e2a7703e242b259cb9' and block['number'] != hex(985)) or
+                    (tx['hash'] == '0xc033250c5a45f9d104fc28640071a776d146d48403cf5e95ed0015c712e26cb6' and block['number'] != hex(123322))
+                ):
                     continue
                 tx['receipt_'] = receipts_map[tx['hash']]
 
