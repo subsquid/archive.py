@@ -248,14 +248,15 @@ class Ingest:
             if self._is_arbitrum_one and r['transactionHash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800':
                 continue
 
-            if self._is_optimism and (
-                (r['transactionHash'] == '0x9ed8f713b2cc6439657db52dcd2fdb9cc944915428f3c6e2a7703e242b259cb9' and r['blockHash'] not in tx_by_index) or
-                (r['transactionHash'] == '0xc033250c5a45f9d104fc28640071a776d146d48403cf5e95ed0015c712e26cb6' and r['blockHash'] not in tx_by_index) or
-                (r['transactionHash'] == '0x86f8c77cfa2b439e9b4e92a10f6c17b99fce1220edf4001e4158b57f41c576e5' and r['blockHash'] not in tx_by_index)
-            ):
-                continue
-
-            tx = tx_by_index[r['blockHash']][r['transactionIndex']]
+            try:
+                tx = tx_by_index[r['blockHash']][r['transactionIndex']]
+            except KeyError as e:
+                if self._is_optimism:
+                    # optimism doesn't provide receipts for duplicated transactions
+                    # so we just skip such transactions 
+                    continue
+                else:
+                    raise e
 
             if (self._is_polygon or self._is_polygon_testnet) and _is_polygon_precompiled(tx):
                 continue
@@ -280,11 +281,7 @@ class Ingest:
                     continue
                 if self._is_arbitrum_one and tx['hash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800' and block['number'] == hex(4527955):
                     continue
-                if self._is_optimism and (
-                    (tx['hash'] == '0x9ed8f713b2cc6439657db52dcd2fdb9cc944915428f3c6e2a7703e242b259cb9' and block['number'] != hex(985)) or
-                    (tx['hash'] == '0xc033250c5a45f9d104fc28640071a776d146d48403cf5e95ed0015c712e26cb6' and block['number'] != hex(123322)) or
-                    (tx['hash'] == '0x86f8c77cfa2b439e9b4e92a10f6c17b99fce1220edf4001e4158b57f41c576e5' and block['number'] != hex(1133328))
-                ):
+                if self._is_optimism and receipts_map[tx['hash']]['blockHash'] != block['hash']:
                     continue
                 tx['receipt_'] = receipts_map[tx['hash']]
 
