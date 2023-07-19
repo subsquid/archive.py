@@ -28,11 +28,12 @@ def execute_query(dataset_dir: str, data_range: Range, q: Query, profiling: bool
         beg = datetime.datetime.now()
         size = 0
 
-        for chunk in get_chunks(LocalFs(dataset_dir), first_block=first_block, last_block=last_block):
+        fs = LocalFs(dataset_dir)
+        for chunk in get_chunks(fs, first_block=first_block, last_block=last_block):
             try:
                 rows = runner.visit(chunk)
             except Exception as e:
-                e.add_note(f'data chunk: ${chunk.path()}')
+                e.add_note(f'data chunk: ${fs.abs(chunk.path())}')
                 raise e
 
             num_read_chunks += 1

@@ -46,7 +46,7 @@ TxFieldSelection = TypedDict('TxFieldSelection', {
     'sighash': bool,
     'gasUsed': bool,
     'cumulativeGasUsed': bool,
-    'effectiveGasUsed': bool,
+    'effectiveGasPrice': bool,
     'type': bool,
     'status': bool
 }, total=False)
