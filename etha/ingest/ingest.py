@@ -250,7 +250,8 @@ class Ingest:
 
             if self._is_optimism and (
                 (r['transactionHash'] == '0x9ed8f713b2cc6439657db52dcd2fdb9cc944915428f3c6e2a7703e242b259cb9' and r['blockHash'] not in tx_by_index) or
-                (r['transactionHash'] == '0xc033250c5a45f9d104fc28640071a776d146d48403cf5e95ed0015c712e26cb6' and r['blockHash'] not in tx_by_index)
+                (r['transactionHash'] == '0xc033250c5a45f9d104fc28640071a776d146d48403cf5e95ed0015c712e26cb6' and r['blockHash'] not in tx_by_index) or
+                (r['transactionHash'] == '0x86f8c77cfa2b439e9b4e92a10f6c17b99fce1220edf4001e4158b57f41c576e5' and r['blockHash'] not in tx_by_index)
             ):
                 continue
 
@@ -281,7 +282,8 @@ class Ingest:
                     continue
                 if self._is_optimism and (
                     (tx['hash'] == '0x9ed8f713b2cc6439657db52dcd2fdb9cc944915428f3c6e2a7703e242b259cb9' and block['number'] != hex(985)) or
-                    (tx['hash'] == '0xc033250c5a45f9d104fc28640071a776d146d48403cf5e95ed0015c712e26cb6' and block['number'] != hex(123322))
+                    (tx['hash'] == '0xc033250c5a45f9d104fc28640071a776d146d48403cf5e95ed0015c712e26cb6' and block['number'] != hex(123322)) or
+                    (tx['hash'] == '0x86f8c77cfa2b439e9b4e92a10f6c17b99fce1220edf4001e4158b57f41c576e5' and block['number'] != hex(1133328))
                 ):
                     continue
                 tx['receipt_'] = receipts_map[tx['hash']]
