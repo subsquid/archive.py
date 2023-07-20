@@ -46,6 +46,7 @@ class Ingest:
         self._is_polygon = False
         self._is_polygon_testnet = False
         self._is_optimism = False
+        self._is_astar = False
 
     async def loop(self) -> AsyncIterator[list[Block]]:
         assert not self._running
@@ -75,6 +76,7 @@ class Ingest:
         self._is_polygon = genesis_hash == '0xa9c28ce2141b56c474f1dc504bee9b01eb1bd7d1a507580d5519d4437a97de1b'
         self._is_polygon_testnet = genesis_hash == '0x7b66506a9ebdbf30d32b43c5f15a3b1216269a1ec3a75aa3182b86176a2b1ca7'
         self._is_optimism = genesis_hash == '0x7ca38a1916c42007829c55e69d3e9a73265554b586a499015373241b8a3fa48b'
+        self._is_astar = genesis_hash == '0x0d28a86ac0fe37871285bd1dac45d83a4b3833e01a37571a1ac4f0a44c64cdc2'
 
     def _schedule_strides(self):
         while len(self._strides) < max(1, min(10, self._rpc.get_total_capacity())) \
@@ -266,10 +268,16 @@ class Ingest:
 
         for block in blocks:
             if self._is_moonriver and qty2int(block['number']) == 2077599:
-                _fix_moonriver_2077599(block, receipts_map, logs_by_hash)
+                _fix_frontier_duplication_bug(block, receipts_map, logs_by_hash)
 
             if self._is_moonriver and qty2int(block['number']) == 2077600:
                 _fix_moonriver_2077600(block)
+
+            if self._is_astar and qty2int(block['number']) == 995595:
+                _fix_frontier_duplication_bug(block, receipts_map, logs_by_hash)
+
+            if self._is_astar and qty2int(block['number']) == 995596:
+                _fix_astar_995596(block)
 
             block_logs = logs_by_hash.get(block['hash'], [])
             assert block['logsBloom'] == logs_bloom(block_logs)
@@ -409,7 +417,7 @@ def _is_polygon_precompiled(tx: Transaction):
     return tx['from'] == address and tx['to'] == address
 
 
-def _fix_moonriver_2077599(block: Block, receipts_map: dict[str, Receipt], logs_by_hash: dict[str, list[Log]]):
+def _fix_frontier_duplication_bug(block: Block, receipts_map: dict[str, Receipt], logs_by_hash: dict[str, list[Log]]):
     block_logs = []
     for tx in block['transactions']:
         receipt = receipts_map[tx['hash']]
@@ -428,3 +436,8 @@ def _fix_moonriver_2077600(block: Block):
     else:
         # transactions were already cut in a different method
         assert len(block['transactions']) == 8
+
+
+def _fix_astar_995596(block: Block):
+    assert len(block['transactions']) == 123
+    block['transactions'] = block['transactions'][58:]
