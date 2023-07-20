@@ -61,26 +61,12 @@ class QueryResource:
     @falcon.before(max_body(4 * 1024 * 1024))
     async def on_post(self, req: fa.Request, res: fa.Response, dataset: str):
         query: Query = await get_json(req, query_schema)
-
-        if _get_query_size(query) > 100:
-            raise falcon.HTTPBadRequest(
-                description='Archive query contains too many item requests'
-            )
-
         try:
             query_result = await self._worker.execute_query(query, dataset)
             res.text = query_result.result
             res.content_type = 'application/json'
         except (QueryError, DataIsNotAvailable) as e:
             raise falcon.HTTPBadRequest(description=str(e))
-
-
-def _get_query_size(query: Query) -> int:
-    size = 0
-    for item in query.values():
-        if isinstance(item, list):
-            size += len(item)
-    return size
 
 
 def create_app(sm: StateManager, worker: Worker) -> fa.App:

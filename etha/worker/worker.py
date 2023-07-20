@@ -56,6 +56,9 @@ class Worker:
             LOG.exception('failed to send a pause ping')
 
     async def execute_query(self, query: Query, dataset: str, profiling: bool = False) -> QueryResult:
+        if _get_query_size(query) > 100:
+            raise QueryError('Archive query contains too many item requests')
+
         try:
             dataset = dataset_decode(dataset)
         except ValueError:
@@ -89,3 +92,11 @@ class Worker:
             )
 
             return await future
+
+
+def _get_query_size(query: Query) -> int:
+    size = 0
+    for item in query.values():
+        if isinstance(item, list):
+            size += len(item)
+    return size
