@@ -49,12 +49,16 @@ def state_from_proto(state: msg_pb.WorkerState) -> State:
     }
 
 
-def hash_and_size(data: bytes) -> msg_pb.SizeAndHash:
+def sha3_256(data: bytes) -> bytes:
     hasher = hashlib.sha3_256()
     hasher.update(data)
+    return hasher.digest()
+
+
+def hash_and_size(data: bytes) -> msg_pb.SizeAndHash:
     return msg_pb.SizeAndHash(
         size=len(data),
-        sha3_256=hasher.digest()
+        sha3_256=sha3_256(data),
     )
 
 
@@ -165,8 +169,11 @@ class P2PTransport(Transport):
         if self._send_metrics:
             envelope = msg_pb.Envelope(
                 query_executed=msg_pb.QueryExecuted(
-                    query=query,
                     client_id=query_info.client_id,
+                    worker_id=self._local_peer_id,
+                    query_id=query.query_id,
+                    query_hash=sha3_256(query.query.encode()),
+                    dataset=query.dataset,
                     ok=msg_pb.InputAndOutput(
                         num_read_chunks=result.num_read_chunks,
                         output=hash_and_size(result_bytes),
@@ -202,8 +209,11 @@ class P2PTransport(Transport):
         if self._send_metrics:
             envelope = msg_pb.Envelope(
                 query_executed=msg_pb.QueryExecuted(
-                    query=query,
                     client_id=query_info.client_id,
+                    worker_id=self._local_peer_id,
+                    query_id=query.query_id,
+                    query_hash=sha3_256(query.query.encode()),
+                    dataset=query.dataset,
                     bad_request=bad_request,
                     server_error=server_error,
                     exec_time_ms=exec_time_ms,
