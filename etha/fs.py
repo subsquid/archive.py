@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import urllib.parse
 from contextlib import AbstractContextManager, contextmanager
-from typing import Optional, IO
+from typing import Optional, IO, TypedDict
 
 import pyarrow.fs
 import pyarrow.parquet
@@ -88,6 +88,16 @@ class LocalFs(Fs):
         return open(path, mode)
 
 
+class _S3File(TypedDict):
+    path: str
+    size: int
+    etag: str
+
+
+class S3DownloadException(Exception):
+    pass
+
+
 class S3Fs(Fs):
     def __init__(self, s3: s3fs.S3FileSystem, bucket: str):
         assert bucket and bucket[0] != '/' and bucket[-1] != '/'
@@ -97,17 +107,25 @@ class S3Fs(Fs):
     def abs(self, *segments) -> str:
         return 's3://' + self._abs_path(*segments)
 
-    def _abs_path(self, *segments) -> str:
-        path = self._bucket
+    def _abs_path(self, *paths: str) -> str:
+        segments = [self._bucket]
 
-        for seg in segments:
-            assert seg and seg[-1] != '/'
-            if seg.startswith('/'):
-                path = seg[1:]
-            else:
-                path += '/' + seg
+        for path in paths:
+            if path.startswith('/'):
+                segments = []
+                path = path[1:]
 
-        return path
+            for seg in path.split('/'):
+                assert seg
+                if seg == '.':
+                    pass
+                elif seg == '..':
+                    segments.pop()
+                else:
+                    segments.append(seg)
+
+        assert segments
+        return '/'.join(segments)
 
     def ls(self, *segments: str) -> list[str]:
         path = self._abs_path(*segments)
@@ -125,7 +143,29 @@ class S3Fs(Fs):
 
     def download(self, src_loc: str, local_dest: str):
         src_path = self._abs_path(src_loc)
+        src_files = self._list_files(src_path)
         self._s3.download(src_path, local_dest, recursive=True)
+        # Once in a while s3fs manages to successfully download incomplete file.
+        # As a dirty workaround we are checking downloaded files below
+        for src_file in src_files:
+            dest = os.path.join(local_dest, os.path.relpath(src_file['path'], src_path))
+            try:
+                stat = os.stat(dest)
+            except IOError as reason:
+                raise S3DownloadException(f'failed to stat downloaded file') from reason
+            if stat.st_size != src_file['size']:
+                raise S3DownloadException(f's3://{src_file["path"]} download to {dest} was incomplete')
+
+    def _list_files(self, path: str) -> list[_S3File]:
+        result: list[_S3File] = []
+        for loc, dirs, files in self._s3.walk(path, detail=True):
+            for filename, stat in files.items():
+                result.append({
+                    'path': f'{loc}/{filename}'if filename else loc,
+                    'size': stat['Size'],
+                    'etag': stat['ETag']
+                })
+        return result
 
     def upload(self, local_src: str, dest: str):
         self._s3.upload(local_src, self._abs_path(dest), recursive=True)
