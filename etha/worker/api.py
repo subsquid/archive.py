@@ -1,12 +1,9 @@
 import logging
 from typing import Optional
-import os
 
 import falcon
 import falcon.asgi as fa
 import marshmallow as mm
-import sentry_sdk
-from sentry_sdk.integrations.falcon import FalconIntegration
 
 from etha.query.model import Query, query_schema
 from etha.query.sql import DataIsNotAvailable
@@ -78,13 +75,6 @@ class QueryResource:
 
 
 def create_app(sm: StateManager, worker: Worker) -> fa.App:
-    if sentry_dsn := os.getenv('SENTRY_DSN'):
-        sentry_sdk.init(
-            dsn=sentry_dsn,
-            integrations=[FalconIntegration()],
-            traces_sample_rate=1.0
-        )
-
     app = fa.App()
     app.add_route('/status', StatusResource(sm))
     app.add_route('/query/{dataset}', QueryResource(worker))

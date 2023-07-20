@@ -16,6 +16,7 @@ from etha.worker.state.manager import StateManager
 from etha.worker.transport import Transport
 from etha.worker.worker import Worker
 
+
 LOG = logging.getLogger(__name__)
 
 
@@ -145,4 +146,11 @@ async def serve(args):
 
 
 def cli():
+    if os.getenv('SENTRY_DSN'):
+        import sentry_sdk
+        import sentry_sdk.integrations.falcon
+        sentry_sdk.init(
+            integrations=[sentry_sdk.integrations.falcon.FalconIntegration()],
+            traces_sample_rate=1.0
+        )
     run_async_program(serve, parse_cli_args())

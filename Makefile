@@ -1,3 +1,7 @@
+deps:
+	pdm sync -G:all
+
+
 image-ingest:
 	docker buildx build --target ingest --platform linux/amd64 . --load
 
@@ -56,4 +60,4 @@ worker:
 		--procs 2
 
 
-.PHONY: image-ingest image-worker ingest-eth ingest-arb ingest-poly router worker
+.PHONY: deps image-ingest image-worker ingest-eth ingest-arb ingest-poly router worker
