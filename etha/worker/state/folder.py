@@ -1,3 +1,4 @@
+import glob
 import logging
 from typing import Callable
 
@@ -30,6 +31,11 @@ class StateFolder:
 
         log.info('update task started', extra={'update': update})
 
+        # delete temp chunk dirs
+        for temp_item in glob.glob('*/*/temp-*', root_dir=self.fs.abs()):
+            log.info(f'deleting abandoned chunk download at {self.fs.abs(temp_item)}')
+            self.fs.delete(temp_item)
+
         # delete old chunks and datasets
         for ds, upd in update.items():
             fs = self.fs.cd(dataset_encode(ds))
@@ -54,7 +60,8 @@ class StateFolder:
                     with fs.transact(dest) as d:
                         src = chunk.path()
                         log.info(f'downloading {rfs.abs(src)}')
-                        # FIXME: we can potentially miss files here
+                        # FIXME: we can potentially miss files here,
+                        #  unless we have a globally consistent API like R2
                         rfs.download(src, d.abs())
                     log.info('saved %s', dest)
                     on_downloaded_chunk(ds, chunk)
