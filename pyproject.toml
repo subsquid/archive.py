@@ -22,7 +22,8 @@ http-worker = [
     "duckdb == 0.8.1",
     "falcon == 3.*",
     "httpx == 0.*",
-    "uvicorn == 0.*"
+    "uvicorn == 0.*",
+    "sentry-sdk[falcon]==1.28.*",
 ]
 p2p-worker = [
     "duckdb == 0.8.1",
