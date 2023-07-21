@@ -96,7 +96,8 @@ def wait_for_term_signal():
     future = loop.create_future()
 
     def handler(signal_name: str):
-        future.set_result(signal_name)
+        if not future.done():
+            future.set_result(signal_name)
 
     loop.add_signal_handler(signal.SIGINT, handler, 'SIGINT')
     loop.add_signal_handler(signal.SIGTERM, handler, 'SIGTERM')
