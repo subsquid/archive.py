@@ -59,9 +59,13 @@ class LocalFs(Fs):
     def transact(self, dest_dir: str) -> AbstractContextManager['LocalFs']:
         path = self.abs(dest_dir)
         temp_dir = add_temp_prefix(path)
-        yield LocalFs(temp_dir)
-        if os.path.exists(temp_dir):
-            os.rename(temp_dir, path)
+        try:
+            yield LocalFs(temp_dir)
+            if os.path.exists(temp_dir):
+                os.rename(temp_dir, path)
+        except Exception as ex:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            raise ex
 
     def write_parquet(self, file: str, table, **kwargs):
         path = self.abs(file)

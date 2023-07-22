@@ -1,5 +1,6 @@
 import glob
 import logging
+import os.path
 from typing import Callable
 
 from etha.fs import create_fs, LocalFs
@@ -28,8 +29,7 @@ class StateFolder:
                      on_downloaded_chunk: Callable[[str, DataChunk], None] = lambda ds, chunk: None,
                      log=logging.getLogger(__name__)
                      ):
-
-        log.info('update task started', extra={'update': update})
+        # !!! This function should allow to apply the same update multiple times in a row
 
         # delete temp chunk dirs
         for temp_item in glob.glob('*/*/temp-*', root_dir=self.fs.abs()):
@@ -57,13 +57,15 @@ class StateFolder:
             for new in upd.new:
                 for chunk in get_chunks(rfs, first_block=new[0], last_block=new[1]):
                     dest = fs.abs(chunk.path())
-                    with fs.transact(dest) as d:
-                        src = chunk.path()
-                        log.info(f'downloading {rfs.abs(src)}')
-                        # FIXME: we can potentially miss files here,
-                        #  unless we have a globally consistent API like R2
-                        rfs.download(src, d.abs())
-                    log.info('saved %s', dest)
-                    on_downloaded_chunk(ds, chunk)
+                    if os.path.exists(dest):
+                        pass
+                    else:
+                        with fs.transact(dest) as d:
+                            src = chunk.path()
+                            log.info(f'downloading {rfs.abs(src)}')
+                            # FIXME: we can potentially miss files here,
+                            #  unless we have a globally consistent API like R2
+                            rfs.download(src, d.abs())
 
-        log.info('update task finished')
+                        log.info('saved %s', dest)
+                        on_downloaded_chunk(ds, chunk)

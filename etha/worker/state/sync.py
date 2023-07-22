@@ -4,10 +4,10 @@ from itertools import groupby
 from queue import Empty
 from typing import Callable
 
-from etha.worker.state.sync_loop import sync_loop
 from etha.worker.state.controller import State, StateUpdate
 from etha.worker.state.folder import StateFolder
 from etha.worker.state.intervals import to_range_set
+from etha.worker.state.sync_proc import sync_proc
 
 
 class _SyncProc:
@@ -15,7 +15,7 @@ class _SyncProc:
         self.update_queue = mp.Queue(100)
         self.new_chunks_queue = mp.Queue(1000)
         self.proc = mp.Process(
-            target=sync_loop,
+            target=sync_proc,
             args=(data_dir, self.update_queue, self.new_chunks_queue),
             name='sm:data_sync'
         )
