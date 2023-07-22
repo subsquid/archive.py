@@ -44,9 +44,9 @@ class Worker:
                 await self._transport.send_ping(state, stored_bytes)
                 await asyncio.sleep(PING_INTERVAL_SEC)
         finally:
-            # pass
+            pass
             # FIXME: for some reason httpx fails to work after SIGINT/SIGTERM
-            await self._pause_ping()
+            # await self._pause_ping()
 
     async def _pause_ping(self):
         state = self._sm.get_state()
