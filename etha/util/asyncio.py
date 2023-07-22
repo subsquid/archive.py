@@ -91,35 +91,9 @@ async def monitor_pipeline(tasks: list[asyncio.Task], service_task: Optional[asy
         await teardown([service_task], log)
 
 
-def wait_for_term_signal():
-    loop = asyncio.get_event_loop()
-    future = loop.create_future()
-
-    def handler(signal_name: str):
-        if not future.done():
-            future.set_result(signal_name)
-
-    loop.add_signal_handler(signal.SIGINT, handler, 'SIGINT')
-    loop.add_signal_handler(signal.SIGTERM, handler, 'SIGTERM')
-
-    return future
-
-
 def run_async_program(main, *args, log=LOG):
-
-    async def run():
-        signal_future = wait_for_term_signal()
-        program = asyncio.create_task(main(*args))
-        await asyncio.wait([signal_future, program], return_when=asyncio.FIRST_COMPLETED)
-
-        if signal_future.done() and not program.done():
-            log.error(f'terminating program due to {signal_future.result()}')
-            program.cancel()
-
-        await program
-
     try:
-        asyncio.run(run())
+        asyncio.run(main(*args))
     except asyncio.CancelledError:
         sys.exit(1)
     except Exception as ex:
