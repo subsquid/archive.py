@@ -6,7 +6,7 @@ from typing import Iterable
 
 from sqa.writer import ArchiveWriteOptions, ArchiveWriter
 from .model import Block
-from .parquet import Batch
+from .parquet import ParquetSink
 
 
 LOG = logging.getLogger(__name__)
@@ -84,26 +84,12 @@ def main(args):
         print(writer.get_next_block())
         return
 
-    batch = Batch()
+    end_of_write = writer.write(
+        ParquetSink(),
+        read_blocks(options, writer.get_next_block())
+    )
 
-    def flush():
-        chunk = writer.next_chunk()
-        chunk_fs = writer.fs.cd(chunk.path())
-        LOG.info(f'writing {chunk_fs.abs()}')
-        with chunk_fs.transact('.') as fs:
-            batch.flush(fs)
-
-    for blocks in writer.write_stream(read_blocks(options, writer.get_next_block())):
-        for b in blocks:
-            batch.append(b)
-
-        if batch.buffered_bytes() > args.chunk_size * 1024 * 1024:
-            flush()
-
-    if writer.get_last_seen_block() >= options.last_block:
-        if batch.buffered_bytes() > 0:
-            flush()
-    else:
+    if not end_of_write:
         sys.exit(1)
 
 

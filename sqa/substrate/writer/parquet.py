@@ -134,7 +134,7 @@ class EventTable(TableBuilder):
         self.call_address.append(event.get('callAddress'))
 
 
-class Batch:
+class ParquetSink:
     def __init__(self):
         self._init()
 
@@ -150,7 +150,7 @@ class Batch:
             + self.call_table.bytesize() \
             + self.event_table.bytesize()
 
-    def append(self, block: Block) -> None:
+    def write(self, block: Block) -> None:
         block_number = block['header']['height']
 
         self.block_table.append(block['header'])
