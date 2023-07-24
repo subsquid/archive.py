@@ -28,4 +28,4 @@ jobs:
         with:
           push: true
           target: ${{ inputs.target }}
-          tags: eldar/etha-${{ inputs.target }}:${{ inputs.tag }}
+          tags: eldar/sqa-${{ inputs.target }}:${{ inputs.tag }}

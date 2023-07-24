@@ -7,28 +7,31 @@ readme = "README.md"
 requires-python = ">=3.11"
 
 dependencies = [
-    "marshmallow == 3.*",
     "pyarrow == 10.*",
     "s3fs >= 2021.8.0"
 ]
 
 [project.optional-dependencies]
-ingest = [
+eth-ingest = [
     "httpx == 0.*",
     "pycryptodome>=3.18.0",
     "prometheus-client==0.17.*",
 ]
+
 http-worker = [
     "duckdb == 0.8.1",
     "falcon == 3.*",
     "httpx == 0.*",
-    "uvicorn == 0.*",
+    "marshmallow == 3.*",
     "sentry-sdk == 1.28.*",
+    "uvicorn == 0.*",
 ]
+
 p2p-worker = [
     "duckdb == 0.8.1",
     "grpcio == 1.*",
-    "protobuf == 4.*"
+    "marshmallow == 3.*",
+    "protobuf == 4.*",
 ]
 
 [build-system]
