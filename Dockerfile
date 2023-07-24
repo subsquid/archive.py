@@ -40,6 +40,7 @@ FROM base as p2p-worker
 COPY --from=p2p-worker-builder /project/.venv /app/env/
 COPY --from=p2p-worker-builder /project/etha /app/etha/
 VOLUME /app/data
-RUN echo "#!/bin/bash \n exec /app/env/bin/python -m etha.worker.p2p --data-dir /app/data --proxy \${PROXY_ADDR} --scheduler-id \${SCHEDULER_ID}" > ./entrypoint.sh
+ENV DATA_DIR=/app/data/worker
+RUN echo "#!/bin/bash \n exec /app/env/bin/python -m etha.worker.p2p --data-dir \${DATA_DIR} --proxy \${PROXY_ADDR} --scheduler-id \${SCHEDULER_ID}" > ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 ENTRYPOINT ["./entrypoint.sh"]
