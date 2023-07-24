@@ -3,6 +3,7 @@
 /.idea
 
 __pycache__
+*.temp.*
 
 /.envrc
 /.venv

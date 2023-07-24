@@ -8,7 +8,7 @@ RUN pdm venv create --with venv
 ADD pyproject.toml .
 ADD pdm.lock .
 RUN pdm sync --no-self --prod
-ADD etha etha/
+ADD sqa etha/
 ADD README.md .
 
 

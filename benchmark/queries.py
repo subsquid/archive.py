@@ -1,6 +1,6 @@
 from typing import Optional
 
-from etha.query.model import Query
+from sqa.query.model import Query
 
 
 def with_range(q: Query, first_block: int = 0, last_block: Optional[int] = None) -> Query:
