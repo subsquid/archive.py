@@ -28,7 +28,8 @@ http-worker = [
 p2p-worker = [
     "duckdb == 0.8.1",
     "grpcio == 1.*",
-    "protobuf == 4.*"
+    "protobuf == 4.*",
+    "sentry-sdk == 1.28.*",
 ]
 
 [build-system]
