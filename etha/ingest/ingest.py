@@ -47,6 +47,7 @@ class Ingest:
         self._is_polygon_testnet = False
         self._is_optimism = False
         self._is_astar = False
+        self._is_zksync = False
 
     async def loop(self) -> AsyncIterator[list[Block]]:
         assert not self._running
@@ -77,6 +78,7 @@ class Ingest:
         self._is_polygon_testnet = genesis_hash == '0x7b66506a9ebdbf30d32b43c5f15a3b1216269a1ec3a75aa3182b86176a2b1ca7'
         self._is_optimism = genesis_hash == '0x7ca38a1916c42007829c55e69d3e9a73265554b586a499015373241b8a3fa48b'
         self._is_astar = genesis_hash == '0x0d28a86ac0fe37871285bd1dac45d83a4b3833e01a37571a1ac4f0a44c64cdc2'
+        self._is_zksync = genesis_hash == '0xe8e77626586f73b955364c7b4bbf0bb7f7685ebd40e852b164633a4acbd3244c'
 
     def _schedule_strides(self):
         while len(self._strides) < max(1, min(10, self._rpc.get_total_capacity())) \
@@ -280,7 +282,8 @@ class Ingest:
                 _fix_astar_995596(block)
 
             block_logs = logs_by_hash.get(block['hash'], [])
-            assert block['logsBloom'] == logs_bloom(block_logs)
+            if not self._is_zksync:
+                assert block['logsBloom'] == logs_bloom(block_logs)
             for tx in block['transactions']:
                 if self._is_moonbase and (
                     (tx['hash'] == '0x48ad1dca229ffc5a418143b003a79dbc11be0d379a3339ee9da9c887e6584283' and block['number'] == hex(2529846)) or
