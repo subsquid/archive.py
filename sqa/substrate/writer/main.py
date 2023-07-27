@@ -146,7 +146,7 @@ def read_from_url(url: str, options: WriteOptions, next_block: int) -> Iterable[
                     height = options.get_block_height(block)
                     data_range['from'] = height + 1
                     yield block
-        except httpx.NetworkError:
+        except (httpx.NetworkError, httpx.RemoteProtocolError):
             LOG.exception('data streaming error, will pause for 5 sec and try again')
             time.sleep(5)
 
