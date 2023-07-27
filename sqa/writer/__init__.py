@@ -59,7 +59,7 @@ class ArchiveWriteOptions:
 class ArchiveWriter:
     def __init__(self, options: ArchiveWriteOptions):
         self.options = options
-        self.fs = create_fs(options.dest, s3_endpoint=options.s3_endpoint)
+        self.fs = create_fs(options.dest)
         self._writing = False
 
     @cached_property
