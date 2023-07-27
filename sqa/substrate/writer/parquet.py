@@ -155,13 +155,13 @@ class ParquetSink:
 
         self.block_table.append(block['header'])
 
-        for ex in block['extrinsics']:
+        for ex in block.get('extrinsics', ()):
             self.extrinsic_table.append(block_number, ex)
 
-        for call in block['calls']:
+        for call in block.get('calls', ()):
             self.call_table.append(block_number, call)
 
-        for event in block['events']:
+        for event in block.get('events', ()):
             self.event_table.append(block_number, event)
 
     def flush(self, fs: Fs) -> None:
