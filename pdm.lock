@@ -6,7 +6,7 @@ groups = ["default", "dev", "eth-ingest", "http-worker", "p2p-worker"]
 cross_platform = true
 static_urls = false
 lock_version = "4.3"
-content_hash = "sha256:e6414a6e08875358a77e442f02e72c213f2700b6b9f7952968fd9957ebc5cf7d"
+content_hash = "sha256:fcfbd4709e9df35020765e1c09cdb96edf6215fa04f4dce3efe3815836829d1c"
 
 [[package]]
 name = "aiobotocore"

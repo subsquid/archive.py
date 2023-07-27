@@ -1,7 +1,9 @@
 import argparse
 import json
 import logging
+import math
 import sys
+import time
 from typing import Iterable
 
 from sqa.writer import ArchiveWriteOptions, ArchiveWriter
@@ -22,6 +24,13 @@ def parse_cli_arguments():
         'dest',
         metavar='ARCHIVE',
         help='target dir or s3 location to write data to'
+    )
+
+    program.add_argument(
+        '-s', '--src',
+        type=str,
+        metavar='URL',
+        help='URL of the data ingestion service'
     )
 
     program.add_argument(
@@ -84,17 +93,32 @@ def main(args):
         print(writer.get_next_block())
         return
 
+    if args.src:
+        blocks = read_from_url(args.src, options, writer.get_next_block())
+    else:
+        blocks = read_from_stdin(options, writer.get_next_block())
+
     end_of_write = writer.write(
         ParquetSink(),
-        read_blocks(options, writer.get_next_block())
+        batch(blocks)
     )
 
     if not end_of_write:
         sys.exit(1)
 
 
-def read_blocks(options: WriteOptions, next_block: int) -> Iterable[list[Block]]:
+def batch(blocks: Iterable[Block]) -> Iterable[list[Block]]:
     pack = []
+    for b in blocks:
+        pack.append(b)
+        if len(pack) >= 50:
+            yield pack
+            pack = []
+    if pack:
+        yield pack
+
+
+def read_from_stdin(options: WriteOptions, next_block: int) -> Iterable[Block]:
     for line in sys.stdin:
         if line:
             block: Block = json.loads(line)
@@ -102,12 +126,29 @@ def read_blocks(options: WriteOptions, next_block: int) -> Iterable[list[Block]]
             if height > options.last_block:
                 break
             elif next_block <= height:
-                pack.append(block)
-                if len(pack) >= 50:
-                    yield pack
-                    pack = []
-    if pack:
-        yield pack
+                yield block
+
+
+def read_from_url(url: str, options: WriteOptions, next_block: int) -> Iterable[Block]:
+    import httpx
+
+    data_range = {
+        'from': next_block
+    }
+    if options.last_block < math.inf:
+        data_range['to'] = options.last_block
+
+    while data_range['from'] <= options.last_block:
+        try:
+            with httpx.stream('POST', url, json=data_range, timeout=httpx.Timeout(None)) as res:
+                for line in res.iter_lines():
+                    block: Block = json.loads(line)
+                    height = options.get_block_height(block)
+                    data_range['from'] = height + 1
+                    yield block
+        except httpx.NetworkError:
+            LOG.exception('data streaming error, will pause for 5 sec and try again')
+            time.sleep(5)
 
 
 def cli():
