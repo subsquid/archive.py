@@ -1,242 +1,80 @@
-from typing import NotRequired, TypedDict
+from typing import NamedTuple, Protocol, Union, TypeVar, Generic, Iterable, Any
 
-import marshmallow as mm
-import marshmallow.validate
-
-
-class BlockFieldSelection(TypedDict, total=False):
-    number: bool
-    hash: bool
-    parentHash: bool
-    timestamp: bool
-    transactionsRoot: bool
-    receiptsRoot: bool
-    stateRoot: bool
-    logsBloom: bool
-    sha3Uncles: bool
-    extraData: bool
-    miner: bool
-    nonce: bool
-    mixHash: bool
-    size: bool
-    gasLimit: bool
-    gasUsed: bool
-    difficulty: bool
-    totalDifficulty: bool
-    baseFeePerGas: bool
+from .util import WhereExp, json_project, to_snake_case
 
 
-TxFieldSelection = TypedDict('TxFieldSelection', {
-    'transactionIndex': bool,
-    'hash': bool,
-    'nonce': bool,
-    'from': bool,
-    'to': bool,
-    'input': bool,
-    'value': bool,
-    'gas': bool,
-    'gasPrice': bool,
-    'maxFeePerGas': bool,
-    'maxPriorityFeePerGas': bool,
-    'v': bool,
-    'r': bool,
-    's': bool,
-    'yParity': bool,
-    'chainId': bool,
-    'sighash': bool,
-    'gasUsed': bool,
-    'cumulativeGasUsed': bool,
-    'effectiveGasPrice': bool,
-    'type': bool,
-    'status': bool
-}, total=False)
+R = TypeVar('R')
 
 
-class LogFieldSelection(TypedDict, total=False):
-    logIndex: bool
-    transactionIndex: bool
-    transactionHash: bool
-    address: bool
-    data: bool
-    topics: bool
+class Table(Generic[R]):
+    relations: list[Union['RefRel', 'JoinRel']]
+
+    def __init__(self):
+        self.relations = []
+
+    def table_name(self) -> str:
+        raise NotImplementedError()
+
+    def request_name(self) -> str:
+        return self.table_name()
+
+    def selection_name(self) -> str:
+        raise NotImplementedError()
+
+    def primary_key(self) -> tuple[str, ...]:
+        raise NotImplementedError()
+
+    def key(self) -> tuple[str, ...]:
+        return self.primary_key()
+
+    def primary_key_columns(self) -> tuple[str, ...]:
+        return tuple(map(to_snake_case, self.primary_key()))
+
+    def key_columns(self) -> tuple[str, ...]:
+        return tuple(map(to_snake_case, self.key()))
+
+    def where(self, builder: 'Builder', req: R) -> Iterable[WhereExp | None]:
+        raise NotImplementedError()
+
+    def project(self, fields: dict, prefix: str = '') -> str:
+        return json_project(self.get_selected_fields(fields), prefix=prefix)
+
+    def get_weight(self, fields: dict) -> int:
+        weights = self.field_weights()
+        fields = self.get_selected_fields(fields)
+        return sum(weights.get(f, 1) for f in fields)
+
+    def field_weights(self) -> dict[str, int]:
+        return {}
+
+    def get_selected_fields(self, fields: dict) -> list[str]:
+        ls = list(self.key())
+        seen = set(self.key())
+        for f, on in fields.items():
+            if on and f not in seen:
+                ls.append(f)
+                seen.add(f)
+        return ls
 
 
-class TraceFieldSelection(TypedDict, total=False):
-    traceAddress: bool
-    subtraces: bool
-    transactionIndex: bool
-    type: bool
-    error: bool
-    createFrom: bool
-    createValue: bool
-    createGas: bool
-    createInit: bool
-    createResultGasUsed: bool
-    createResultCode: bool
-    createResultAddress: bool
-    callFrom: bool
-    callTo: bool
-    callValue: bool
-    callGas: bool
-    callInput: bool
-    callSighash: bool
-    callType: bool
-    callResultGasUsed: bool
-    callResultOutput: bool
-    suicideAddress: bool
-    suicideRefundAddress: bool
-    suicideBalance: bool
-    rewardAuthor: bool
-    rewardValue: bool
-    rewardType: bool
-
-
-class StateDiffFieldSelection(TypedDict, total=False):
-    transactionIndex: bool
-    address: bool
-    key: bool
-    kind: bool
-    prev: bool
-    next: bool
-
-
-class FieldSelection(TypedDict, total=False):
-    block: BlockFieldSelection
-    transaction: TxFieldSelection
-    log: LogFieldSelection
-    trace: TraceFieldSelection
-    stateDiff: StateDiffFieldSelection
-
-
-class LogRequest(TypedDict, total=False):
-    address: list[str]
-    topic0: list[str]
-    topic1: list[str]
-    topic2: list[str]
-    topic3: list[str]
-    transaction: bool
-
-
-TxRequest = TypedDict('TxRequest', {
-    'from': list[str],
-    'to': list[str],
-    'sighash': list[str],
-    'logs': bool,
-    'traces': bool,
-    'stateDiffs': bool
-}, total=False)
-
-
-class TraceRequest(TypedDict, total=False):
-    type: list[str]
-    createFrom: list[str]
-    callFrom: list[str]
-    callTo: list[str]
-    callSighash: list[str]
-    suicideRefundAddress: list[str]
-    rewardAuthor: list[str]
-    transaction: bool
-    subtraces: bool
-    parents: bool
-
-
-class StateDiffRequest(TypedDict, total=False):
-    address: list[str]
+class RefRel(NamedTuple):
+    table: Table
+    include_flag_name: str
     key: list[str]
-    kind: list[str]
-    transaction: bool
 
 
-class Query(TypedDict):
-    fromBlock: int
-    toBlock: NotRequired[int]
-    includeAllBlocks: NotRequired[bool]
-    fields: NotRequired[FieldSelection]
-    logs: NotRequired[list[LogRequest]]
-    transactions: NotRequired[list[TxRequest]]
-    traces: NotRequired[list[TraceRequest]]
-    stateDiffs: NotRequired[list[StateDiffRequest]]
+class JoinRel(NamedTuple):
+    table: Table
+    include_flag_name: str
+    join_condition: str
 
 
-def _field_map_schema(typed_dict):
-    return mm.fields.Dict(
-        mm.fields.Str(validate=lambda k: k in typed_dict.__optional_keys__),
-        mm.fields.Boolean(),
-        required=False
-    )
+class Builder(Protocol):
+    def new_param(self, value: Any) -> str:
+        pass
+
+    def in_condition(self, col: str, variants: list | None) -> WhereExp | None:
+        pass
 
 
-class FieldSelectionSchema(mm.Schema):
-    block = _field_map_schema(BlockFieldSelection)
-    transaction = _field_map_schema(TxFieldSelection)
-    log = _field_map_schema(LogFieldSelection)
-    trace = _field_map_schema(TraceFieldSelection)
-    stateDiff = _field_map_schema(StateDiffFieldSelection)
-
-
-class LogRequestSchema(mm.Schema):
-    address = mm.fields.List(mm.fields.Str())
-    topic0 = mm.fields.List(mm.fields.Str())
-    topic1 = mm.fields.List(mm.fields.Str())
-    topic2 = mm.fields.List(mm.fields.Str())
-    topic3 = mm.fields.List(mm.fields.Str())
-    transaction = mm.fields.Boolean()
-
-
-TxRequestSchema = mm.Schema.from_dict({
-    'from': mm.fields.List(mm.fields.Str()),
-    'to': mm.fields.List(mm.fields.Str()),
-    'sighash': mm.fields.List(mm.fields.Str()),
-    'logs': mm.fields.Boolean(),
-    'traces': mm.fields.Boolean(),
-    'stateDiffs': mm.fields.Boolean()
-})
-
-
-class TraceRequestSchema(mm.Schema):
-    type = mm.fields.List(mm.fields.Str())
-    createFrom = mm.fields.List(mm.fields.Str())
-    callFrom = mm.fields.List(mm.fields.Str())
-    callTo = mm.fields.List(mm.fields.Str())
-    callSighash = mm.fields.List(mm.fields.Str())
-    suicideRefundAddress = mm.fields.List(mm.fields.Str())
-    rewardAuthor = mm.fields.List(mm.fields.Str())
-    transaction = mm.fields.Boolean()
-    subtraces = mm.fields.Boolean()
-    parents = mm.fields.Boolean()
-
-
-class StateDiffRequestSchema(mm.Schema):
-    address = mm.fields.List(mm.fields.Str())
-    key = mm.fields.List(mm.fields.Str())
-    kind = mm.fields.List(mm.fields.Str())
-    transaction = mm.fields.Boolean()
-
-
-class QuerySchema(mm.Schema):
-    fromBlock = mm.fields.Integer(
-        required=True,
-        strict=True,
-        validate=mm.validate.Range(min=0, min_inclusive=True)
-    )
-
-    toBlock = mm.fields.Integer(
-        required=False,
-        strict=True,
-        validate=mm.validate.Range(min=0, min_inclusive=True)
-    )
-
-    includeAllBlocks = mm.fields.Boolean(required=False)
-
-    fields = mm.fields.Nested(FieldSelectionSchema())
-
-    logs = mm.fields.List(mm.fields.Nested(LogRequestSchema()))
-
-    transactions = mm.fields.List(mm.fields.Nested(TxRequestSchema()))
-
-    traces = mm.fields.List(mm.fields.Nested(TraceRequestSchema()))
-
-    stateDiffs = mm.fields.List(mm.fields.Nested(StateDiffRequestSchema()))
-
-
-query_schema = QuerySchema()
+Model = list[Table]

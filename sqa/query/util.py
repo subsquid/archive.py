@@ -1,5 +1,5 @@
 import re
-from typing import NamedTuple, Union, Iterable, TypeVar
+from typing import NamedTuple, Union, Iterable
 
 
 class And(NamedTuple):
@@ -39,7 +39,7 @@ def remove_camel_prefix(name: str, prefix: str) -> str:
     return name[len(prefix)].lower() + name[len(prefix) + 1:]
 
 
-class SqlBuilder:
+class SelectBuilder:
     def __init__(self, table: str):
         self._table = table
         self._columns = []
@@ -63,27 +63,14 @@ class SqlBuilder:
         return sql
 
 
-_T = TypeVar('_T')
-
-
-def unique(elements: Iterable[_T]) -> Iterable[_T]:
-    seen = set()
-    for e in elements:
-        if e in seen:
-            pass
-        else:
-            seen.add(e)
-            yield e
-
-
-def json_project(fields: Iterable[str | tuple[str, str]], field_prefix: str = '') -> str:
+def json_project(fields: Iterable[str | tuple[str, str]], prefix: str = '') -> str:
     props = []
     for alias in fields:
         if isinstance(alias, tuple):
             exp = alias[1]
             alias = alias[0]
         else:
-            exp = f'{field_prefix}"{to_snake_case(alias)}"'
+            exp = f'{prefix}"{to_snake_case(alias)}"'
 
         props.append(f"'{alias}'")
         props.append(exp)
@@ -99,7 +86,7 @@ def project(columns: Iterable[str], prefix: str = '') -> str:
 
 def json_list(subquery: str):
     return f'coalesce(' \
-           f'(SELECT json_group_array(obj) FROM ({subquery})), ' \
+           f'(SELECT json_group_array(item) FROM ({subquery})), ' \
            f'list_value()' \
            f')'
 

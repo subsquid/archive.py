@@ -120,8 +120,8 @@ def get_last_chunk(fs: Fs, first_block: int = 0, last_block: int = math.inf) -> 
         return chunk
 
 
-def get_filelist(fs: Fs) -> list[str]:
-    for chunk in get_chunks(fs):
+def get_filelist(fs: Fs, first_block: int = 0) -> list[str]:
+    for chunk in get_chunks(fs, first_block):
         return fs.cd(chunk.path()).ls()
     return []
 

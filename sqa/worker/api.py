@@ -1,14 +1,12 @@
 import logging
-from typing import Optional
 
 import falcon
 import falcon.asgi as fa
-import marshmallow as mm
 
-from sqa.query.model import Query, query_schema
-from sqa.query.sql import DataIsNotAvailable
+from sqa.query.builder import MissingData
+from sqa.worker.query import QueryError
 from sqa.worker.state.manager import StateManager
-from sqa.worker.worker import QueryError, Worker
+from sqa.worker.worker import Worker
 
 
 LOG = logging.getLogger(__name__)
@@ -33,15 +31,9 @@ def max_body(limit: int):
     return hook
 
 
-async def get_json(req: fa.Request, schema: Optional[mm.Schema] = None):
+async def get_json(req: fa.Request):
     if req.content_type and req.content_type.startswith('application/json'):
-        obj = await req.get_media()
-        if not schema:
-            return obj
-        try:
-            return schema.load(obj)
-        except mm.ValidationError as err:
-            raise falcon.HTTPBadRequest(description=f'validation error: {err.normalized_messages()}')
+        return await req.get_media()
     else:
         raise falcon.HTTPUnsupportedMediaType(description='expected json body')
 
@@ -60,13 +52,16 @@ class QueryResource:
 
     @falcon.before(max_body(4 * 1024 * 1024))
     async def on_post(self, req: fa.Request, res: fa.Response, dataset: str):
-        query: Query = await get_json(req, query_schema)
+        query = await get_json(req)
         try:
             query_result = await self._worker.execute_query(query, dataset)
             res.text = query_result.result
             res.content_type = 'application/json'
-        except (QueryError, DataIsNotAvailable) as e:
-            raise falcon.HTTPBadRequest(description=str(e))
+        except (QueryError, MissingData) as e:
+            raise falcon.HTTPBadRequest(
+                title=e.__class__.__name__,
+                description=str(e)
+            )
 
 
 def create_app(sm: StateManager, worker: Worker) -> fa.App:

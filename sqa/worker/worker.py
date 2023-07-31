@@ -2,19 +2,16 @@ import asyncio
 import logging
 from multiprocessing.pool import Pool
 
-from sqa.query.model import Query
+from sqa.query.builder import ArchiveQuery
 from sqa.util.asyncio import create_child_task, monitor_service_tasks
-from sqa.worker.query import execute_query, QueryResult
-from sqa.worker.state.dataset import dataset_decode
-from sqa.worker.state.manager import StateManager
-from sqa.worker.transport import Transport
+from .query import execute_query, QueryResult, QueryError, validate_query
+from .state.dataset import dataset_decode
+from .state.manager import StateManager
+from .transport import Transport
+
 
 LOG = logging.getLogger(__name__)
 PING_INTERVAL_SEC = 10
-
-
-class QueryError(Exception):
-    pass
 
 
 class Worker:
@@ -57,19 +54,15 @@ class Worker:
         except:
             LOG.exception('failed to send a pause ping')
 
-    async def execute_query(self, query: Query, dataset: str, profiling: bool = False) -> QueryResult:
-        if _get_query_size(query) > 100:
-            raise QueryError('Archive query contains too many item requests')
-
+    async def execute_query(self, query: ArchiveQuery, dataset: str, profiling: bool = False) -> QueryResult:
         try:
             dataset = dataset_decode(dataset)
         except ValueError:
             raise QueryError(f'failed to decode dataset: {dataset}')
 
+        query = validate_query(query)
+
         first_block = query['fromBlock']
-        last_block = query.get('toBlock')
-        if last_block is not None and last_block < first_block:
-            raise QueryError(f'fromBlock={last_block} > toBlock={first_block}')
 
         data_range_lock = self._sm.use_range(dataset, first_block)
         if data_range_lock is None:
@@ -94,11 +87,3 @@ class Worker:
             )
 
             return await future
-
-
-def _get_query_size(query: Query) -> int:
-    size = 0
-    for item in query.values():
-        if isinstance(item, list):
-            size += len(item)
-    return size
