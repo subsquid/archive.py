@@ -13,14 +13,13 @@ from sqa.worker.api import create_app
 from sqa.worker.state.controller import State
 from sqa.worker.state.intervals import to_range_set
 from sqa.worker.state.manager import StateManager
-from sqa.worker.transport import Transport
 from sqa.worker.worker import Worker
 
 
 LOG = logging.getLogger(__name__)
 
 
-class HttpTransport(Transport):
+class HttpTransport:
     def __init__(self,  worker_id: str, worker_url: str, router_url: str):
         self._worker_id = worker_id
         self._worker_url = worker_url

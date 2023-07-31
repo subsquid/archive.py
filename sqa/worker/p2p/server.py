@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import gzip
 import hashlib
+import json
 import logging
 import multiprocessing
 import os
@@ -12,18 +13,16 @@ from typing import AsyncIterator, Optional, Dict
 import grpc.aio
 from marshmallow import ValidationError
 
-from sqa.query.model import query_schema
 from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
 from sqa.util.child_proc import init_child_process
 from sqa.worker.p2p import messages_pb2 as msg_pb
 from sqa.worker.p2p.p2p_transport_pb2 import Message, Empty
 from sqa.worker.p2p.p2p_transport_pb2_grpc import P2PTransportStub
-from sqa.worker.query import QueryResult, QueryError
+from sqa.worker.query import QueryResult, QueryError, validate_query
 from sqa.worker.state.controller import State
 from sqa.worker.state.dataset import dataset_encode
 from sqa.worker.state.intervals import to_range_set
 from sqa.worker.state.manager import StateManager
-from sqa.worker.transport import Transport
 from sqa.worker.worker import Worker
 
 
@@ -73,7 +72,7 @@ class QueryInfo:
         return int((datetime.now() - self.start_time).total_seconds() * 1000)
 
 
-class P2PTransport(Transport):
+class P2PTransport:
     def __init__(self, channel: grpc.aio.Channel, scheduler_id: str, send_metrics: bool = True):
         self._transport = P2PTransportStub(channel)
         self._scheduler_id = scheduler_id
@@ -227,13 +226,16 @@ async def run_queries(transport: P2PTransport, worker: Worker):
     async for query_task in transport.query_tasks():
         async def task():
             try:
-                query = query_schema.loads(query_task.query)
+                query = json.loads(query_task.query)
+                query = validate_query(query)
                 result = await worker.execute_query(query, query_task.dataset, query_task.profiling)
                 LOG.info(f"Query {query_task.query_id} success")
                 await transport.send_query_result(query_task, result)
             except Exception as e:
                 LOG.exception(f"Query {query_task.query_id} execution failed")
                 await transport.send_query_error(query_task, e)
+
+        # FIXME: backpressure
         asyncio.create_task(task())
 
 
