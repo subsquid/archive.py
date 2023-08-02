@@ -40,6 +40,8 @@ class Call(TypedDict):
     origin: NotRequired[JSON]
     error: NotRequired[JSON]
     success: bool
+    _ethereumTransactTo: NotRequired[Bytes]
+    _ethereumTransactSighash: NotRequired[Bytes]
 
 
 class Event(TypedDict):
@@ -49,6 +51,10 @@ class Event(TypedDict):
     phase: Literal['Initialization', 'ApplyExtrinsic', 'Finalization']
     extrinsicIndex: NotRequired[int]
     callAddress: NotRequired[list[int]]
+    _evmLogAddress: NotRequired[Bytes]
+    _evmLogTopics: NotRequired[list[Bytes]]
+    _contractAddress: NotRequired[Bytes]
+    _gearProgramId: NotRequired[Bytes]
 
 
 class Block(TypedDict):

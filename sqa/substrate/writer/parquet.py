@@ -102,6 +102,8 @@ class CallTable(TableBuilder):
         self.origin = Column(JSON())
         self.error = Column(JSON())
         self.success = Column(pyarrow.bool_())
+        self._ethereum_transact_to = Column(binary())
+        self._ethereum_transact_sighash = Column(binary())
 
     def append(self, block_number: int, call: Call) -> None:
         self.block_number.append(block_number)
@@ -112,6 +114,8 @@ class CallTable(TableBuilder):
         self.origin.append(_to_json(call.get('origin')))
         self.error.append(_to_json(call.get('error')))
         self.success.append(call['success'])
+        self._ethereum_transact_to.append(call.get('_ethereumTransactTo'))
+        self._ethereum_transact_sighash.append(call.get('_ethereumTransactSighash'))
 
 
 class EventTable(TableBuilder):
@@ -123,6 +127,13 @@ class EventTable(TableBuilder):
         self.phase = Column(pyarrow.string())
         self.extrinsic_index = Column(pyarrow.int32())
         self.call_address = Column(address())
+        self._evm_log_address = Column(binary())
+        self._evm_log_topic0 = Column(binary())
+        self._evm_log_topic1 = Column(binary())
+        self._evm_log_topic2 = Column(binary())
+        self._evm_log_topic3 = Column(binary())
+        self._contract_address = Column(binary())
+        self._gear_program_id = Column(binary())
 
     def append(self, block_number: int, event: Event) -> None:
         self.block_number.append(block_number)
@@ -132,6 +143,17 @@ class EventTable(TableBuilder):
         self.phase.append(event['phase'])
         self.extrinsic_index.append(event.get('extrinsicIndex'))
         self.call_address.append(event.get('callAddress'))
+        self._evm_log_address.append(event.get('_evmLogAddress'))
+
+        topics = iter(event.get('_evmLogTopics', ()))
+        self._evm_log_topic0.append(next(topics, None))
+        self._evm_log_topic1.append(next(topics, None))
+        self._evm_log_topic2.append(next(topics, None))
+        self._evm_log_topic3.append(next(topics, None))
+
+        self._contract_address.append(event.get('_contractAddress'))
+        self._gear_program_id.append(event.get('_gearProgramId'))
+
 
 
 class ParquetSink:
@@ -172,14 +194,21 @@ class ParquetSink:
 
         calls = calls.sort_by([
             ('name', 'ascending'),
+            ('_ethereum_transact_to', 'ascending'),
+            ('_ethereum_transact_sighash', 'ascending'),
             ('block_number', 'ascending'),
             ('extrinsic_index', 'ascending')
         ])
 
         events = events.sort_by([
             ('name', 'ascending'),
+            ('_evm_log_address', 'ascending'),
+            ('_evm_log_topic0', 'ascending'),
+            ('_contract_address', 'ascending'),
+            ('_gear_program_id', 'ascending'),
             ('block_number', 'ascending'),
-            ('extrinsic_index', 'ascending')
+            ('extrinsic_index', 'ascending'),
+            ('index', 'ascending')
         ])
 
         kwargs = {
@@ -191,12 +220,24 @@ class ParquetSink:
         fs.write_parquet(
             'events.parquet',
             events,
-            use_dictionary=['name', 'phase'],
+            row_group_size=20_000,
+            use_dictionary=[
+                'name',
+                'phase',
+                '_evm_log_address',
+                '_evm_log_topic0',
+                '_contract_address',
+                '_gear_program_id'
+            ],
             write_statistics=[
                 'block_number',
                 'index',
                 'extrinsic_index',
-                'name'
+                'name',
+                '_evm_log_address',
+                '_evm_log_topic0',
+                '_contract_address',
+                '_gear_program_id'
             ],
             **kwargs
         )
@@ -204,11 +245,18 @@ class ParquetSink:
         fs.write_parquet(
             'calls.parquet',
             calls,
-            use_dictionary=['name'],
+            row_group_size=20_000,
+            use_dictionary=[
+                'name',
+                '_ethereum_transact_to',
+                '_ethereum_transact_sighash'
+            ],
             write_statistics=[
                 'block_number',
                 'extrinsic_index',
-                'name'
+                'name',
+                '_ethereum_transact_to',
+                '_ethereum_transact_sighash'
             ],
             **kwargs
         )

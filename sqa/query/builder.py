@@ -170,7 +170,7 @@ class _SqlQueryBuilder:
                     )
                     union.append(
                         f'SELECT block_number, {projection} '
-                        f'FROM requested_{rel.table.table_name()} '
+                        f'FROM requested_{rel.table.request_name()} '
                         f'WHERE include_{rel.include_flag_name}'
                     )
                 else:

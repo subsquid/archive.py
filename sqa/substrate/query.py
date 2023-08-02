@@ -4,6 +4,7 @@ import marshmallow as mm
 
 from sqa.query.model import STable, RTable, Builder, Model, JoinRel, RefRel
 from sqa.query.schema import BaseQuerySchema
+from sqa.query.util import json_project
 
 
 class BlockFieldSelection(TypedDict, total=False):
@@ -46,27 +47,6 @@ class EventFieldSelection(TypedDict, total=False):
     callAddress: bool
 
 
-class _CallRelations(TypedDict, total=False):
-    extrinsic: bool
-    stack: bool
-    events: bool
-
-
-class _EventRelations(TypedDict, total=False):
-    extrinsic: bool
-    call: bool
-    stack: bool
-
-
-class CallRequest(_CallRelations):
-    name: list[str]
-    subcalls: bool
-
-
-class EventRequest(_EventRelations):
-    name: list[str]
-
-
 def _field_map_schema(typed_dict):
     return mm.fields.Dict(
         mm.fields.Str(validate=lambda k: k in typed_dict.__optional_keys__),
@@ -82,14 +62,32 @@ class _FieldSelectionSchema(mm.Schema):
     event = _field_map_schema(EventFieldSelection)
 
 
+class _CallRelations(TypedDict, total=False):
+    extrinsic: bool
+    stack: bool
+    events: bool
+
+
 class _CallRelationsSchema(mm.Schema):
     extrinsic = mm.fields.Boolean()
     stack = mm.fields.Boolean()
     events = mm.fields.Boolean()
 
 
+class CallRequest(_CallRelations):
+    name: list[str]
+    subcalls: bool
+
+
 class _CallRequestSchema(_CallRelationsSchema):
     name = mm.fields.List(mm.fields.Str())
+    subcalls = mm.fields.Boolean()
+
+
+class _EventRelations(TypedDict, total=False):
+    extrinsic: bool
+    call: bool
+    stack: bool
 
 
 class _EventRelationsSchema(mm.Schema):
@@ -98,14 +96,73 @@ class _EventRelationsSchema(mm.Schema):
     stack = mm.fields.Boolean()
 
 
+class EventRequest(_EventRelations):
+    name: list[str]
+
+
 class _EventRequestSchema(_EventRelationsSchema):
     name = mm.fields.List(mm.fields.Str())
 
 
+class EvmLogRequest(_EventRelations):
+    address: list[str]
+    topic0: list[str]
+    topic1: list[str]
+    topic2: list[str]
+    topic3: list[str]
+
+
+class _EvmLogRequestSchema(_EventRelationsSchema):
+    address = mm.fields.List(mm.fields.Str())
+    topic0 = mm.fields.List(mm.fields.Str())
+    topic1 = mm.fields.List(mm.fields.Str())
+    topic2 = mm.fields.List(mm.fields.Str())
+    topic3 = mm.fields.List(mm.fields.Str())
+
+
+class ContractsContractEmittedRequest(_EventRelations):
+    contractAddress: list[str]
+
+
+class _ContractsContractEmittedRequestSchema(_EventRelationsSchema):
+    contractAddress = mm.fields.List(mm.fields.Str())
+
+
+class GearMessageEnqueuedRequest(_EventRelations):
+    programId: list[str]
+
+
+class _GearMessageEnqueuedRequestSchema(_EventRelationsSchema):
+    programId = mm.fields.List(mm.fields.Str())
+
+
+class GearUserMessageSentRequest(_EventRelations):
+    programId: list[str]
+
+
+class _GearUserMessageSentRequestSchema(_EventRelationsSchema):
+    programId = mm.fields.List(mm.fields.Str())
+
+
+class EthereumTransactRequest(_CallRelations):
+    to: list[str]
+    sighash: list[str]
+
+
+class _EthereumTransactRequestSchema(_CallRelationsSchema):
+    to = mm.fields.List(mm.fields.Str())
+    sighash = mm.fields.List(mm.fields.Str())
+
+
 class _QuerySchema(BaseQuerySchema):
     fields = mm.fields.Nested(_FieldSelectionSchema())
-    calls = mm.fields.List(mm.fields.Nested(_CallRelationsSchema()))
     events = mm.fields.List(mm.fields.Nested(_EventRequestSchema()))
+    calls = mm.fields.List(mm.fields.Nested(_CallRequestSchema()))
+    evmLogs = mm.fields.List(mm.fields.Nested(_EvmLogRequestSchema()))
+    ethereumTransactions = mm.fields.List(mm.fields.Nested(_EthereumTransactRequestSchema()))
+    contractsEvents = mm.fields.List(mm.fields.Nested(_ContractsContractEmittedRequestSchema()))
+    gearMessagesEnqueued = mm.fields.List(mm.fields.Nested(_GearMessageEnqueuedRequestSchema()))
+    gearUserMessagesSent = mm.fields.List(mm.fields.Nested(_GearUserMessageSentRequestSchema()))
 
 
 QUERY_SCHEMA = _QuerySchema()
@@ -121,21 +178,66 @@ class _BlocksTable(STable):
     def primary_key(self) -> tuple[str, ...]:
         return 'number',
 
+    def required_fields(self) -> tuple[str, ...]:
+        return 'number', 'hash', 'parentHash'
+
     def field_weights(self) -> dict[str, int]:
         return {
             'digest': 2
         }
 
 
-class _REvents(RTable):
+class _R_BaseEvent(RTable):
     def table_name(self) -> str:
         return 'events'
 
     def columns(self) -> tuple[str, ...]:
         return 'index', 'extrinsic_index', 'call_address'
 
+
+class _REvents(_R_BaseEvent):
     def where(self, builder: Builder, req: EventRequest):
         yield builder.in_condition('name', req.get('name'))
+
+
+class _REvmLogs(_R_BaseEvent):
+    def request_name(self) -> str:
+        return 'evmLogs'
+
+    def where(self, builder: Builder, req: EvmLogRequest):
+        yield builder.in_condition('name', ['EVM.Log'])
+        yield builder.in_condition('_evm_log_address', req.get('address'))
+        yield builder.in_condition('_evm_log_topic0', req.get('topic0'))
+        yield builder.in_condition('_evm_log_topic1', req.get('topic1'))
+        yield builder.in_condition('_evm_log_topic2', req.get('topic2'))
+        yield builder.in_condition('_evm_log_topic3', req.get('topic3'))
+
+
+class _RContractsEvents(_R_BaseEvent):
+    def request_name(self) -> str:
+        return 'contractsEvents'
+
+    def where(self, builder: Builder, req: ContractsContractEmittedRequest):
+        yield builder.in_condition('name', ['Contracts.ContractEmitted'])
+        yield builder.in_condition('_contract_address', req.get('contractAddress'))
+
+
+class _RGearUserMessagesEnqueued(_R_BaseEvent):
+    def request_name(self) -> str:
+        return 'gearMessagesEnqueued'
+
+    def where(self, builder: Builder, req: GearMessageEnqueuedRequest):
+        yield builder.in_condition('name', ['Gear.UserMessageEnqueued'])
+        yield builder.in_condition('_gear_program_id', req.get('programId'))
+
+
+class _RGearUserMessagesSent(_R_BaseEvent):
+    def request_name(self) -> str:
+        return 'gearUserMessagesSent'
+
+    def where(self, builder: Builder, req: GearUserMessageSentRequest):
+        yield builder.in_condition('name', ['Gear.UserMessageSent'])
+        yield builder.in_condition('_gear_program_id', req.get('programId'))
 
 
 class _SEvents(STable):
@@ -148,10 +250,25 @@ class _SEvents(STable):
     def primary_key(self) -> tuple[str, ...]:
         return 'index',
 
+    def required_fields(self) -> tuple[str, ...]:
+        return 'index', 'extrinsicIndex', 'callAddress'
+
     def field_weights(self) -> dict[str, int]:
         return {
             'args': 4
         }
+
+    def project(self, fields: dict, prefix: str = '') -> str:
+        def rewrite(f: str):
+            if f == 'args':
+                return f, f'{prefix}{f}::json'
+            else:
+                return f
+
+        return json_project(
+            map(rewrite, self.get_selected_fields(fields)),
+            prefix=prefix
+        )
 
 
 class _RCalls(RTable):
@@ -180,6 +297,18 @@ class _SCalls(STable):
             'args': 4
         }
 
+    def project(self, fields: dict, prefix: str = '') -> str:
+        def rewrite(f: str):
+            if f in ('args', 'origin', 'error'):
+                return f, f'{prefix}{f}::json'
+            else:
+                return f
+
+        return json_project(
+            map(rewrite, self.get_selected_fields(fields)),
+            prefix=prefix
+        )
+
 
 class _SExtrinsics(STable):
     def table_name(self) -> str:
@@ -196,10 +325,29 @@ class _SExtrinsics(STable):
             'signature': 2
         }
 
+    def project(self, fields: dict, prefix: str = '') -> str:
+        def rewrite(f: str):
+            if f in ('fee', 'tip'):
+                return f, f'{prefix}{f}::string'
+            elif f in ('signature', 'error'):
+                return f, f'{prefix}{f}::json'
+            else:
+                return f
+
+        return json_project(
+            map(rewrite, self.get_selected_fields(fields)),
+            prefix=prefix
+        )
+
+
 
 def _build_model() -> Model:
     r_events = _REvents()
     r_calls = _RCalls()
+    r_evm_logs = _REvmLogs()
+    r_contracts_events = _RContractsEvents()
+    r_gear_enqueued = _RGearUserMessagesEnqueued()
+    r_gear_sent = _RGearUserMessagesSent()
 
     s_events = _SEvents()
     s_calls = _SCalls()
@@ -207,6 +355,10 @@ def _build_model() -> Model:
 
     s_events.sources.extend([
         r_events,
+        r_evm_logs,
+        r_contracts_events,
+        r_gear_enqueued,
+        r_gear_sent,
         JoinRel(
             table=r_calls,
             include_flag_name='events',
@@ -216,11 +368,6 @@ def _build_model() -> Model:
 
     s_calls.sources.extend([
         r_calls,
-        RefRel(
-            table=r_events,
-            include_flag_name='call',
-            key=['extrinsic_index', 'call_address']
-        ),
         JoinRel(
             table=r_calls,
             include_flag_name='stack',
@@ -237,12 +384,32 @@ def _build_model() -> Model:
         )
     ])
 
+    for r_ev in (r_events, r_evm_logs, r_contracts_events, r_gear_enqueued, r_gear_sent):
+        s_calls.sources.extend([
+            RefRel(
+                table=r_ev,
+                include_flag_name='call',
+                key=['extrinsic_index', 'call_address']
+            ),
+            JoinRel(
+                table=r_ev,
+                include_flag_name='stack',
+                join_condition='s.extrinsic_index = r.extrinsic_index AND '
+                               'r.call_address is not null AND'
+                               'len(s.address) <= len(r.call_address) AND '
+                               's.address = r.call_address[1:len(s.address)]'
+            )
+        ])
+
+        s_extrinsics.sources.extend([
+            RefRel(
+                table=r_ev,
+                include_flag_name='extrinsic',
+                key=['extrinsic_index']
+            ),
+        ])
+
     s_extrinsics.sources.extend([
-        RefRel(
-            table=r_events,
-            include_flag_name='extrinsic',
-            key=['extrinsic_index']
-        ),
         RefRel(
             table=r_calls,
             include_flag_name='extrinsic',
@@ -253,6 +420,10 @@ def _build_model() -> Model:
     return [
         _BlocksTable(),
         r_events,
+        r_evm_logs,
+        r_contracts_events,
+        r_gear_sent,
+        r_gear_enqueued,
         r_calls,
         s_events,
         s_calls,
