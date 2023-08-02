@@ -5,6 +5,7 @@ from typing import Iterable, Optional, NamedTuple
 import marshmallow as mm
 
 import sqa.eth.query
+import sqa.substrate.query
 from sqa.fs import LocalFs
 from sqa.layout import get_chunks, get_filelist
 from sqa.query.builder import ArchiveQuery, build_sql_query
@@ -25,6 +26,8 @@ def validate_query(q) -> ArchiveQuery:
 
     if query_type == 'eth':
         q = _validate_shape(q, sqa.eth.query.QUERY_SCHEMA)
+    elif query_type == 'substrate':
+        q = _validate_shape(q, sqa.substrate.query.QUERY_SCHEMA)
     else:
         raise QueryError(f'invalid query: unknown query type - {query_type}"')
 
@@ -58,6 +61,8 @@ def _get_model(q: dict) -> Model:
     query_type = q.get('type', 'eth')
     if query_type == 'eth':
         return sqa.eth.query.MODEL
+    elif query_type == 'substrate':
+        return sqa.substrate.query.MODEL
     else:
         raise TypeError(f'unknown query type - {query_type}')
 

@@ -9,7 +9,7 @@ from .model import BlockHeader, Extrinsic, Call, BigInt, Event, Block
 
 
 def bigint():
-    return pyarrow.decimal256(76)
+    return pyarrow.decimal128(38)
 
 
 def binary():
