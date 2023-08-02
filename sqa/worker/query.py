@@ -84,8 +84,6 @@ def execute_query(
     filelist = get_filelist(fs, first_block=first_block)
     sql_query = build_sql_query(model, q, filelist)
 
-    print(sql_query.sql)
-
     runner = QueryRunner(dataset_dir, sql_query, profiling=profiling)
     num_read_chunks = 0
 

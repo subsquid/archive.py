@@ -3,7 +3,7 @@ from typing import TypedDict
 
 import marshmallow as mm
 
-from sqa.query.model import Table, Builder, JoinRel, RefRel
+from sqa.query.model import STable, Builder, JoinRel, RefRel, RTable
 from sqa.query.schema import BaseQuerySchema
 from sqa.query.util import json_project, remove_camel_prefix, to_snake_case
 
@@ -102,14 +102,6 @@ class StateDiffFieldSelection(TypedDict, total=False):
     kind: bool
     prev: bool
     next: bool
-
-
-class FieldSelection(TypedDict, total=False):
-    block: BlockFieldSelection
-    transaction: TxFieldSelection
-    log: LogFieldSelection
-    trace: TraceFieldSelection
-    stateDiff: StateDiffFieldSelection
 
 
 class LogRequest(TypedDict, total=False):
@@ -221,15 +213,15 @@ class _QuerySchema(BaseQuerySchema):
 QUERY_SCHEMA = _QuerySchema()
 
 
-class _BlocksTable(Table):
+class _BlocksTable(STable):
     def table_name(self):
         return 'blocks'
 
-    def selection_name(self) -> str:
+    def field_selection_name(self) -> str:
         return 'block'
 
-    def key(self):
-        return 'number', 'hash', 'parentHash'
+    def primary_key(self):
+        return ('number',)
 
     def project(self, fields: dict, prefix=''):
         def rewrite_timestamp(f: str):
@@ -248,12 +240,28 @@ class _BlocksTable(Table):
             'logsBloom': 10
         }
 
+    def required_fields(self) -> tuple[str, ...]:
+        return 'number', 'hash', 'parentHash'
 
-class _TransactionsTable(Table):
+
+class _RTransactions(RTable):
+    def table_name(self) -> str:
+        return 'transactions'
+
+    def columns(self) -> tuple[str, ...]:
+        return ('transaction_index',)
+
+    def where(self, builder: Builder, req: TxRequest):
+        yield builder.in_condition('"to"', req.get('to'))
+        yield builder.in_condition('"from"', req.get('from'))
+        yield builder.in_condition('sighash', req.get('sighash'))
+
+
+class _STransactions(STable):
     def table_name(self):
         return 'transactions'
 
-    def selection_name(self) -> str:
+    def field_selection_name(self) -> str:
         return 'transaction'
 
     def primary_key(self):
@@ -264,24 +272,31 @@ class _TransactionsTable(Table):
             'input': 4
         }
 
-    def where(self, builder: Builder, req: TxRequest):
-        yield builder.in_condition('"to"', req.get('to'))
-        yield builder.in_condition('"from"', req.get('from'))
-        yield builder.in_condition('sighash', req.get('sighash'))
+
+class _RLogs(RTable):
+    def table_name(self) -> str:
+        return 'logs'
+
+    def columns(self) -> tuple[str, ...]:
+        return 'log_index', 'transaction_index'
+
+    def where(self, builder: Builder, req: LogRequest):
+        yield builder.in_condition('address', req.get('address'))
+        yield builder.in_condition('topic0', req.get('topic0'))
+        yield builder.in_condition('topic1', req.get('topic1'))
+        yield builder.in_condition('topic2', req.get('topic2'))
+        yield builder.in_condition('topic3', req.get('topic3'))
 
 
-class _LogsTable(Table):
+class _SLogs(STable):
     def table_name(self):
         return 'logs'
 
-    def selection_name(self) -> str:
+    def field_selection_name(self) -> str:
         return 'log'
 
     def primary_key(self):
         return ('logIndex',)
-
-    def key(self):
-        return 'logIndex', 'transactionIndex'
 
     def field_weights(self):
         return {
@@ -303,26 +318,16 @@ class _LogsTable(Table):
             prefix=prefix
         )
 
-    def where(self, builder: Builder, req: LogRequest):
-        yield builder.in_condition('address', req.get('address'))
-        yield builder.in_condition('topic0', req.get('topic0'))
-        yield builder.in_condition('topic1', req.get('topic1'))
-        yield builder.in_condition('topic2', req.get('topic2'))
-        yield builder.in_condition('topic3', req.get('topic3'))
+    def required_fields(self) -> tuple[str, ...]:
+        return 'logIndex', 'transactionIndex'
 
 
-class _TracesTable(Table):
-    def table_name(self):
+class _RTraces(RTable):
+    def table_name(self) -> str:
         return 'traces'
 
-    def selection_name(self) -> str:
-        return 'trace'
-
-    def primary_key(self):
-        return 'transactionIndex', 'traceAddress'
-
-    def key(self):
-        return 'transactionIndex', 'traceAddress', 'type'
+    def columns(self) -> tuple[str, ...]:
+        return 'transaction_index', 'trace_address'
 
     def where(self, builder: Builder, req: TraceRequest):
         yield builder.in_condition('type', req.get('type'))
@@ -332,6 +337,20 @@ class _TracesTable(Table):
         yield builder.in_condition('call_sighash', req.get('callSighash'))
         yield builder.in_condition('suicide_refund_address', req.get('suicideRefundAddress'))
         yield builder.in_condition('reward_author', req.get('rewardAuthor'))
+
+
+class _STraces(STable):
+    def table_name(self) -> str:
+        return 'traces'
+
+    def field_selection_name(self) -> str:
+        return 'trace'
+
+    def primary_key(self) -> tuple[str, ...]:
+        return 'transactionIndex', 'traceAddress'
+
+    def required_fields(self) -> tuple[str, ...]:
+        return 'transactionIndex', 'traceAddress', 'type'
 
     def project(self, fields: dict, prefix: str = ''):
         selected = self.get_selected_fields(fields)
@@ -417,21 +436,15 @@ def _trace_topic_projection(prefix: str, topic: str, topic_fields: list[str]) ->
         return f'json_merge_patch({", ".join(components)})'
 
 
-class _StatediffsTable(Table):
-    def table_name(self):
+class _RStateDiffs(RTable):
+    def table_name(self) -> str:
         return 'statediffs'
 
-    def request_name(self):
+    def request_name(self) -> str:
         return 'stateDiffs'
 
-    def selection_name(self) -> str:
-        return 'stateDiff'
-
-    def primary_key(self):
-        return 'transactionIndex', 'address', 'key'
-
-    def key(self):
-        return 'transactionIndex', 'address', 'key', 'kind'
+    def columns(self) -> tuple[str, ...]:
+        return 'transaction_index', 'address', 'key'
 
     def where(self, builder: Builder, req: StateDiffRequest):
         yield builder.in_condition('address', req.get('address'))
@@ -439,36 +452,58 @@ class _StatediffsTable(Table):
         yield builder.in_condition('kind', req.get('kind'))
 
 
+class _SStateDiffs(STable):
+    def table_name(self) -> str:
+        return 'statediffs'
+
+    def field_selection_name(self) -> str:
+        return 'stateDiff'
+
+    def primary_key(self) -> tuple[str, ...]:
+        return 'transactionIndex', 'address', 'key'
+
+    def required_fields(self):
+        return 'transactionIndex', 'address', 'key', 'kind'
+
+
 def _build_model():
     blocks = _BlocksTable()
-    transactions = _TransactionsTable()
-    logs = _LogsTable()
-    traces = _TracesTable()
-    statediffs = _StatediffsTable()
 
-    statediffs.relations.extend([
+    r_transactions = _RTransactions()
+    r_logs = _RLogs()
+    r_traces = _RTraces()
+    r_statediffs = _RStateDiffs()
+
+    s_transactions = _STransactions()
+    s_logs = _SLogs()
+    s_traces = _STraces()
+    s_statediffs = _SStateDiffs()
+
+    s_statediffs.sources.extend([
+        r_statediffs,
         JoinRel(
-            table=transactions,
+            table=r_transactions,
             include_flag_name='stateDiffs',
             join_condition='s.transaction_index = r.transaction_index'
         )
     ])
 
-    traces.relations.extend([
+    s_traces.sources.extend([
+        r_traces,
         JoinRel(
-            table=transactions,
+            table=r_transactions,
             include_flag_name='traces',
             join_condition='s.transaction_index = r.transaction_index'
         ),
         JoinRel(
-            table=traces,
+            table=r_traces,
             include_flag_name='subtraces',
             join_condition='s.transaction_index = r.transaction_index AND '
                            'len(s.trace_address) > len(r.trace_address) AND '
                            's.trace_address[1:len(r.trace_address)] = r.trace_address'
         ),
         JoinRel(
-            table=traces,
+            table=r_traces,
             include_flag_name='parents',
             join_condition='s.transaction_index = r.transaction_index AND '
                            'len(s.trace_address) < len(r.trace_address) AND '
@@ -476,27 +511,29 @@ def _build_model():
         )
     ])
 
-    logs.relations.extend([
+    s_logs.sources.extend([
+        r_logs,
         JoinRel(
-            table=traces,
+            table=r_transactions,
             include_flag_name='logs',
             join_condition='s.transaction_index = r.transaction_index'
         )
     ])
 
-    transactions.relations.extend([
+    s_transactions.sources.extend([
+        r_transactions,
         RefRel(
-            table=logs,
+            table=r_logs,
             include_flag_name='transaction',
             key=['transaction_index']
         ),
         RefRel(
-            table=traces,
+            table=r_traces,
             include_flag_name='transaction',
             key=['transaction_index']
         ),
         RefRel(
-            table=statediffs,
+            table=r_statediffs,
             include_flag_name='transaction',
             key=['transaction_index']
         )
@@ -504,10 +541,14 @@ def _build_model():
 
     return [
         blocks,
-        transactions,
-        logs,
-        traces,
-        statediffs
+        r_transactions,
+        r_logs,
+        r_traces,
+        r_statediffs,
+        s_transactions,
+        s_logs,
+        s_traces,
+        s_statediffs
     ]
 
 

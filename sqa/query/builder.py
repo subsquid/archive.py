@@ -2,7 +2,7 @@ import itertools
 from typing import TypedDict, NotRequired, Any, Iterable
 
 from . import SqlQuery
-from .model import Table, RefRel, JoinRel
+from .model import STable, RefRel, JoinRel, Model, RTable
 from .util import SelectBuilder, And, Or, union_all, Bin, project, json_list, json_project
 
 
@@ -18,7 +18,7 @@ class ArchiveQuery(TypedDict):
 
 
 def build_sql_query(
-        model: list[Table],
+        model: Model,
         q: ArchiveQuery,
         filelist: list[str],
         size_limit=1_000_000
@@ -44,7 +44,7 @@ def build_sql_query(
 
 class _SqlQueryBuilder:
     def __init__(self,
-                 model: list[Table],
+                 model: Model,
                  q: ArchiveQuery,
                  filelist: list[str],
                  size_limit=1_000_000
@@ -89,7 +89,7 @@ class _SqlQueryBuilder:
                     f'"{name}" data is not supported by this archive on requested block range'
                 )
 
-    def add_req_rel(self, table: Table) -> None:
+    def add_req(self, table: RTable) -> None:
         requests: list[dict] | None
         requests = self.q.get(table.request_name())
         if not requests:
@@ -111,7 +111,7 @@ class _SqlQueryBuilder:
         for mask, req_group in itertools.groupby(requests, key=relation_mask):
             qb = SelectBuilder(table.table_name())
             qb.add_columns(['block_number'])
-            qb.add_columns(table.key_columns())
+            qb.add_columns(table.columns())
             for i, flag in enumerate(include_flags):
                 qb.add_columns([
                     f'{self.new_param(mask[i])} AS include_{flag}'
@@ -130,34 +130,38 @@ class _SqlQueryBuilder:
 
             union.append(qb.build())
 
-        relation_name = f'requested_{table.table_name()}'
+        relation_name = f'requested_{table.request_name()}'
 
         if len(union) == 1:
             self.relations[relation_name] = union[0]
         else:
             qb = SelectBuilder(f'({union_all(union)})')
             qb.add_columns(['block_number'])
-            qb.add_columns(table.key_columns())
+            qb.add_columns(table.columns())
             qb.add_columns(
                 f'MAX(include_{flag}) AS include_{flag}'
                 for flag in include_flags
             )
-            self.relations[relation_name] = qb.build() + ' GROUP BY ' + ', '.join(table.key())
+            self.relations[relation_name] = qb.build() + ' GROUP BY ' + ', '.join(table.columns())
 
-    def get_include_flags(self, table: Table) -> Iterable[str]:
-        for t in self.items():
-            for rel in t.relations:
-                if rel.table == table:
+    def get_include_flags(self, table: RTable) -> Iterable[str]:
+        for t in self.s_items():
+            for rel in t.sources:
+                if not isinstance(rel, RTable) and rel.table == table:
                     yield rel.include_flag_name
 
-    def add_sel_rel(self, table: Table) -> None:
+    def add_sel(self, table: STable) -> None:
         union = []
-        has_relations = False
-
-        for rel in table.relations:
+        r_table = False
+        for rel in table.sources:
             if self.is_rel_requested(rel):
-                has_relations = True
-                if isinstance(rel, RefRel):
+                if isinstance(rel, RTable):
+                    r_table = True
+                    union.append(
+                        f'SELECT block_number, {project(rel.columns())} '
+                        f'FROM requested_{rel.request_name()}'
+                    )
+                elif isinstance(rel, RefRel):
                     projection = ", ".join(
                         c if a == c else f"{c} AS {a}" for a, c in zip(
                             table.primary_key_columns(),
@@ -172,31 +176,28 @@ class _SqlQueryBuilder:
                 else:
                     union.append(
                         f'SELECT s.block_number, {project(table.primary_key_columns(), prefix="s.")} '
-                        f'FROM {table.table_name()} s, requested_{rel.table.table_name()} r '
+                        f'FROM {table.table_name()} s, requested_{rel.table.request_name()} r '
                         f'WHERE r.include_{rel.include_flag_name} '
                         f'AND s.block_number = r.block_number '
                         f'AND {rel.join_condition}'
                     )
-
-        if f'requested_{table.table_name()}' in self.relations:
-            union.append(
-                f'SELECT block_number, {project(table.primary_key_columns())} '
-                f'FROM requested_{table.table_name()}'
-            )
 
         if not union:
             return
 
         self.use_table(table.table_name())
 
-        if len(union) == 1 and not has_relations:
+        if len(union) == 1 and r_table:
             select = union[0]
         else:
             select = f'SELECT DISTINCT * FROM ({union_all(union)})'
 
         self.relations[f'selected_{table.table_name()}'] = select
 
-    def is_rel_requested(self, rel: RefRel | JoinRel) -> bool:
+    def is_rel_requested(self, rel: RTable | RefRel | JoinRel) -> bool:
+        if isinstance(rel, RTable):
+            return bool(self.q.get(rel.request_name()))
+
         requests: list[dict] | None
         requests = self.q.get(rel.table.request_name())
         if not requests:
@@ -206,26 +207,37 @@ class _SqlQueryBuilder:
                 return True
         return False
 
-    def items(self) -> Iterable[Table]:
+    def r_items(self) -> Iterable[RTable]:
+        for t in self.items():
+            if isinstance(t, RTable):
+                yield t
+
+    def s_items(self) -> Iterable[STable]:
+        for t in self.items():
+            if isinstance(t, STable):
+                yield t
+
+    def items(self) -> Iterable[RTable | STable]:
         for table in self.model:
             if table.table_name() == 'blocks':
                 pass
             else:
                 yield table
 
-    def get_blocks_table(self) -> Table:
+    def get_blocks_table(self) -> STable:
         for table in self.model:
             if table.table_name() == 'blocks':
+                assert isinstance(table, STable)
                 return table
         assert False, '"blocks" table must be defined'
 
-    def get_fields(self, table: Table) -> dict:
-        return self.q.get('fields', {}).get(table.selection_name(), {})
+    def get_fields(self, table: STable) -> dict:
+        return self.q.get('fields', {}).get(table.field_selection_name(), {})
 
     def add_item_stats(self) -> None:
         sources = []
 
-        for table in self.items():
+        for table in self.s_items():
             if f'selected_{table.table_name()}' in self.relations:
                 fields = self.get_fields(table)
                 weight = table.get_weight(fields)
@@ -282,11 +294,11 @@ class _SqlQueryBuilder:
         blocks_table = self.get_blocks_table()
         self.use_table('blocks')
 
-        for table in self.items():
-            self.add_req_rel(table)
+        for table in self.r_items():
+            self.add_req(table)
 
-        for table in self.items():
-            self.add_sel_rel(table)
+        for table in self.s_items():
+            self.add_sel(table)
 
         self.add_item_stats()
         self.add_block_stats()
@@ -296,14 +308,14 @@ class _SqlQueryBuilder:
             ('header', blocks_table.project(self.get_fields(blocks_table)))
         ]
 
-        for table in self.items():
+        for table in self.s_items():
             selected = f'selected_{table.table_name()}'
             if selected in self.relations:
                 projection = table.project(self.get_fields(table), prefix='t.')
                 condition = ' AND '.join(f't.{c} = s.{c}' for c in table.primary_key_columns())
                 order = project(table.primary_key_columns(), 't.')
                 props.append((
-                    table.request_name(),
+                    table.prop_name(),
                     json_list(
                         f'SELECT {projection} AS item '
                         f'FROM {table.table_name()} AS t, {selected} AS s '

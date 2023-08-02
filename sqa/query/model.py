@@ -6,35 +6,40 @@ from .util import WhereExp, json_project, to_snake_case
 R = TypeVar('R')
 
 
-class Table(Generic[R]):
-    relations: list[Union['RefRel', 'JoinRel']]
-
-    def __init__(self):
-        self.relations = []
-
+class RTable(Generic[R]):
     def table_name(self) -> str:
         raise NotImplementedError()
 
     def request_name(self) -> str:
         return self.table_name()
 
-    def selection_name(self) -> str:
+    def columns(self) -> tuple[str, ...]:
+        raise NotImplementedError()
+
+    def where(self, builder: 'Builder', req: R) -> Iterable[WhereExp | None]:
+        raise NotImplementedError()
+
+
+class STable:
+    sources: list[Union[RTable, 'RefRel', 'JoinRel']]
+
+    def __init__(self):
+        self.sources = []
+
+    def table_name(self) -> str:
+        raise NotImplementedError()
+
+    def prop_name(self) -> str:
+        return self.table_name()
+
+    def field_selection_name(self) -> str:
         raise NotImplementedError()
 
     def primary_key(self) -> tuple[str, ...]:
         raise NotImplementedError()
 
-    def key(self) -> tuple[str, ...]:
-        return self.primary_key()
-
     def primary_key_columns(self) -> tuple[str, ...]:
         return tuple(map(to_snake_case, self.primary_key()))
-
-    def key_columns(self) -> tuple[str, ...]:
-        return tuple(map(to_snake_case, self.key()))
-
-    def where(self, builder: 'Builder', req: R) -> Iterable[WhereExp | None]:
-        raise NotImplementedError()
 
     def project(self, fields: dict, prefix: str = '') -> str:
         return json_project(self.get_selected_fields(fields), prefix=prefix)
@@ -48,23 +53,26 @@ class Table(Generic[R]):
         return {}
 
     def get_selected_fields(self, fields: dict) -> list[str]:
-        ls = list(self.key())
-        seen = set(self.key())
+        ls = list(self.required_fields())
+        seen = set(self.required_fields())
         for f, on in fields.items():
             if on and f not in seen:
                 ls.append(f)
                 seen.add(f)
         return ls
 
+    def required_fields(self) -> tuple[str, ...]:
+        return self.primary_key()
+
 
 class RefRel(NamedTuple):
-    table: Table
+    table: RTable
     include_flag_name: str
     key: list[str]
 
 
 class JoinRel(NamedTuple):
-    table: Table
+    table: RTable
     include_flag_name: str
     join_condition: str
 
@@ -77,4 +85,4 @@ class Builder(Protocol):
         pass
 
 
-Model = list[Table]
+Model = list[STable | RTable]
