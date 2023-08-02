@@ -476,7 +476,7 @@ class WriteService:
             os.remove(tmp)
 
     async def _parquet_writer(self, batches: AsyncIterator[Batch]) -> AsyncIterator[WriteTask]:
-        bb = ArrowBatchBuilder()
+        bb = ArrowBatchBuilder(self.options.with_traces, self.options.with_statediffs)
         chunk_size = self.options.chunk_size
 
         writer = ParquetWriter(
