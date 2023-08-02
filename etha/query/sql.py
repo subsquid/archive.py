@@ -108,7 +108,7 @@ class _SqlQueryBuilder:
                 ])
 
             cases = []
-            for req in requests:
+            for req in req_group:
                 conditions = list(c for c in where(req) if c)
                 if conditions:
                     cases.append(And(conditions))
@@ -602,7 +602,10 @@ FROM selected_blocks AS b
         requested = self.q.get('fields', {}).get(table, {})
         return list(
             unique(
-                chain(required, requested)
+                chain(
+                    required,
+                    (name for name, ok in requested.items() if ok)
+                )
             )
         )
 
