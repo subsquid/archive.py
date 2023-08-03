@@ -2,7 +2,7 @@ import logging
 import math
 import time
 from functools import cached_property
-from typing import Iterable, Protocol
+from typing import Iterable, Protocol, Any
 
 from sqa.fs import create_fs, Fs
 from sqa.layout import ChunkWriter
@@ -16,13 +16,16 @@ Block = dict
 
 
 class Sink(Protocol):
-    def write(self, block: Block) -> None:
+    def buffered_bytes(self) -> int:
+        raise NotImplemented
+
+    def push(self, block: Any) -> None:
         pass
 
     def flush(self, fs: Fs) -> None:
         pass
 
-    def buffered_bytes(self) -> int:
+    def end(self) -> None:
         pass
 
 
@@ -116,8 +119,7 @@ class ArchiveWriter:
             chunk_first_block = None
             chunk_fs = self.fs.cd(chunk.path())
             LOG.info(f'writing {chunk_fs.abs()}')
-            with chunk_fs.transact('.') as fs:
-                sink.flush(fs)
+            sink.flush(chunk_fs)
 
         for stride in strides:
             first_block = self._get_height(stride[0])
@@ -138,7 +140,7 @@ class ArchiveWriter:
                 last_hash = block_hash
 
                 # write block
-                sink.write(block)
+                sink.push(block)
 
             if chunk_first_block is None:
                 chunk_first_block = first_block
@@ -154,6 +156,8 @@ class ArchiveWriter:
 
         if sink.buffered_bytes() > 0 and last_block == write_range[1]:
             flush()
+
+        sink.end()
 
         if self._progress.has_news():
             self._report()

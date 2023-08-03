@@ -4,7 +4,7 @@ from typing import Any
 import pyarrow
 
 from sqa.fs import Fs
-from sqa.writer.parquet import TableBuilder, Column
+from sqa.writer.parquet import TableBuilder, Column, BaseParquetSink
 from .model import BlockHeader, Extrinsic, Call, BigInt, Event, Block
 
 
@@ -155,42 +155,32 @@ class EventTable(TableBuilder):
         self._gear_program_id.append(event.get('_gearProgramId'))
 
 
-
-class ParquetSink:
+class ParquetSink(BaseParquetSink):
     def __init__(self):
-        self._init()
+        self.blocks = BlockTable()
+        self.extrinsics = ExtrinsicTable()
+        self.calls = CallTable()
+        self.events = EventTable()
 
-    def _init(self):
-        self.block_table = BlockTable()
-        self.extrinsic_table = ExtrinsicTable()
-        self.call_table = CallTable()
-        self.event_table = EventTable()
-
-    def buffered_bytes(self) -> int:
-        return self.block_table.bytesize() \
-            + self.extrinsic_table.bytesize() \
-            + self.call_table.bytesize() \
-            + self.event_table.bytesize()
-
-    def write(self, block: Block) -> None:
+    def push(self, block: Block) -> None:
         block_number = block['header']['height']
 
-        self.block_table.append(block['header'])
+        self.blocks.append(block['header'])
 
         for ex in block.get('extrinsics', ()):
-            self.extrinsic_table.append(block_number, ex)
+            self.extrinsics.append(block_number, ex)
 
         for call in block.get('calls', ()):
-            self.call_table.append(block_number, call)
+            self.calls.append(block_number, call)
 
         for event in block.get('events', ()):
-            self.event_table.append(block_number, event)
+            self.events.append(block_number, event)
 
-    def flush(self, fs: Fs) -> None:
-        blocks = self.block_table.to_table()
-        extrinsics = self.extrinsic_table.to_table()
-        calls = self.call_table.to_table()
-        events = self.event_table.to_table()
+    def _write(self, fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
+        blocks = tables['blocks']
+        extrinsics = tables['extrinsics']
+        calls = tables['calls']
+        events = tables['events']
 
         calls = calls.sort_by([
             ('name', 'ascending'),
@@ -288,5 +278,3 @@ class ParquetSink:
             ],
             **kwargs
         )
-
-        self._init()

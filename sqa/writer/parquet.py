@@ -1,6 +1,10 @@
-from typing import Union
+import concurrent.futures
+from functools import cached_property
+from typing import Union, Any
 
 import pyarrow
+
+from sqa.fs import Fs
 
 
 class Column:
@@ -21,7 +25,7 @@ class Column:
         self.buf.clear()
 
     def bytesize(self):
-        return sum((c.nbytes for c in self.chunks), 0)
+        return sum(c.nbytes for c in self.chunks)
 
     def build(self) -> Union[pyarrow.ChunkedArray, pyarrow.Array]:
         if self.buf:
@@ -34,20 +38,79 @@ class Column:
         else:
             return pyarrow.chunked_array(self.chunks)
 
+    def reset(self) -> None:
+        self.chunks = []
+        self.buf = []
+
 
 class TableBuilder:
-    def to_table(self) -> pyarrow.Table:
-        arrays = []
-        names = []
+    @cached_property
+    def _columns(self) -> dict[str, Column]:
+        columns = {}
         for n, c in self.__dict__.items():
             if isinstance(c, Column):
-                names.append(n)
-                arrays.append(c.build())
+                columns[n] = c
+        return columns
+
+    def to_table(self) -> pyarrow.Table:
+        names = []
+        arrays = []
+        for n, c in self._columns.items():
+            names.append(n)
+            arrays.append(c.build())
         return pyarrow.table(arrays, names=names)
 
     def bytesize(self) -> int:
-        size = 0
-        for c in self.__dict__.values():
-            if isinstance(c, Column):
-                size += c.bytesize()
-        return size
+        return sum(c.bytesize() for c in self._columns.values())
+
+    def reset(self) -> None:
+        for c in self._columns.values():
+            c.reset()
+
+
+_WRITE_POOL = concurrent.futures.ThreadPoolExecutor(thread_name_prefix='parquet_writer')
+
+
+class BaseParquetSink:
+    @cached_property
+    def _tables(self) -> dict[str, TableBuilder]:
+        tables = {}
+        for k, v in self.__dict__.items():
+            if isinstance(v, TableBuilder):
+                tables[k] = v
+        return tables
+
+    def buffered_bytes(self) -> int:
+        return sum(t.bytesize() for t in self._tables.values())
+
+    def push(self, block: Any) -> None:
+        raise NotImplementedError()
+
+    def _write(self, fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
+        raise NotImplementedError()
+
+    def flush(self, fs: Fs) -> None:
+        arrow_tables = {}
+        for n, t in self._tables.items():
+            arrow_tables[n] = t.to_table()
+
+        self._submit_write(fs, arrow_tables)
+
+        for t in self._tables.values():
+            t.reset()
+
+    def _submit_write(self, fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
+        self._wait_for_prev_write()
+        self.__dict__['_prev_write'] = _WRITE_POOL.submit(self._write_task, fs, tables)
+
+    def _write_task(self, fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
+        with fs.transact('.') as tmp:
+            self._write(tmp, tables)
+
+    def _wait_for_prev_write(self) -> None:
+        if prev_write := self.__dict__.get('_prev_write'):
+            prev_write.result()
+            self.__dict__['_prev_write'] = None
+
+    def end(self):
+        self._wait_for_prev_write()
