@@ -186,6 +186,18 @@ class _BlocksTable(STable):
             'digest': 2
         }
 
+    def project(self, fields: dict, prefix=''):
+        def rewrite_timestamp(f: str):
+            if f == 'timestamp':
+                return 'timestamp', f'epoch({prefix}timestamp)'
+            else:
+                return f
+
+        return json_project(
+            map(rewrite_timestamp, self.get_selected_fields(fields)),
+            prefix=prefix
+        )
+
 
 class _R_BaseEvent(RTable):
     def table_name(self) -> str:
