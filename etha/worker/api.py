@@ -9,6 +9,7 @@ import marshmallow as mm
 
 from etha.query.model import Query, query_schema
 from etha.query.sql import DataIsNotAvailable
+from etha.worker.state.dataset import dataset_decode
 from etha.worker.state.manager import StateManager
 from etha.worker.worker import QueryError, Worker
 
@@ -71,10 +72,15 @@ class QueryResource:
     async def on_post(self, req: fa.Request, res: fa.Response, dataset: str):
         self._assert_is_not_busy()
 
+        try:
+            dataset = dataset_decode(dataset)
+        except ValueError:
+            raise falcon.HTTPBadRequest(description=f'failed to decode dataset: {dataset}')
+
         query: Query = await get_json(req, query_schema)
 
         if random.random() < 0.05:
-            LOG.info('archive query', extra={'query': query})
+            LOG.info('archive query', extra={'query': query, 'dataset': dataset})
 
         self._assert_is_not_busy()
 
@@ -87,7 +93,8 @@ class QueryResource:
         except (QueryError, DataIsNotAvailable) as e:
             if random.random() < 0.2:
                 LOG.warning('archive query error', exc_info=e, extra={
-                    'query': query
+                    'query': query,
+                    'dataset': dataset
                 })
             raise falcon.HTTPBadRequest(description=str(e))
         finally:
@@ -96,7 +103,8 @@ class QueryResource:
         end_time = time.time()
         if end_time - start_time > 10:
             LOG.warning('slow query', extra={
-                'query': query
+                'query': query,
+                'dataset': dataset
             })
 
     def _assert_is_not_busy(self) -> None:

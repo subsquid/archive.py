@@ -7,7 +7,6 @@ from etha.query.model import Query
 from etha.util.asyncio import create_child_task, monitor_service_tasks
 from etha.util.child_proc import init_child_process
 from etha.worker.query import execute_query, QueryResult
-from etha.worker.state.dataset import dataset_decode
 from etha.worker.state.manager import StateManager
 from etha.worker.transport import Transport
 
@@ -67,11 +66,6 @@ class Worker:
     async def execute_query(self, query: Query, dataset: str, profiling: bool = False) -> QueryResult:
         if _get_query_size(query) > 100:
             raise QueryError('Archive query contains too many item requests')
-
-        try:
-            dataset = dataset_decode(dataset)
-        except ValueError:
-            raise QueryError(f'failed to decode dataset: {dataset}')
 
         first_block = query['fromBlock']
         last_block = query.get('toBlock')
