@@ -1,5 +1,6 @@
 import logging
 import random
+import time
 from typing import Optional
 
 import falcon
@@ -42,7 +43,7 @@ async def get_json(req: fa.Request, schema: Optional[mm.Schema] = None):
         try:
             return schema.load(obj)
         except mm.ValidationError as err:
-            if random.random() < 0.1:
+            if random.random() < 0.2:
                 LOG.warning('malformed request', extra={
                     'query': obj,
                     'validation_error': err.normalized_messages()
@@ -72,23 +73,31 @@ class QueryResource:
 
         query: Query = await get_json(req, query_schema)
 
-        if random.random() < 0.01:
+        if random.random() < 0.05:
             LOG.info('archive query', extra={'query': query})
 
         self._assert_is_not_busy()
+
+        start_time = time.time()
         self._pending_requests += 1
         try:
             query_result = await self._worker.execute_query(query, dataset)
             res.text = query_result.result
             res.content_type = 'application/json'
         except (QueryError, DataIsNotAvailable) as e:
-            if random.random() < 0.1:
+            if random.random() < 0.2:
                 LOG.warning('archive query error', exc_info=e, extra={
                     'query': query
                 })
             raise falcon.HTTPBadRequest(description=str(e))
         finally:
             self._pending_requests -= 1
+
+        end_time = time.time()
+        if end_time - start_time > 10:
+            LOG.warning('slow query', extra={
+                'query': query
+            })
 
     def _assert_is_not_busy(self) -> None:
         if self._pending_requests >= self._max_pending_requests:
