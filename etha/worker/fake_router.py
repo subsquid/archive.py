@@ -7,9 +7,12 @@ class PingResource:
     def on_post(self, req: falcon.Request, res: falcon.Response):
         res.media = {
             's3://ethereum-mainnet': [
-                # (1110320, 1275799),
+                (9492320, 9509459),
                 (16254600, 16272699),
                 (17090380, 17098719)
+            ],
+            's3://binance-mainnet': [
+                (5748140, 5756519)
             ]
         }
 

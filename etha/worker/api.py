@@ -36,6 +36,10 @@ def max_body(limit: int):
     return hook
 
 
+def get_squid_id(req: fa.Request) -> str | None:
+    return req.get_header('x-squid-id')
+
+
 async def get_json(req: fa.Request, schema: Optional[mm.Schema] = None):
     if req.content_type and req.content_type.startswith('application/json'):
         obj = await req.get_media()
@@ -44,11 +48,11 @@ async def get_json(req: fa.Request, schema: Optional[mm.Schema] = None):
         try:
             return schema.load(obj)
         except mm.ValidationError as err:
-            if random.random() < 0.2:
-                LOG.warning('malformed request', extra={
-                    'query': obj,
-                    'validation_error': err.normalized_messages()
-                })
+            LOG.warning('malformed request', extra={
+                'query': obj,
+                'validation_error': err.normalized_messages(),
+                'squid': get_squid_id(req)
+            })
             raise falcon.HTTPBadRequest(description=f'validation error: {err.normalized_messages()}')
     else:
         raise falcon.HTTPUnsupportedMediaType(description='expected json body')
@@ -79,8 +83,14 @@ class QueryResource:
 
         query: Query = await get_json(req, query_schema)
 
+        log_extra = {
+            'query_dataset': dataset,
+            'query': query,
+            'squid': get_squid_id(req)
+        }
+
         if random.random() < 0.05:
-            LOG.info('archive query', extra={'query': query, 'dataset': dataset})
+            LOG.info('query', extra=log_extra)
 
         self._assert_is_not_busy()
 
@@ -91,20 +101,17 @@ class QueryResource:
             res.text = query_result.result
             res.content_type = 'application/json'
         except (QueryError, DataIsNotAvailable) as e:
-            if random.random() < 0.2:
-                LOG.warning('archive query error', exc_info=e, extra={
-                    'query': query,
-                    'dataset': dataset
-                })
+            LOG.warning(f'bad query: {e}', extra=log_extra)
             raise falcon.HTTPBadRequest(description=str(e))
         finally:
             self._pending_requests -= 1
 
         end_time = time.time()
-        if end_time - start_time > 10:
+        duration = end_time - start_time
+        if duration > 10:
             LOG.warning('slow query', extra={
-                'query': query,
-                'dataset': dataset
+                'query_time_secs': round(duration),
+                **log_extra
             })
 
     def _assert_is_not_busy(self) -> None:
