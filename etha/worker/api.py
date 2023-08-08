@@ -1,4 +1,5 @@
 import logging
+import random
 from typing import Optional
 
 import falcon
@@ -41,6 +42,11 @@ async def get_json(req: fa.Request, schema: Optional[mm.Schema] = None):
         try:
             return schema.load(obj)
         except mm.ValidationError as err:
+            if random.random() < 0.1:
+                LOG.warning('malformed request', extra={
+                    'query': obj,
+                    'validation_error': err.normalized_messages()
+                })
             raise falcon.HTTPBadRequest(description=f'validation error: {err.normalized_messages()}')
     else:
         raise falcon.HTTPUnsupportedMediaType(description='expected json body')
@@ -57,16 +63,36 @@ class StatusResource:
 class QueryResource:
     def __init__(self, worker: Worker):
         self._worker = worker
+        self._pending_requests = 0
+        self._max_pending_requests = worker.get_processes_count() * 5
 
     @falcon.before(max_body(4 * 1024 * 1024))
     async def on_post(self, req: fa.Request, res: fa.Response, dataset: str):
+        self._assert_is_not_busy()
+
         query: Query = await get_json(req, query_schema)
+
+        if random.random() < 0.01:
+            LOG.info('archive query', extra={'query': query})
+
+        self._assert_is_not_busy()
+        self._pending_requests += 1
         try:
             query_result = await self._worker.execute_query(query, dataset)
             res.text = query_result.result
             res.content_type = 'application/json'
         except (QueryError, DataIsNotAvailable) as e:
+            if random.random() < 0.1:
+                LOG.warning('archive query error', exc_info=e, extra={
+                    'query': query
+                })
             raise falcon.HTTPBadRequest(description=str(e))
+        finally:
+            self._pending_requests -= 1
+
+    def _assert_is_not_busy(self) -> None:
+        if self._pending_requests >= self._max_pending_requests:
+            raise falcon.HTTPServiceUnavailable(description='server is too busy')
 
 
 def create_app(sm: StateManager, worker: Worker) -> fa.App:

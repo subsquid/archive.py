@@ -1,13 +1,16 @@
 import asyncio
 import logging
-from multiprocessing.pool import Pool
+import multiprocessing
+import os
 
 from etha.query.model import Query
 from etha.util.asyncio import create_child_task, monitor_service_tasks
+from etha.util.child_proc import init_child_process
 from etha.worker.query import execute_query, QueryResult
 from etha.worker.state.dataset import dataset_decode
 from etha.worker.state.manager import StateManager
 from etha.worker.transport import Transport
+
 
 LOG = logging.getLogger(__name__)
 PING_INTERVAL_SEC = 10
@@ -18,11 +21,15 @@ class QueryError(Exception):
 
 
 class Worker:
-    def __init__(self, sm: StateManager, pool: Pool, transport: Transport):
+    def __init__(self, sm: StateManager, transport: Transport, procs: int | None = None):
         self._sm = sm
-        self._pool = pool
         self._transport = transport
+        self._procs = procs or os.cpu_count() or 1
+        self._pool = multiprocessing.Pool(processes=self._procs, initializer=init_child_process)
         self._shutdown = False
+
+    def get_processes_count(self) -> int:
+        return self._procs
 
     async def run(self):
         state_update_task = create_child_task('state_update', self._state_update_loop())

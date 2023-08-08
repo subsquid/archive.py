@@ -8,6 +8,7 @@ __pycache__
 # temp project directories
 /data
 /scratch
+*.temp.*
 
 # IDEs
 /.idea
