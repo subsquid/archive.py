@@ -1,6 +1,9 @@
 import datetime
 import math
+import time
 from typing import Iterable, Optional, NamedTuple
+
+import psutil
 
 from etha.fs import LocalFs
 from etha.layout import get_chunks
@@ -13,6 +16,7 @@ class QueryResult(NamedTuple):
     result: str
     num_read_chunks: int
     exec_plan: Optional[str] = None
+    exec_time: Optional[dict] = None
 
 
 def execute_query(dataset_dir: str, data_range: Range, q: Query, profiling: bool = False) -> QueryResult:
@@ -49,8 +53,31 @@ def execute_query(dataset_dir: str, data_range: Range, q: Query, profiling: bool
             if datetime.datetime.now() - beg > datetime.timedelta(seconds=2):
                 break
 
+    if profiling:
+        ps = psutil.Process()
+        beg_times = ps.cpu_times()
+        beg = time.time()
+
+    result = f'[{",".join(json_lines())}]'
+
+    if profiling:
+        duration = time.time() - beg
+        end_times = ps.cpu_times()
+        exec_time = {
+            'user': end_times.user - beg_times.user,
+            'system': end_times.system - beg_times.system,
+        }
+        try:
+            exec_time['iowait'] = end_times.iowait - beg_times.iowait
+        except AttributeError:
+            pass
+        exec_time['elapsed'] = duration
+    else:
+        exec_time = None
+
     return QueryResult(
-        result=f'[{",".join(json_lines())}]',
+        result=result,
         num_read_chunks=num_read_chunks,
-        exec_plan=f'[{",".join(runner.exec_plans)}]' if profiling else None
+        exec_plan=f'[{",".join(runner.exec_plans)}]' if profiling else None,
+        exec_time=exec_time
     )

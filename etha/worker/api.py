@@ -1,3 +1,4 @@
+import json
 import logging
 import random
 import time
@@ -76,6 +77,8 @@ class QueryResource:
     async def on_post(self, req: fa.Request, res: fa.Response, dataset: str):
         self._assert_is_not_busy()
 
+        profiling = req.params.get('profile') == 'true'
+
         try:
             dataset = dataset_decode(dataset)
         except ValueError:
@@ -95,13 +98,16 @@ class QueryResource:
         self._assert_is_not_busy()
 
         start_time = time.time()
+
         self._pending_requests += 1
         try:
-            query_result = await self._worker.execute_query(query, dataset)
+            query_result = await self._worker.execute_query(query, dataset, profiling=profiling)
             res.text = query_result.result
             res.content_type = 'application/json'
-        except (QueryError, DataIsNotAvailable) as e:
+        except QueryError as e:
             LOG.warning(f'bad query: {e}', extra=log_extra)
+            raise falcon.HTTPBadRequest(description=str(e))
+        except DataIsNotAvailable as e:
             raise falcon.HTTPBadRequest(description=str(e))
         finally:
             self._pending_requests -= 1
@@ -111,6 +117,14 @@ class QueryResource:
         if duration > 10:
             LOG.warning('slow query', extra={
                 'query_time_secs': round(duration),
+                **log_extra
+            })
+
+        if query_result.exec_plan:
+            LOG.warning('query profile', extra={
+                'query_time': duration,
+                'query_exec_time': query_result.exec_time,
+                'query_exec_plan': json.loads(query_result.exec_plan),
                 **log_extra
             })
 
