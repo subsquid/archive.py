@@ -1,4 +1,3 @@
-import datetime
 import math
 import time
 from typing import Iterable, Optional, NamedTuple
@@ -10,6 +9,9 @@ from etha.layout import get_chunks
 from etha.query.model import Query
 from etha.query.runner import get_query_runner
 from etha.worker.state.intervals import Range
+
+
+PS = psutil.Process()
 
 
 class QueryResult(NamedTuple):
@@ -24,12 +26,15 @@ def execute_query(dataset_dir: str, data_range: Range, q: Query, profiling: bool
     last_block = min(data_range[1], q.get('toBlock', math.inf))
     assert first_block <= last_block
 
+    beg = time.time()
+    if profiling:
+        beg_cpu_times = PS.cpu_times()
+
     num_read_chunks = 0
     runner = get_query_runner(dataset_dir=dataset_dir, q=q, profiling=profiling)
 
     def json_lines() -> Iterable[str]:
         nonlocal num_read_chunks
-        beg = datetime.datetime.now()
         size = 0
 
         fs = LocalFs(dataset_dir)
@@ -50,30 +55,28 @@ def execute_query(dataset_dir: str, data_range: Range, q: Query, profiling: bool
             if size > 20 * 1024 * 1024:
                 break
 
-            if datetime.datetime.now() - beg > datetime.timedelta(seconds=2):
+            if time.time() - beg > 2:
                 break
-
-    if profiling:
-        ps = psutil.Process()
-        beg_times = ps.cpu_times()
-        beg = time.time()
 
     result = f'[{",".join(json_lines())}]'
 
+    duration = time.time() - beg
+
     if profiling:
         duration = time.time() - beg
-        end_times = ps.cpu_times()
+        end_cpu_times = PS.cpu_times()
         exec_time = {
-            'user': end_times.user - beg_times.user,
-            'system': end_times.system - beg_times.system,
+            'user': end_cpu_times.user - beg_cpu_times.user,
+            'system': end_cpu_times.system - beg_cpu_times.system,
         }
         try:
-            exec_time['iowait'] = end_times.iowait - beg_times.iowait
+            exec_time['iowait'] = end_cpu_times.iowait - beg_cpu_times.iowait
         except AttributeError:
             pass
-        exec_time['elapsed'] = duration
     else:
-        exec_time = None
+        exec_time = {}
+
+    exec_time['elapsed'] = duration
 
     return QueryResult(
         result=result,

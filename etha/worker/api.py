@@ -50,7 +50,7 @@ async def get_json(req: fa.Request, schema: Optional[mm.Schema] = None):
             return schema.load(obj)
         except mm.ValidationError as err:
             LOG.warning('malformed request', extra={
-                'query': obj,
+                'body': obj,
                 'validation_error': err.normalized_messages(),
                 'squid': get_squid_id(req)
             })
@@ -71,11 +71,11 @@ class QueryResource:
     def __init__(self, worker: Worker):
         self._worker = worker
         self._pending_requests = 0
-        self._max_pending_requests = worker.get_processes_count() * 5
+        self._max_pending_requests = worker.get_processes_count() * 2
 
     @falcon.before(max_body(4 * 1024 * 1024))
     async def on_post(self, req: fa.Request, res: fa.Response, dataset: str):
-        self._assert_is_not_busy()
+        self._assert_not_busy()
 
         profiling = req.params.get('profile') == 'true'
 
@@ -92,10 +92,7 @@ class QueryResource:
             'squid': get_squid_id(req)
         }
 
-        if random.random() < 0.05:
-            LOG.info('query', extra=log_extra)
-
-        self._assert_is_not_busy()
+        self._assert_not_busy()
 
         start_time = time.time()
 
@@ -108,17 +105,13 @@ class QueryResource:
             LOG.warning(f'bad query: {e}', extra=log_extra)
             raise falcon.HTTPBadRequest(description=str(e))
         except DataIsNotAvailable as e:
+            LOG.warning('request for unavailable data', extra=log_extra)
             raise falcon.HTTPBadRequest(description=str(e))
         finally:
             self._pending_requests -= 1
 
         end_time = time.time()
         duration = end_time - start_time
-        if duration > 10:
-            LOG.warning('slow query', extra={
-                'query_time_secs': round(duration),
-                **log_extra
-            })
 
         if query_result.exec_plan:
             LOG.warning('query profile', extra={
@@ -127,8 +120,19 @@ class QueryResource:
                 'query_exec_plan': json.loads(query_result.exec_plan),
                 **log_extra
             })
+        elif duration > 10:
+            LOG.warning('slow query', extra={
+                'query_time': duration,
+                'query_exec_time': query_result.exec_time,
+                **log_extra
+            })
+        elif random.random() < 0.05:
+            LOG.info('query sample', extra={
+                'query_time': duration,
+                **log_extra
+            })
 
-    def _assert_is_not_busy(self) -> None:
+    def _assert_not_busy(self) -> None:
         if self._pending_requests >= self._max_pending_requests:
             raise falcon.HTTPServiceUnavailable(description='server is too busy')
 
