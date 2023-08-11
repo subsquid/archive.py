@@ -380,7 +380,7 @@ class _SqlQueryBuilder:
         return compute_item_weight(self.get_statediff_fields(), {})
 
     def get_statediff_fields(self) -> list[str]:
-        return self.get_fields('stateDiff', ['transactionIndex', 'kind'])
+        return self.get_fields('stateDiff', ['transactionIndex', 'address',  'key'])
 
     def project_statediff(self, prefix: str):
         return json_project(self.get_statediff_fields(), prefix)
