@@ -112,6 +112,7 @@ class LogRequest(TypedDict, total=False):
     topic2: list[str]
     topic3: list[str]
     transaction: bool
+    transaction_traces: bool
 
 
 TxRequest = TypedDict('TxRequest', {
@@ -494,6 +495,11 @@ def _build_model():
         JoinRel(
             table=r_transactions,
             include_flag_name='traces',
+            join_condition='s.transaction_index = r.transaction_index'
+        ),
+        JoinRel(
+            table=r_logs,
+            include_flag_name='transaction_traces',
             join_condition='s.transaction_index = r.transaction_index'
         ),
         JoinRel(
