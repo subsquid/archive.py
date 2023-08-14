@@ -67,4 +67,8 @@ worker:
 		--procs 2
 
 
-.PHONY: deps image-ingest image-worker ingest-eth ingest-arb ingest-poly ingest-kusama router worker
+test:
+	@python3 -m tests.run
+
+
+.PHONY: deps image-ingest image-worker ingest-eth ingest-arb ingest-poly ingest-kusama router worker test
