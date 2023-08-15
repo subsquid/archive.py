@@ -24,12 +24,12 @@ def get_fixtures():
 
 
 def execute_query(q: query.ArchiveQuery):
-    return query.execute_query('tests/data/', (17881390, 17882786), q)
+    res = query.execute_query('tests/data/', (17881390, 17882786), q)
+    return json.loads(res.result)
 
 
 def run_test(fixture: Fixture) -> bool:
-    res = execute_query(fixture.query).result
-    actual_result = json.loads(res)
+    actual_result = execute_query(fixture.query)
     return actual_result == fixture.result
 
 
@@ -39,6 +39,8 @@ def main():
             print(f'test "{fixture.name}" successfully passed')
         else:
             print(f'test "{fixture.name}" failed')
+            with open(f'{fixture.name}.actual.temp.json', 'w') as f:
+                json.dump(execute_query(fixture.query), f, indent=4)
             sys.exit(1)
 
 
