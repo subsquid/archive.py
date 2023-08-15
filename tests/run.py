@@ -1,6 +1,7 @@
 import os
 import glob
 import json
+import sys
 from typing import NamedTuple, Any
 
 from sqa.worker import query
@@ -38,6 +39,8 @@ def main():
             print(f'test "{fixture.name}" successfully passed')
         else:
             print(f'test "{fixture.name}" failed')
+            sys.exit(1)
+
 
 if __name__ == '__main__':
     main()
