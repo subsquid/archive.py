@@ -84,13 +84,6 @@ def project(columns: Iterable[str], prefix: str = '') -> str:
     )
 
 
-def json_list(subquery: str):
-    return f'coalesce(' \
-           f'(SELECT json_group_array(item) FROM ({subquery})), ' \
-           f'list_value()' \
-           f')'
-
-
 def compute_item_weight(fields: Iterable[str], weights: dict[str, int]) -> int:
     return sum(weights.get(f, 1) for f in fields)
 

@@ -3,7 +3,7 @@ from typing import TypedDict, NotRequired, Any, Iterable
 
 from . import SqlQuery
 from .model import STable, RefRel, JoinRel, Model, RTable
-from .util import SelectBuilder, And, Or, union_all, Bin, project, json_list, json_project
+from .util import SelectBuilder, And, Or, union_all, Bin, project, json_project
 
 
 class MissingData(Exception):
@@ -316,14 +316,13 @@ class _SqlQueryBuilder:
                 order = project(table.primary_key_columns(), 't.')
                 props.append((
                     table.prop_name(),
-                    json_list(
-                        f'SELECT {projection} AS item '
-                        f'FROM {table.table_name()} AS t, {selected} AS s '
-                        f'WHERE t.block_number = s.block_number '
-                        f'AND {condition} '
-                        f'AND t.block_number = b.number '
-                        f'ORDER BY {order}'
-                    )
+                    f'coalesce(('
+                    f'SELECT list({projection} ORDER BY {order}) '
+                    f'FROM {table.table_name()} AS t, {selected} AS s '
+                    f'WHERE t.block_number = s.block_number '
+                    f'AND {condition} '
+                    f'AND t.block_number = b.number '
+                    f'), list_value())'
                 ))
 
         sub_queries = ',\n'.join(
