@@ -4,7 +4,6 @@ import gzip
 import hashlib
 import json
 import logging
-import multiprocessing
 import os
 from datetime import datetime
 from json import JSONDecodeError
@@ -14,13 +13,12 @@ import grpc.aio
 from marshmallow import ValidationError
 
 from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
-from sqa.util.child_proc import init_child_process
 from sqa.worker.p2p import messages_pb2 as msg_pb
 from sqa.worker.p2p.p2p_transport_pb2 import Message, Empty
 from sqa.worker.p2p.p2p_transport_pb2_grpc import P2PTransportStub
-from sqa.worker.query import QueryResult, QueryError, validate_query
+from sqa.worker.query import QueryResult, QueryError
 from sqa.worker.state.controller import State
-from sqa.worker.state.dataset import dataset_encode
+from sqa.worker.state.dataset import dataset_encode, dataset_decode
 from sqa.worker.state.intervals import to_range_set
 from sqa.worker.state.manager import StateManager
 from sqa.worker.worker import Worker
@@ -227,8 +225,8 @@ async def run_queries(transport: P2PTransport, worker: Worker):
         async def task():
             try:
                 query = json.loads(query_task.query)
-                query = validate_query(query)
-                result = await worker.execute_query(query, query_task.dataset, query_task.profiling)
+                dataset = dataset_decode(query_task.dataset)
+                result = await worker.execute_query(query,dataset, query_task.profiling)
                 LOG.info(f"Query {query_task.query_id} success")
                 await transport.send_query_result(query_task, result)
             except Exception as e:
@@ -283,16 +281,20 @@ async def _main():
     async with channel as chan:
         transport = P2PTransport(chan, args.scheduler_id, send_metrics=(not args.no_metrics))
 
-        with multiprocessing.Pool(processes=args.procs, initializer=init_child_process) as pool:
-            worker = Worker(sm, pool, transport)
+        worker = Worker(sm, transport, args.procs)
 
-            await monitor_service_tasks([
-                asyncio.create_task(transport.run(), name='p2p_transport'),
-                asyncio.create_task(sm.run(), name='state_manager'),
-                asyncio.create_task(worker.run(), name='worker'),
-                asyncio.create_task(run_queries(transport, worker), name='run_queries')
-            ], log=LOG)
+        await monitor_service_tasks([
+            asyncio.create_task(transport.run(), name='p2p_transport'),
+            asyncio.create_task(sm.run(), name='state_manager'),
+            asyncio.create_task(worker.run(), name='worker'),
+            asyncio.create_task(run_queries(transport, worker), name='run_queries')
+        ], log=LOG)
 
 
 def main():
+    if os.getenv('SENTRY_DSN'):
+        import sentry_sdk
+        sentry_sdk.init(
+            traces_sample_rate=1.0
+        )
     run_async_program(_main, log=LOG)

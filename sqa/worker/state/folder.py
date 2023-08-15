@@ -36,18 +36,6 @@ class StateFolder:
             log.info(f'deleting abandoned chunk download at {self.fs.abs(temp_item)}')
             self.fs.delete(temp_item)
 
-        # delete old chunks and datasets
-        for ds, upd in update.items():
-            fs = self.fs.cd(dataset_encode(ds))
-            if upd:
-                for deleted in upd.deleted:
-                    for chunk in get_chunks(fs, first_block=deleted[0], last_block=deleted[1]):
-                        log.info(f'deleting chunk {ds}/{chunk.path()} at {fs.abs()}')
-                        fs.delete(chunk.path())
-            else:
-                log.info(f'deleting dataset {ds} at {fs.abs()}')
-                fs.delete('.')
-
         # download new chunks
         for ds, upd in update.items():
             if not upd:
@@ -69,3 +57,15 @@ class StateFolder:
 
                         log.info('saved %s', dest)
                         on_downloaded_chunk(ds, chunk)
+
+        # delete old chunks and datasets
+        for ds, upd in update.items():
+            fs = self.fs.cd(dataset_encode(ds))
+            if upd:
+                for deleted in upd.deleted:
+                    for chunk in get_chunks(fs, first_block=deleted[0], last_block=deleted[1]):
+                        log.info(f'deleting chunk {ds}/{chunk.path()} at {fs.abs()}')
+                        fs.delete(chunk.path())
+            else:
+                log.info(f'deleting dataset {ds} at {fs.abs()}')
+                fs.delete('.')

@@ -1,11 +1,12 @@
 import asyncio
 import logging
-from multiprocessing.pool import Pool
+import multiprocessing
+import os
 
 from sqa.query.builder import ArchiveQuery
 from sqa.util.asyncio import create_child_task, monitor_service_tasks
-from .query import execute_query, QueryResult, QueryError, validate_query
-from .state.dataset import dataset_decode
+from sqa.util.child_proc import init_child_process
+from .query import QueryResult, QueryError, validate_query, execute_query
 from .state.manager import StateManager
 from .transport import Transport
 
@@ -15,11 +16,15 @@ PING_INTERVAL_SEC = 10
 
 
 class Worker:
-    def __init__(self, sm: StateManager, pool: Pool, transport: Transport):
+    def __init__(self, sm: StateManager, transport: Transport, procs: int | None = None):
         self._sm = sm
-        self._pool = pool
         self._transport = transport
+        self._procs = procs or (os.cpu_count() or 1) * 3 // 2
+        self._pool = multiprocessing.Pool(processes=self._procs, initializer=init_child_process)
         self._shutdown = False
+
+    def get_processes_count(self) -> int:
+        return self._procs
 
     async def run(self):
         state_update_task = create_child_task('state_update', self._state_update_loop())
@@ -55,15 +60,9 @@ class Worker:
             LOG.exception('failed to send a pause ping')
 
     async def execute_query(self, query: ArchiveQuery, dataset: str, profiling: bool = False) -> QueryResult:
-        try:
-            dataset = dataset_decode(dataset)
-        except ValueError:
-            raise QueryError(f'failed to decode dataset: {dataset}')
-
         query = validate_query(query)
 
         first_block = query['fromBlock']
-
         data_range_lock = self._sm.use_range(dataset, first_block)
         if data_range_lock is None:
             raise QueryError(f'data for block {first_block} is not available')

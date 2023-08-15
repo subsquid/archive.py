@@ -81,7 +81,7 @@ class TxTableBuilder(TableBuilder):
         self.cumulative_gas_used = Column(qty())
         self.effective_gas_price = Column(qty())
         self.contract_address = Column(pyarrow.string())
-        self.type = Column(pyarrow.int8())
+        self.type = Column(pyarrow.uint8())
         self.status = Column(pyarrow.int8())
 
     def append(self, tx: Transaction):
@@ -113,7 +113,7 @@ class TxTableBuilder(TableBuilder):
         if receipt:
             self.gas_used.append(receipt['gasUsed'])
             self.cumulative_gas_used.append(receipt['cumulativeGasUsed'])
-            self.effective_gas_price.append(receipt['effectiveGasPrice'])
+            self.effective_gas_price.append(receipt.get('effectiveGasPrice'))
             self.type.append(qty2int(receipt['type']))
             self.status.append(qty2int(receipt['status']))
             self.contract_address.append(receipt.get('contractAddress'))
@@ -288,9 +288,9 @@ class TraceTableBuilder(TableBuilder):
 
             trace_type: Literal['create', 'call', 'suicide']
             frame_type = frame['type']
-            if frame_type in ('CALL', 'CALLCODE', 'STATICCALL', 'DELEGATECALL', 'INVALID'):
+            if frame_type in ('CALL', 'CALLCODE', 'STATICCALL', 'DELEGATECALL', 'INVALID', 'Call'):
                 trace_type = 'call'
-            elif frame_type in ('CREATE', 'CREATE2'):
+            elif frame_type in ('CREATE', 'CREATE2', 'Create'):
                 trace_type = 'create'
             elif frame_type == 'SELFDESTRUCT':
                 trace_type = 'suicide'

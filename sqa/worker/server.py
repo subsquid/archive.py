@@ -1,14 +1,12 @@
 import argparse
 import asyncio
 import logging
-import multiprocessing
 import os
 
 import httpx
 import uvicorn
 
 from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
-from sqa.util.child_proc import init_child_process
 from sqa.worker.api import create_app
 from sqa.worker.state.controller import State
 from sqa.worker.state.intervals import to_range_set
@@ -124,24 +122,25 @@ async def serve(args):
         router_url=args.router,
     )
 
-    with multiprocessing.Pool(processes=args.procs, initializer=init_child_process) as pool:
-        worker = Worker(sm, pool, transport)
-        app = create_app(sm, worker)
-        server_conf = uvicorn.Config(
-            app,
-            port=args.port,
-            host='0.0.0.0',
-            access_log=False,
-            log_config=None
-        )
+    worker = Worker(sm, transport, args.procs)
 
-        server = Server(server_conf)
+    app = create_app(sm, worker)
 
-        await monitor_service_tasks([
-            asyncio.create_task(server.run_server_task(), name='http_server'),
-            asyncio.create_task(sm.run(), name='state_manager'),
-            asyncio.create_task(worker.run(), name='worker'),
-        ])
+    server_conf = uvicorn.Config(
+        app,
+        port=args.port,
+        host='0.0.0.0',
+        access_log=False,
+        log_config=None
+    )
+
+    server = Server(server_conf)
+
+    await monitor_service_tasks([
+        asyncio.create_task(server.run_server_task(), name='http_server'),
+        asyncio.create_task(sm.run(), name='state_manager'),
+        asyncio.create_task(worker.run(), name='worker'),
+    ])
 
 
 def cli():

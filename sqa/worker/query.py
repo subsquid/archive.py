@@ -1,8 +1,9 @@
-import datetime
 import math
+import time
 from typing import Iterable, Optional, NamedTuple
 
 import marshmallow as mm
+import psutil
 
 import sqa.eth.query
 import sqa.substrate.query
@@ -11,7 +12,7 @@ from sqa.layout import get_chunks, get_filelist
 from sqa.query.builder import ArchiveQuery, build_sql_query
 from sqa.query.model import Model
 from sqa.query.runner import QueryRunner
-from sqa.worker.state.intervals import Range
+from .state.intervals import Range
 
 
 class QueryError(Exception):
@@ -71,6 +72,10 @@ class QueryResult(NamedTuple):
     result: str
     num_read_chunks: int
     exec_plan: Optional[str] = None
+    exec_time: Optional[dict] = None
+
+
+_PS = psutil.Process()
 
 
 def execute_query(
@@ -83,18 +88,23 @@ def execute_query(
     last_block = min(data_range[1], q.get('toBlock', math.inf))
     assert first_block <= last_block
 
+    beg = time.time()
+    if profiling:
+        beg_cpu_times = _PS.cpu_times()
+
     fs = LocalFs(dataset_dir)
 
-    model = _get_model(q)
-    filelist = get_filelist(fs, first_block=first_block)
-    sql_query = build_sql_query(model, q, filelist)
+    sql_query = build_sql_query(
+        _get_model(q),
+        q,
+        get_filelist(fs, first_block=first_block)
+    )
 
     runner = QueryRunner(dataset_dir, sql_query, profiling=profiling)
     num_read_chunks = 0
 
     def json_lines() -> Iterable[str]:
         nonlocal num_read_chunks
-        beg = datetime.datetime.now()
         size = 0
 
         for chunk in get_chunks(fs, first_block=first_block, last_block=last_block):
@@ -114,11 +124,31 @@ def execute_query(
             if size > 20 * 1024 * 1024:
                 break
 
-            if datetime.datetime.now() - beg > datetime.timedelta(seconds=2):
+            if time.time() - beg > 2:
                 break
 
+    result = f'[{",".join(json_lines())}]'
+
+    duration = time.time() - beg
+
+    if profiling:
+        end_cpu_times = _PS.cpu_times()
+        exec_time = {
+            'user': end_cpu_times.user - beg_cpu_times.user,
+            'system': end_cpu_times.system - beg_cpu_times.system,
+        }
+        try:
+            exec_time['iowait'] = end_cpu_times.iowait - beg_cpu_times.iowait
+        except AttributeError:
+            pass
+    else:
+        exec_time = {}
+
+    exec_time['elapsed'] = duration
+
     return QueryResult(
-        result=f'[{",".join(json_lines())}]',
+        result=result,
         num_read_chunks=num_read_chunks,
-        exec_plan=f'[{",".join(runner.exec_plans)}]' if profiling else None
+        exec_plan=f'[{",".join(runner.exec_plans)}]' if profiling else None,
+        exec_time=exec_time
     )

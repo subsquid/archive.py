@@ -24,7 +24,9 @@ class ArrowDataBatch(NamedTuple):
 
 
 class ArrowBatchBuilder:
-    def __init__(self):
+    def __init__(self, with_traces: bool, with_statediffs: bool):
+        self._with_traces = with_traces
+        self._with_statediffs = with_statediffs
         self._init()
 
     def _init(self):
@@ -47,15 +49,17 @@ class ArrowBatchBuilder:
         for tx in block['transactions']:
             self.tx_table.append(tx)
 
-            if frame := tx.get('debugFrame_'):
-                self.trace_table.debug_append(tx['blockNumber'], tx['transactionIndex'], frame['result'])
-            elif trace := tx.get('traceReplay_', {}).get('trace'):
-                self.trace_table.trace_append(tx['blockNumber'], tx['transactionIndex'], trace)
+            if self._with_traces:
+                if frame := tx.get('debugFrame_'):
+                    self.trace_table.debug_append(tx['blockNumber'], tx['transactionIndex'], frame['result'])
+                elif trace := tx.get('traceReplay_', {}).get('trace'):
+                    self.trace_table.trace_append(tx['blockNumber'], tx['transactionIndex'], trace)
 
-            if diff := tx.get('debugStateDiff_'):
-                self.statediff_table.debug_append(tx['blockNumber'], tx['transactionIndex'], diff['result'])
-            elif diff := tx.get('traceReplay_', {}).get('stateDiff'):
-                self.statediff_table.trace_append(tx['blockNumber'], tx['transactionIndex'], diff)
+            if self._with_statediffs:
+                if diff := tx.get('debugStateDiff_'):
+                    self.statediff_table.debug_append(tx['blockNumber'], tx['transactionIndex'], diff['result'])
+                elif diff := tx.get('traceReplay_', {}).get('stateDiff'):
+                    self.statediff_table.trace_append(tx['blockNumber'], tx['transactionIndex'], diff)
 
         if 'logs_' in block:
             for log in block['logs_']:

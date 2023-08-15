@@ -55,12 +55,12 @@ ingest-kusama:
 
 
 router:
-	@python3 -m sqa.worker.fake_router
+	@python3 tests/fake_router.py
 
 
 worker:
 	@python3 -m sqa.worker \
-		--router http://localhost:5555 \
+		--router http://127.0.0.1:5555 \
 		--worker-id 1 \
 		--worker-url http://localhost:8000 \
 		--data-dir data/worker \

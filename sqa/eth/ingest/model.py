@@ -80,7 +80,7 @@ class Receipt(TypedDict):
     blockHash: Hash32
     blockNumber: Qty
     cumulativeGasUsed: Qty
-    effectiveGasPrice: Qty
+    effectiveGasPrice: NotRequired[Qty]
     gasUsed: Qty
     contractAddress: NotRequired[Address20]
     logs: list[Log]
