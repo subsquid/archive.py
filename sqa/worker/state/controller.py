@@ -118,19 +118,14 @@ class StateController:
         self._track = {}
         self._reset()
 
-    def get_status(self) -> dict[Dataset, DatasetRanges]:
-        status = {}
-        for dataset, track in self._track.items():
-            if track.is_live:
-                status[dataset] = {
-                    'available': track.available,
-                    'downloading': track.downloading
-                }
-        return status
-
     def get_state(self) -> State:
         return {
             ds: track.available for ds, track in self._track.items() if track.is_live and track.available
+        }
+
+    def get_downloading(self) -> State:
+        return {
+            ds: track.downloading for ds, track in self._track.items() if track.is_live and track.downloading
         }
 
     def use_range(self, dataset: str, first_block: int) -> Optional[RangeLock]:

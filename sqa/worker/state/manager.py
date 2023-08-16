@@ -42,6 +42,9 @@ class StateManager:
     def get_state(self) -> State:
         return self._controller.get_state()
 
+    def get_downloading(self) -> State:
+        return self._controller.get_downloading()
+
     def update_state(self, desired_state: State) -> None:
         self._controller.ping(desired_state)
 

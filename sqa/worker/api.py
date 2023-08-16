@@ -2,14 +2,12 @@ import json
 import logging
 import random
 import time
-from typing import Optional
 
 import falcon
 import falcon.asgi as fa
-import marshmallow as mm
 
 from sqa.query.builder import MissingData
-from sqa.worker.query import QueryError
+from sqa.worker.query import InvalidQuery
 from sqa.worker.state.dataset import dataset_decode
 from sqa.worker.state.manager import StateManager
 from sqa.worker.worker import Worker
@@ -41,30 +39,31 @@ def get_squid_id(req: fa.Request) -> str | None:
     return req.get_header('x-squid-id')
 
 
-async def get_json(req: fa.Request, schema: Optional[mm.Schema] = None):
+async def get_json(req: fa.Request):
     if req.content_type and req.content_type.startswith('application/json'):
-        obj = await req.get_media()
-        if not schema:
-            return obj
-        try:
-            return schema.load(obj)
-        except mm.ValidationError as err:
-            LOG.warning('malformed request', extra={
-                'body': obj,
-                'validation_error': err.normalized_messages(),
-                'squid': get_squid_id(req)
-            })
-            raise falcon.HTTPBadRequest(description=f'validation error: {err.normalized_messages()}')
+        return await req.get_media()
     else:
         raise falcon.HTTPUnsupportedMediaType(description='expected json body')
 
 
 class StatusResource:
-    def __init__(self, sm: StateManager):
+    def __init__(self, sm: StateManager, router_url: str, worker_id: str, worker_url: str):
         self.sm = sm
+        self.router_url = router_url
+        self.worker_id = worker_id
+        self.worker_url = worker_url
 
     async def on_get(self, req: fa.Request, res: fa.Response):
-        res.media = self.sm.get_state()
+        res.content_type = 'application/json'
+        res.text = json.dumps({
+            'router_url': self.router_url,
+            'worker_id': self.worker_id,
+            'worker_url': self.worker_url,
+            'state': {
+                'available': self.sm.get_state(),
+                'downloading': self.sm.get_downloading()
+            }
+        }, indent=2)
 
 
 class QueryResource:
@@ -101,11 +100,11 @@ class QueryResource:
             query_result = await self._worker.execute_query(query, dataset, profiling=profiling)
             res.text = query_result.result
             res.content_type = 'application/json'
-        except QueryError as e:
-            LOG.warning(f'bad query: {e}', extra=log_extra)
+        except InvalidQuery as e:
+            LOG.warning(f'invalid query: {e}', extra=log_extra)
             raise falcon.HTTPBadRequest(description=str(e))
         except MissingData as e:
-            LOG.warning('request for unavailable data', extra=log_extra)
+            LOG.warning(f'missing data: {e}', extra=log_extra)
             raise falcon.HTTPBadRequest(description=str(e))
         finally:
             self._pending_requests -= 1
@@ -135,10 +134,3 @@ class QueryResource:
     def _assert_not_busy(self) -> None:
         if self._pending_requests >= self._max_pending_requests:
             raise falcon.HTTPServiceUnavailable(description='server is too busy')
-
-
-def create_app(sm: StateManager, worker: Worker) -> fa.App:
-    app = fa.App()
-    app.add_route('/status', StatusResource(sm))
-    app.add_route('/query/{dataset}', QueryResource(worker))
-    return app

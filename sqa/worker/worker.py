@@ -3,10 +3,10 @@ import logging
 import multiprocessing
 import os
 
-from sqa.query.builder import ArchiveQuery
+from sqa.query.builder import ArchiveQuery, MissingData
 from sqa.util.asyncio import create_child_task, monitor_service_tasks
 from sqa.util.child_proc import init_child_process
-from .query import QueryResult, QueryError, validate_query, execute_query
+from .query import QueryResult, validate_query, execute_query
 from .state.manager import StateManager
 from .transport import Transport
 
@@ -65,7 +65,7 @@ class Worker:
         first_block = query['fromBlock']
         data_range_lock = self._sm.use_range(dataset, first_block)
         if data_range_lock is None:
-            raise QueryError(f'data for block {first_block} is not available')
+            raise MissingData(f'data for block {first_block} is not available')
 
         with data_range_lock as data_range:
             args = self._sm.get_dataset_dir(dataset), data_range, query, profiling

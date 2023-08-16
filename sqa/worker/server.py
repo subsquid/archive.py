@@ -3,11 +3,12 @@ import asyncio
 import logging
 import os
 
+import falcon.asgi as fa
 import httpx
 import uvicorn
 
 from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
-from sqa.worker.api import create_app
+from sqa.worker.api import StatusResource, QueryResource
 from sqa.worker.state.controller import State
 from sqa.worker.state.intervals import to_range_set
 from sqa.worker.state.manager import StateManager
@@ -124,7 +125,16 @@ async def serve(args):
 
     worker = Worker(sm, transport, args.procs)
 
-    app = create_app(sm, worker)
+    app = fa.App()
+
+    app.add_route('/status', StatusResource(
+        sm=sm,
+        router_url=args.router,
+        worker_id=args.worker_id,
+        worker_url=args.worker_url
+    ))
+
+    app.add_route('/query/{dataset}', QueryResource(worker))
 
     server_conf = uvicorn.Config(
         app,

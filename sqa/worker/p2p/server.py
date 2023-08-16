@@ -16,7 +16,7 @@ from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async
 from sqa.worker.p2p import messages_pb2 as msg_pb
 from sqa.worker.p2p.p2p_transport_pb2 import Message, Empty
 from sqa.worker.p2p.p2p_transport_pb2_grpc import P2PTransportStub
-from sqa.worker.query import QueryResult, QueryError
+from sqa.worker.query import QueryResult, InvalidQuery
 from sqa.worker.state.controller import State
 from sqa.worker.state.dataset import dataset_encode, dataset_decode
 from sqa.worker.state.intervals import to_range_set
@@ -189,7 +189,7 @@ class P2PTransport:
             return
         exec_time_ms = query_info.exec_time_ms
 
-        if isinstance(error, (JSONDecodeError, ValidationError, QueryError)):
+        if isinstance(error, (JSONDecodeError, ValidationError, InvalidQuery)):
             bad_request, server_error = str(error), None
         else:
             bad_request, server_error = None, str(error)

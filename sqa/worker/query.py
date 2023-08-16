@@ -15,13 +15,13 @@ from sqa.query.runner import QueryRunner
 from .state.intervals import Range
 
 
-class QueryError(Exception):
+class InvalidQuery(Exception):
     pass
 
 
 def validate_query(q) -> ArchiveQuery:
     if not isinstance(q, dict):
-        raise QueryError('invalid query')
+        raise InvalidQuery('query must be a JSON object')
 
     query_type = q.get('type', 'eth')
 
@@ -30,15 +30,15 @@ def validate_query(q) -> ArchiveQuery:
     elif query_type == 'substrate':
         q = _validate_shape(q, sqa.substrate.query.QUERY_SCHEMA)
     else:
-        raise QueryError(f'invalid query: unknown query type - {query_type}"')
+        raise InvalidQuery(f'unknown query type - {query_type}"')
 
     first_block = q['fromBlock']
     last_block = q.get('toBlock')
     if last_block is not None and last_block < first_block:
-        raise QueryError(f'invalid query: fromBlock={last_block} > toBlock={first_block}')
+        raise InvalidQuery(f'fromBlock={last_block} > toBlock={first_block}')
 
     if _get_query_size(q) > 100:
-        raise QueryError('invalid query: too many item requests')
+        raise InvalidQuery('too many item requests')
 
     return q
 
@@ -47,7 +47,7 @@ def _validate_shape(obj, schema: mm.Schema):
     try:
         return schema.load(obj)
     except mm.ValidationError as err:
-        raise QueryError(f'invalid query: {err.normalized_messages()}')
+        raise InvalidQuery(str(err.normalized_messages()))
 
 
 def _get_query_size(query: ArchiveQuery) -> int:
