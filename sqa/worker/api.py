@@ -106,6 +106,9 @@ class QueryResource:
         except MissingData as e:
             LOG.warning(f'missing data: {e}', extra=log_extra)
             raise falcon.HTTPBadRequest(description=str(e))
+        except Exception as e:
+            LOG.exception('failed to execute query', extra=log_extra)
+            raise falcon.HTTPInternalServerError(description=str(e))
         finally:
             self._pending_requests -= 1
 
