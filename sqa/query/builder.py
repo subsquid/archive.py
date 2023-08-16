@@ -158,7 +158,7 @@ class _SqlQueryBuilder:
                 if isinstance(rel, RTable):
                     r_table = True
                     union.append(
-                        f'SELECT block_number, {project(rel.columns())} '
+                        f'SELECT block_number, {project(table.primary_key_columns())} '
                         f'FROM requested_{rel.request_name()}'
                     )
                 elif isinstance(rel, RefRel):
