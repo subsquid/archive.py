@@ -3,8 +3,8 @@ import logging
 
 from locust import FastHttpUser, task
 
-from etha.query.model import Query
-from etha.worker.state.dataset import dataset_encode
+from sqa.query.model import Query
+from sqa.worker.state.dataset import dataset_encode
 
 
 LOG = logging.getLogger(__name__)

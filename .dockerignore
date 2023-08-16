@@ -3,9 +3,11 @@
 /.idea
 
 __pycache__
+*.temp.*
 
 /.envrc
 /.venv
 /build
 /data
 /scratch
+/tests

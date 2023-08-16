@@ -1,0 +1,154 @@
+import math
+import time
+from typing import Iterable, Optional, NamedTuple
+
+import marshmallow as mm
+import psutil
+
+import sqa.eth.query
+import sqa.substrate.query
+from sqa.fs import LocalFs
+from sqa.layout import get_chunks, get_filelist
+from sqa.query.builder import ArchiveQuery, build_sql_query
+from sqa.query.model import Model
+from sqa.query.runner import QueryRunner
+from .state.intervals import Range
+
+
+class InvalidQuery(Exception):
+    pass
+
+
+def validate_query(q) -> ArchiveQuery:
+    if not isinstance(q, dict):
+        raise InvalidQuery('query must be a JSON object')
+
+    query_type = q.get('type', 'eth')
+
+    if query_type == 'eth':
+        q = _validate_shape(q, sqa.eth.query.QUERY_SCHEMA)
+    elif query_type == 'substrate':
+        q = _validate_shape(q, sqa.substrate.query.QUERY_SCHEMA)
+    else:
+        raise InvalidQuery(f'unknown query type - {query_type}"')
+
+    first_block = q['fromBlock']
+    last_block = q.get('toBlock')
+    if last_block is not None and last_block < first_block:
+        raise InvalidQuery(f'fromBlock={last_block} > toBlock={first_block}')
+
+    if _get_query_size(q) > 100:
+        raise InvalidQuery('too many item requests')
+
+    return q
+
+
+def _validate_shape(obj, schema: mm.Schema):
+    try:
+        return schema.load(obj)
+    except mm.ValidationError as err:
+        raise InvalidQuery(str(err.normalized_messages()))
+
+
+def _get_query_size(query: ArchiveQuery) -> int:
+    size = 0
+    for item in query.values():
+        if isinstance(item, list):
+            size += len(item)
+    return size
+
+
+def _get_model(q: dict) -> Model:
+    query_type = q.get('type', 'eth')
+    if query_type == 'eth':
+        return sqa.eth.query.MODEL
+    elif query_type == 'substrate':
+        return sqa.substrate.query.MODEL
+    else:
+        raise TypeError(f'unknown query type - {query_type}')
+
+
+class QueryResult(NamedTuple):
+    result: str
+    num_read_chunks: int
+    exec_plan: Optional[str] = None
+    exec_time: Optional[dict] = None
+
+
+_PS = psutil.Process()
+
+
+def execute_query(
+        dataset_dir: str,
+        data_range: Range,
+        q: ArchiveQuery,
+        profiling: bool = False
+) -> QueryResult:
+    first_block = max(data_range[0], q['fromBlock'])
+    last_block = min(data_range[1], q.get('toBlock', math.inf))
+    assert first_block <= last_block
+
+    beg = time.time()
+    if profiling:
+        beg_cpu_times = _PS.cpu_times()
+
+    fs = LocalFs(dataset_dir)
+
+    sql_query = build_sql_query(
+        _get_model(q),
+        q,
+        get_filelist(fs, first_block=first_block)
+    )
+
+    runner = QueryRunner(dataset_dir, sql_query, profiling=profiling)
+    num_read_chunks = 0
+
+    def json_lines() -> Iterable[str]:
+        nonlocal num_read_chunks
+        size = 0
+
+        for chunk in get_chunks(fs, first_block=first_block, last_block=last_block):
+            try:
+                rows = runner.visit(chunk)
+            except Exception as e:
+                e.add_note(f'data chunk: ${fs.abs(chunk.path())}')
+                raise e
+
+            num_read_chunks += 1
+
+            for row in rows:
+                line = row.as_py()
+                yield line
+                size += len(line)
+
+            if size > 20 * 1024 * 1024:
+                break
+
+            if time.time() - beg > 2:
+                break
+
+    result = f'[{",".join(json_lines())}]'
+
+    duration = time.time() - beg
+
+    if profiling:
+        end_cpu_times = _PS.cpu_times()
+        exec_time = {
+            'user': end_cpu_times.user - beg_cpu_times.user,
+            'system': end_cpu_times.system - beg_cpu_times.system,
+        }
+        try:
+            exec_time['iowait'] = end_cpu_times.iowait - beg_cpu_times.iowait
+        except AttributeError:
+            pass
+    else:
+        exec_time = {}
+
+    exec_time['elapsed'] = duration
+
+    return QueryResult(
+        result=result,
+        num_read_chunks=num_read_chunks,
+        exec_plan=f'[{",".join(runner.exec_plans)}]' if profiling else None,
+        exec_time=exec_time
+    )

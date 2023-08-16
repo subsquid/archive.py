@@ -11,7 +11,7 @@ image-worker:
 
 
 ingest-eth:
-	@python3 -m etha.ingest --dest data/mainnet \
+	@python3 -m sqa.eth.ingest --dest data/mainnet \
 		-e ${ETH_NODE} \
 		-c 30 \
 		-r 600 \
@@ -23,7 +23,7 @@ ingest-eth:
 
 
 ingest-arb:
-	@python3 -m etha.ingest --dest data/arb-one \
+	@python3 -m sqa.eth.ingest --dest data/arb-one \
 		-e ${ARB_NODE} \
 		-c 20 \
 		-r 400 \
@@ -38,7 +38,7 @@ ingest-arb:
 
 
 ingest-poly:
-	@python3 -m etha.ingest --dest data/poly \
+	@python3 -m sqa.eth.ingest --dest data/poly \
 		-e ${POLY_NODE} \
 		-c 10 \
 		-r 1000 \
@@ -47,17 +47,28 @@ ingest-poly:
 		--first-block 40000000
 
 
+ingest-kusama:
+	@python3 -m sqa.substrate.writer data/kusama \
+		--src http://localhost:7373 \
+		--first-block 18961964 \
+		--chunk-size 256
+
+
 router:
-	@python3 -m etha.worker.fake_router
+	@python3 tests/fake_router.py
 
 
 worker:
-	@python3 -m etha.worker \
-		--router http://localhost:5555 \
+	@python3 -m sqa.worker \
+		--router http://127.0.0.1:5555 \
 		--worker-id 1 \
 		--worker-url http://localhost:8000 \
 		--data-dir data/worker \
 		--procs 2
 
 
-.PHONY: deps image-ingest image-worker ingest-eth ingest-arb ingest-poly router worker
+test:
+	@python3 -m tests.run
+
+
+.PHONY: deps image-ingest image-worker ingest-eth ingest-arb ingest-poly ingest-kusama router worker test
