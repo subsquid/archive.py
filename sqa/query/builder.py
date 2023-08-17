@@ -142,7 +142,7 @@ class _SqlQueryBuilder:
                 f'MAX(include_{flag}) AS include_{flag}'
                 for flag in include_flags
             )
-            self.relations[relation_name] = qb.build() + ' GROUP BY ' + ', '.join(table.columns())
+            self.relations[relation_name] = qb.build() + ' GROUP BY block_number, ' + ', '.join(table.columns())
 
     def get_include_flags(self, table: RTable) -> Iterable[str]:
         for t in self.s_items():
