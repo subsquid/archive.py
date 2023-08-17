@@ -253,7 +253,7 @@ class Ingest:
                     # optimism doesn't provide receipts for duplicated transactions
                     # so we just skip such transactions
                     continue
-                if self._is_moonbase:
+                if self._is_moonbase and 2529736 <= qty2int(r['blockNumber']) <= 3069634:
                     # receipts aren't accessible for duplicated transactions
                     # https://github.com/moonbeam-foundation/moonbeam/pull/1790
                     continue
@@ -285,7 +285,7 @@ class Ingest:
             for tx in block['transactions']:
                 if self._is_arbitrum_one and tx['hash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800' and block['number'] == hex(4527955):
                     continue
-                if self._is_moonbase and receipts_map[tx['hash']]['blockHash'] != block['hash']:
+                if self._is_moonbase and 2529736 <= qty2int(block['number']) <= 3069634 and receipts_map[tx['hash']]['blockHash'] != block['hash']:
                     continue
                 if self._is_optimism and receipts_map[tx['hash']]['blockHash'] != block['hash']:
                     continue
