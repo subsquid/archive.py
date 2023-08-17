@@ -243,12 +243,6 @@ class Ingest:
             receipts_map[r['transactionHash']] = r
             block_logs = logs_by_hash.setdefault(r['blockHash'], [])
 
-            if self._is_moonbase and (
-                r['transactionHash'] == '0x48ad1dca229ffc5a418143b003a79dbc11be0d379a3339ee9da9c887e6584283' or
-                r['transactionHash'] == '0xf39b2cbe70decd96bf39b2f23683786e026dfc74b7e9e6c84ac43388214f1273'
-            ):
-                continue
-
             if self._is_arbitrum_one and r['transactionHash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800':
                 continue
 
@@ -258,6 +252,10 @@ class Ingest:
                 if self._is_optimism:
                     # optimism doesn't provide receipts for duplicated transactions
                     # so we just skip such transactions
+                    continue
+                if self._is_moonbase:
+                    # receipts aren't accessible for duplicated transactions
+                    # https://github.com/moonbeam-foundation/moonbeam/pull/1790
                     continue
                 else:
                     raise e
@@ -285,12 +283,9 @@ class Ingest:
             if not self._is_zksync:
                 assert block['logsBloom'] == logs_bloom(block_logs)
             for tx in block['transactions']:
-                if self._is_moonbase and (
-                    (tx['hash'] == '0x48ad1dca229ffc5a418143b003a79dbc11be0d379a3339ee9da9c887e6584283' and block['number'] == hex(2529846)) or
-                    (tx['hash'] == '0xf39b2cbe70decd96bf39b2f23683786e026dfc74b7e9e6c84ac43388214f1273' and block['number'] == hex(2721741))
-                ):
-                    continue
                 if self._is_arbitrum_one and tx['hash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800' and block['number'] == hex(4527955):
+                    continue
+                if self._is_moonbase and receipts_map[tx['hash']]['blockHash'] != block['hash']:
                     continue
                 if self._is_optimism and receipts_map[tx['hash']]['blockHash'] != block['hash']:
                     continue
