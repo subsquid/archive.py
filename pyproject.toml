@@ -32,6 +32,7 @@ p2p-worker = [
     "grpcio == 1.*",
     "marshmallow == 3.*",
     "protobuf == 4.*",
+    "psutil >= 5.9.5",
     "sentry-sdk == 1.28.*",
 ]
 

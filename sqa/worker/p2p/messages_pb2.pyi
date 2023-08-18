@@ -43,18 +43,20 @@ class OkResult(_message.Message):
     def __init__(self, data: _Optional[bytes] = ..., exec_plan: _Optional[bytes] = ...) -> None: ...
 
 class Ping(_message.Message):
-    __slots__ = ["pause", "state", "stored_bytes", "worker_id", "worker_url"]
+    __slots__ = ["pause", "signature", "state", "stored_bytes", "worker_id", "worker_url"]
     PAUSE_FIELD_NUMBER: _ClassVar[int]
+    SIGNATURE_FIELD_NUMBER: _ClassVar[int]
     STATE_FIELD_NUMBER: _ClassVar[int]
     STORED_BYTES_FIELD_NUMBER: _ClassVar[int]
     WORKER_ID_FIELD_NUMBER: _ClassVar[int]
     WORKER_URL_FIELD_NUMBER: _ClassVar[int]
     pause: bool
+    signature: bytes
     state: WorkerState
     stored_bytes: int
     worker_id: str
     worker_url: str
-    def __init__(self, worker_id: _Optional[str] = ..., worker_url: _Optional[str] = ..., state: _Optional[_Union[WorkerState, _Mapping]] = ..., pause: bool = ..., stored_bytes: _Optional[int] = ...) -> None: ...
+    def __init__(self, worker_id: _Optional[str] = ..., worker_url: _Optional[str] = ..., state: _Optional[_Union[WorkerState, _Mapping]] = ..., pause: bool = ..., stored_bytes: _Optional[int] = ..., signature: _Optional[bytes] = ...) -> None: ...
 
 class Query(_message.Message):
     __slots__ = ["dataset", "profiling", "query", "query_id"]

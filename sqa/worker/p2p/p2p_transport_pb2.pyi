@@ -4,6 +4,12 @@ from typing import ClassVar as _ClassVar, Optional as _Optional
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
+class Bytes(_message.Message):
+    __slots__ = ["bytes"]
+    BYTES_FIELD_NUMBER: _ClassVar[int]
+    bytes: bytes
+    def __init__(self, bytes: _Optional[bytes] = ...) -> None: ...
+
 class Empty(_message.Message):
     __slots__ = []
     def __init__(self) -> None: ...

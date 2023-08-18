@@ -14,7 +14,7 @@ from marshmallow import ValidationError
 
 from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
 from sqa.worker.p2p import messages_pb2 as msg_pb
-from sqa.worker.p2p.p2p_transport_pb2 import Message, Empty
+from sqa.worker.p2p.p2p_transport_pb2 import Message, Empty, Bytes
 from sqa.worker.p2p.p2p_transport_pb2_grpc import P2PTransportStub
 from sqa.worker.query import QueryResult, InvalidQuery
 from sqa.worker.state.controller import State
@@ -121,11 +121,14 @@ class P2PTransport:
     async def send_ping(self, state: State, stored_bytes: int, pause=False) -> None:
         if self._local_peer_id is None:
             await self.initialize()
-        envelope = msg_pb.Envelope(ping=msg_pb.Ping(
+        ping = msg_pb.Ping(
             worker_id=self._local_peer_id,
             state=state_to_proto(state),
             stored_bytes=stored_bytes
-        ))
+        )
+        signature: Bytes = await self._transport.Sign(Bytes(bytes=ping.SerializeToString()))
+        ping.signature = signature.bytes
+        envelope = msg_pb.Envelope(ping=ping)
         await self._send(envelope, peer_id=self._scheduler_id)
 
         for dataset, range_set in envelope.ping.state.datasets.items():

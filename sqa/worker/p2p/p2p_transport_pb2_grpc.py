@@ -29,6 +29,16 @@ class P2PTransportStub(object):
                 request_serializer=p2p__transport__pb2.Message.SerializeToString,
                 response_deserializer=p2p__transport__pb2.Empty.FromString,
                 )
+        self.ToggleSubscription = channel.unary_unary(
+                '/p2p_transport.P2PTransport/ToggleSubscription',
+                request_serializer=p2p__transport__pb2.Subscription.SerializeToString,
+                response_deserializer=p2p__transport__pb2.Empty.FromString,
+                )
+        self.Sign = channel.unary_unary(
+                '/p2p_transport.P2PTransport/Sign',
+                request_serializer=p2p__transport__pb2.Bytes.SerializeToString,
+                response_deserializer=p2p__transport__pb2.Bytes.FromString,
+                )
 
 
 class P2PTransportServicer(object):
@@ -52,6 +62,18 @@ class P2PTransportServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ToggleSubscription(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Sign(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_P2PTransportServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -69,6 +91,16 @@ def add_P2PTransportServicer_to_server(servicer, server):
                     servicer.SendMessage,
                     request_deserializer=p2p__transport__pb2.Message.FromString,
                     response_serializer=p2p__transport__pb2.Empty.SerializeToString,
+            ),
+            'ToggleSubscription': grpc.unary_unary_rpc_method_handler(
+                    servicer.ToggleSubscription,
+                    request_deserializer=p2p__transport__pb2.Subscription.FromString,
+                    response_serializer=p2p__transport__pb2.Empty.SerializeToString,
+            ),
+            'Sign': grpc.unary_unary_rpc_method_handler(
+                    servicer.Sign,
+                    request_deserializer=p2p__transport__pb2.Bytes.FromString,
+                    response_serializer=p2p__transport__pb2.Bytes.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -128,5 +160,39 @@ class P2PTransport(object):
         return grpc.experimental.unary_unary(request, target, '/p2p_transport.P2PTransport/SendMessage',
             p2p__transport__pb2.Message.SerializeToString,
             p2p__transport__pb2.Empty.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def ToggleSubscription(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/p2p_transport.P2PTransport/ToggleSubscription',
+            p2p__transport__pb2.Subscription.SerializeToString,
+            p2p__transport__pb2.Empty.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def Sign(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/p2p_transport.P2PTransport/Sign',
+            p2p__transport__pb2.Bytes.SerializeToString,
+            p2p__transport__pb2.Bytes.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
