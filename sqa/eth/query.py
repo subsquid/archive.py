@@ -73,6 +73,7 @@ class TraceFieldSelection(TypedDict, total=False):
     transactionIndex: bool
     type: bool
     error: bool
+    revertReason: bool
     createFrom: bool
     createValue: bool
     createGas: bool
@@ -113,7 +114,7 @@ class LogRequest(TypedDict, total=False):
     topic2: list[str]
     topic3: list[str]
     transaction: bool
-    transaction_traces: bool
+    transactionTraces: bool
 
 
 TxRequest = TypedDict('TxRequest', {
@@ -169,6 +170,7 @@ class _LogRequestSchema(mm.Schema):
     topic2 = mm.fields.List(mm.fields.Str())
     topic3 = mm.fields.List(mm.fields.Str())
     transaction = mm.fields.Boolean()
+    transactionTraces = mm.fields.Boolean()
 
 
 _TxRequestSchema = mm.Schema.from_dict({
@@ -500,7 +502,7 @@ def _build_model():
         ),
         JoinRel(
             table=r_logs,
-            include_flag_name='transaction_traces',
+            include_flag_name='transactionTraces',
             join_condition='s.transaction_index = r.transaction_index'
         ),
         JoinRel(
