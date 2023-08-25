@@ -461,6 +461,9 @@ class _SStateDiffs(STable):
     def table_name(self) -> str:
         return 'statediffs'
 
+    def prop_name(self) -> str:
+        return 'stateDiffs'
+
     def field_selection_name(self) -> str:
         return 'stateDiff'
 
