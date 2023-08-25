@@ -71,8 +71,10 @@ class _SqlQueryBuilder:
         return f'${idx}'
 
     def in_condition(self, col: str, variants: list | None) -> Bin | None:
-        if not variants:
+        if variants is None:
             return None
+        elif len(variants) == 0:
+            return Bin('=', '1', '0')
         elif len(variants) == 1:
             return Bin('=', col, self.new_param(variants[0]))
         else:
