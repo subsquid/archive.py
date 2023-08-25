@@ -29,6 +29,8 @@ LOG = logging.getLogger(__name__)
 # This is the maximum *decompressed* size of the message
 MAX_MESSAGE_LENGTH = 100 * 1024 * 1024  # 100 MiB
 
+PING_TOPIC = "worker_ping"
+
 
 def state_to_proto(state: State) -> msg_pb.WorkerState:
     return msg_pb.WorkerState(datasets={
@@ -79,6 +81,7 @@ class P2PTransport:
         self._query_info: 'Dict[str, QueryInfo]' = {}
         self._local_peer_id: 'Optional[str]' = None
         self._send_metrics = send_metrics
+        self._expected_pong: 'Optional[bytes]' = None  # Hash of the last sent ping
 
     async def initialize(self) -> None:
         self._local_peer_id = (await self._transport.LocalPeerId(Empty())).peer_id
@@ -94,16 +97,23 @@ class P2PTransport:
             envelope = msg_pb.Envelope.FromString(msg.content)
             msg_type = envelope.WhichOneof('msg')
 
-            if msg_type == 'state_update':
+            if msg_type == 'pong':
                 if msg.peer_id != self._scheduler_id:
-                    LOG.error(f"Wrong message origin: {msg.peer_id}")
+                    LOG.warning(f"Wrong message origin: {msg.peer_id}")
                     continue
-                await self._state_updates.put(envelope.state_update)
+                if envelope.pong.ping_hash != self._expected_pong:
+                    LOG.warning("Invalid ping hash in received pong message")
+                    continue
+                self._expected_pong = None
+                if envelope.pong.assigned_state is not None:
+                    await self._state_updates.put(envelope.pong.assigned_state)
+
             elif msg_type == 'query':
                 self._query_info[envelope.query.query_id] = QueryInfo(msg.peer_id)
                 await self._query_tasks.put(envelope.query)
+
             else:
-                LOG.error(f"Unexpected message type received: {msg_type}")
+                LOG.warning(f"Unexpected message type received: {msg_type}")
 
     async def _send(
             self,
@@ -129,7 +139,13 @@ class P2PTransport:
         signature: Bytes = await self._transport.Sign(Bytes(bytes=ping.SerializeToString()))
         ping.signature = signature.bytes
         envelope = msg_pb.Envelope(ping=ping)
-        await self._send(envelope, peer_id=self._scheduler_id)
+
+        # We expect pong to be delivered before the next ping is sent
+        if self._expected_pong is not None:
+            LOG.error("Pong message not received in time. The scheduler is not responding. Contact tech support.")
+        self._expected_pong = sha3_256(ping.SerializeToString())
+
+        await self._send(envelope, topic=PING_TOPIC)
 
         for dataset, range_set in envelope.ping.state.datasets.items():
             envelope = msg_pb.Envelope(dataset_state=range_set)
