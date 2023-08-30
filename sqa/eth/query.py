@@ -274,7 +274,7 @@ class _STransactions(STable):
 
     def field_weights(self):
         return {
-            'input': 4
+            'input': 8
         }
 
 

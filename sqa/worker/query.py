@@ -120,12 +120,14 @@ def execute_query(
                 line = row.as_py()
                 yield line
                 size += len(line)
+                if size > 50 * 1024 * 1024:
+                    return
 
             if size > 20 * 1024 * 1024:
-                break
+                return
 
             if time.time() - beg > 2:
-                break
+                return
 
     result = f'[{",".join(json_lines())}]'
 
