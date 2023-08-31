@@ -18,6 +18,7 @@ class Ingest:
         self,
         rpc: RpcClient,
         finality_confirmation: int,
+        genesis_block: int = 0,
         from_block: int = 0,
         to_block: Optional[int] = None,
         with_receipts: bool = False,
@@ -34,6 +35,7 @@ class Ingest:
         self._use_trace_api = use_trace_api
         self._use_debug_api_for_statediffs = use_debug_api_for_statediffs
         self._height = from_block - 1
+        self._genesis = genesis_block
         self._end = to_block
         self._chain_height = 0
         self._strides = []
@@ -69,7 +71,7 @@ class Ingest:
         self._rpc.close()
 
     async def _detect_special_chains(self) -> None:
-        genesis: Block = await self._rpc.call('eth_getBlockByNumber', ['0x0', False])
+        genesis: Block = await self._rpc.call('eth_getBlockByNumber', [hex(self._genesis), False])
         genesis_hash = genesis['hash']
         self._is_arbitrum_one = genesis_hash == '0x7ee576b35482195fc49205cec9af72ce14f003b9ae69f6ba0faef4514be8b442'
         self._is_moonriver = genesis_hash == '0xce24348303f7a60c4d2d3c82adddf55ca57af89cd9e2cd4b863906ef53b89b3c'

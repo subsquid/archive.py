@@ -116,6 +116,14 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
+        '--genesis-block',
+        type=int,
+        default=0,
+        metavar='N',
+        help='genesis block of a network'
+    )
+
+    program.add_argument(
         '--first-block',
         type=int,
         default=0,
@@ -265,6 +273,7 @@ async def rpc_ingest(args, rpc: RpcClient, first_block: int, last_block: int | N
     ingest = Ingest(
         rpc=rpc,
         finality_confirmation=args.best_block_offset,
+        genesis_block=args.genesis_block,
         from_block=first_block,
         to_block=last_block,
         with_receipts=args.with_receipts,
