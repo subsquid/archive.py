@@ -14,11 +14,11 @@ from marshmallow import ValidationError
 
 from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
 from sqa.worker.p2p import messages_pb2 as msg_pb
-from sqa.worker.p2p.p2p_transport_pb2 import Message, Empty
+from sqa.worker.p2p.p2p_transport_pb2 import Message, Empty, Subscription
 from sqa.worker.p2p.p2p_transport_pb2_grpc import P2PTransportStub
 from sqa.worker.query import QueryResult, InvalidQuery
 from sqa.worker.state.controller import State
-from sqa.worker.state.dataset import dataset_encode, dataset_decode
+from sqa.worker.state.dataset import dataset_decode
 from sqa.worker.state.intervals import to_range_set
 from sqa.worker.state.manager import StateManager
 from sqa.worker.worker import Worker
@@ -28,6 +28,8 @@ LOG = logging.getLogger(__name__)
 
 # This is the maximum *decompressed* size of the message
 MAX_MESSAGE_LENGTH = 100 * 1024 * 1024  # 100 MiB
+PING_TOPIC = "worker_ping"
+WORKER_VERSION = "0.1.1"
 
 
 def state_to_proto(state: State) -> msg_pb.WorkerState:
@@ -83,6 +85,8 @@ class P2PTransport:
     async def initialize(self) -> None:
         self._local_peer_id = (await self._transport.LocalPeerId(Empty())).peer_id
         LOG.info(f"Local peer ID: {self._local_peer_id}")
+        # Subscribe to the ping topic so that our node also participates in broadcasting messages
+        await self._subscribe(topic=PING_TOPIC)
 
     async def run(self):
         receive_task = create_child_task('p2p_receive', self._receive_loop())
@@ -102,6 +106,8 @@ class P2PTransport:
             elif msg_type == 'query':
                 self._query_info[envelope.query.query_id] = QueryInfo(msg.peer_id)
                 await self._query_tasks.put(envelope.query)
+            elif msg_type == 'ping':
+                continue  # Just ignore others' pings
             else:
                 LOG.error(f"Unexpected message type received: {msg_type}")
 
@@ -118,20 +124,19 @@ class P2PTransport:
         )
         await self._transport.SendMessage(msg)
 
+    async def _subscribe(self, topic: str) -> None:
+        await self._transport.ToggleSubscription(Subscription(topic=topic, subscribed=True))
+
     async def send_ping(self, state: State, stored_bytes: int, pause=False) -> None:
         if self._local_peer_id is None:
             await self.initialize()
         envelope = msg_pb.Envelope(ping=msg_pb.Ping(
             worker_id=self._local_peer_id,
             state=state_to_proto(state),
-            stored_bytes=stored_bytes
+            stored_bytes=stored_bytes,
+            version=WORKER_VERSION,
         ))
-        await self._send(envelope, peer_id=self._scheduler_id)
-
-        for dataset, range_set in envelope.ping.state.datasets.items():
-            envelope = msg_pb.Envelope(dataset_state=range_set)
-            topic = dataset_encode(dataset)
-            await self._send(envelope, topic=topic)
+        await self._send(envelope, topic=PING_TOPIC)
 
     async def state_updates(self) -> AsyncIterator[State]:
         while True:
