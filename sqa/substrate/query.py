@@ -294,6 +294,22 @@ class _RCalls(RTable):
         yield builder.in_condition('name', req.get('name'))
 
 
+class _REthereumTransactCalls(RTable):
+    def table_name(self) -> str:
+        return 'calls'
+
+    def request_name(self) -> str:
+        return 'ethereumTransactions'
+
+    def columns(self) -> tuple[str, ...]:
+        return 'extrinsic_index', 'address'
+
+    def where(self, builder: Builder, req: EthereumTransactRequest):
+        yield builder.in_condition('name', ['Ethereum.transact'])
+        yield builder.in_condition('_ethereum_transact_to', req.get('to'))
+        yield builder.in_condition('_ethereum_transact_sighash', req.get('sighash'))
+
+
 class _SCalls(STable):
     def table_name(self) -> str:
         return 'calls'
@@ -352,14 +368,15 @@ class _SExtrinsics(STable):
         )
 
 
-
 def _build_model() -> Model:
     r_events = _REvents()
-    r_calls = _RCalls()
     r_evm_logs = _REvmLogs()
     r_contracts_events = _RContractsEvents()
     r_gear_enqueued = _RGearUserMessagesEnqueued()
     r_gear_sent = _RGearUserMessagesSent()
+
+    r_calls = _RCalls()
+    r_ethereum_transact_calls = _REthereumTransactCalls()
 
     s_events = _SEvents()
     s_calls = _SCalls()
@@ -370,23 +387,21 @@ def _build_model() -> Model:
         r_evm_logs,
         r_contracts_events,
         r_gear_enqueued,
-        r_gear_sent,
-        JoinRel(
-            table=r_calls,
-            include_flag_name='events',
-            join_condition='s.extrinsic_index = r.extrinsic_index AND s.call_address = r.address'
-        )
+        r_gear_sent
     ])
+
+    for rt in (r_calls, r_ethereum_transact_calls):
+        s_events.sources.append(
+            JoinRel(
+                table=rt,
+                include_flag_name='events',
+                join_condition='s.extrinsic_index = r.extrinsic_index AND s.call_address = r.address'
+            )
+        )
 
     s_calls.sources.extend([
         r_calls,
-        JoinRel(
-            table=r_calls,
-            include_flag_name='stack',
-            join_condition='s.extrinsic_index = r.extrinsic_index AND '
-                           'len(s.address) < len(r.address) AND '
-                           's.address = r.address[1:len(s.address)]'
-        ),
+        r_ethereum_transact_calls,
         JoinRel(
             table=r_calls,
             include_flag_name='subcalls',
@@ -395,6 +410,17 @@ def _build_model() -> Model:
                            's.address[1:len(r.address)] = r.address'
         )
     ])
+
+    for rt in (r_calls, r_ethereum_transact_calls):
+        s_calls.sources.append(
+            JoinRel(
+                table=rt,
+                include_flag_name='stack',
+                join_condition='s.extrinsic_index = r.extrinsic_index AND '
+                               'len(s.address) < len(r.address) AND '
+                               's.address = r.address[1:len(s.address)]'
+            ),
+        )
 
     for r_ev in (r_events, r_evm_logs, r_contracts_events, r_gear_enqueued, r_gear_sent):
         s_calls.sources.extend([
@@ -437,6 +463,7 @@ def _build_model() -> Model:
         r_gear_sent,
         r_gear_enqueued,
         r_calls,
+        r_ethereum_transact_calls,
         s_events,
         s_calls,
         s_extrinsics
