@@ -395,7 +395,9 @@ def _build_model() -> Model:
             JoinRel(
                 table=rt,
                 include_flag_name='events',
-                join_condition='s.extrinsic_index = r.extrinsic_index AND s.call_address = r.address'
+                join_condition='s.extrinsic_index = r.extrinsic_index AND '
+                               'len(s.call_address) >= len(r.address) AND '
+                               's.call_address[1:len(r.address)] = r.address'
             )
         )
 
