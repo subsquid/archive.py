@@ -166,14 +166,14 @@ class RpcConnection:
 
         http_response.raise_for_status()
 
-        result = http_response.json()
-
         LOG.debug('rpc result', extra={
             **self._extra,
             'rpc_req': req_id,
             'rpc_time': timer.time_ms(),
-            'rpc_response': result
+            'rpc_response': http_response.text
         })
+
+        result = http_response.json()
 
         if isinstance(request, list):  # is batch
             if isinstance(result, dict):
