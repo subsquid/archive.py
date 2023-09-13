@@ -357,6 +357,12 @@ class _STraces(STable):
     def required_fields(self) -> tuple[str, ...]:
         return 'transactionIndex', 'traceAddress', 'type'
 
+    def field_weights(self) -> dict[str, int]:
+        return {
+            'createInit': 100,
+            'callInput': 8
+        }
+
     def project(self, fields: dict, prefix: str = ''):
         selected = self.get_selected_fields(fields)
 

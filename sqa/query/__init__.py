@@ -1,4 +1,5 @@
 import os
+import sys
 
 from sqa.layout import DataChunk
 
@@ -29,3 +30,12 @@ class SqlQuery:
                 self.params[idx] = chunk.last_block
             else:
                 self.params[idx] = min(chunk.last_block, self._last_block)
+
+    def set_chunk_dir_(self, chunk_dir: str) -> None:
+        for table in self._tables:
+            idx = self._variables[table]
+            self.params[idx] = os.path.join(chunk_dir, f'{table}.parquet')
+
+        if 'last_block' in self._variables:
+            idx = self._variables['last_block']
+            self.params[idx] = min(sys.maxsize, sys.maxsize if self._last_block is None else self._last_block)
