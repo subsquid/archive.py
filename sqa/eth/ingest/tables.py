@@ -75,7 +75,7 @@ class TxTableBuilder(TableBuilder):
         self.r = Column(pyarrow.string())
         self.s = Column(pyarrow.string())
         self.y_parity = Column(pyarrow.int8())
-        self.chain_id = Column(pyarrow.int32())
+        self.chain_id = Column(pyarrow.uint64())
         self.sighash = Column(pyarrow.string())
         self.gas_used = Column(qty())
         self.cumulative_gas_used = Column(qty())

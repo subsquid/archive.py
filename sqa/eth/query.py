@@ -277,6 +277,19 @@ class _STransactions(STable):
             'input': 8
         }
 
+    def project(self, fields: dict, prefix: str = '') -> str:
+        def rewrite_chain_id(f: str):
+            if f == 'chainId':
+                chain_id = prefix + 'chain_id'
+                return 'chainId', f'IF({chain_id} > 9007199254740991, to_json({chain_id}::text), to_json({chain_id}))'
+            else:
+                return f
+
+        return json_project(
+            map(rewrite_chain_id, self.get_selected_fields(fields)),
+            prefix=prefix
+        )
+
 
 class _RLogs(RTable):
     def table_name(self) -> str:
