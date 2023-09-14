@@ -331,6 +331,9 @@ class Ingest:
             transactions = [tx for tx in transactions if not is_moonbase_traceless(tx, block)]
         assert len(transactions) == len(traces)
         for tx, trace in zip(transactions, traces):
+            if len(trace.keys()) == 1 and trace.get('error') == 'execution timeout':
+                raise Exception(f'got invalid trace - {trace}')
+
             if 'result' not in trace:
                 trace = {'result': trace}
             tx['debugFrame_'] = trace
