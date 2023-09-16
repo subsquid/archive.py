@@ -154,7 +154,7 @@ class RpcConnection:
             self._pending_requests -= 1
 
     async def _perform_request(self, req_id: Any, request: Union[RpcRequest, BatchRpcRequest], timer: _Timer) -> Any:
-        LOG.debug('rpc send', extra={**self._extra, 'rpc_req': req_id})
+        LOG.debug('rpc send', extra={**self._extra, 'rpc_req': req_id, 'rpc_request': request})
 
         http_response = await self._client.post(self.endpoint.url, json=request, headers={
             'accept': 'application/json',
