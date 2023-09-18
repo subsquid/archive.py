@@ -225,21 +225,22 @@ class P2PTransport:
             await self._send(envelope, peer_id=self._scheduler_id)
 
 
+async def execute_query(transport: P2PTransport, worker: Worker, query_task: msg_pb.Query):
+    try:
+        query = json.loads(query_task.query)
+        dataset = dataset_decode(query_task.dataset)
+        result = await worker.execute_query(query, dataset, query_task.profiling)
+        LOG.info(f"Query {query_task.query_id} success")
+        await transport.send_query_result(query_task, result)
+    except Exception as e:
+        LOG.exception(f"Query {query_task.query_id} execution failed")
+        await transport.send_query_error(query_task, e)
+
+
 async def run_queries(transport: P2PTransport, worker: Worker):
     async for query_task in transport.query_tasks():
-        async def task():
-            try:
-                query = json.loads(query_task.query)
-                dataset = dataset_decode(query_task.dataset)
-                result = await worker.execute_query(query,dataset, query_task.profiling)
-                LOG.info(f"Query {query_task.query_id} success")
-                await transport.send_query_result(query_task, result)
-            except Exception as e:
-                LOG.exception(f"Query {query_task.query_id} execution failed")
-                await transport.send_query_error(query_task, e)
-
         # FIXME: backpressure
-        asyncio.create_task(task())
+        asyncio.create_task(execute_query(transport, worker, query_task))
 
 
 async def _main():
