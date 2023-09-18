@@ -288,7 +288,10 @@ class _SqlQueryBuilder:
     def add_selected_blocks(self):
         self.relations['selected_blocks'] = f'SELECT * FROM blocks ' \
                                             f'WHERE number IN (' \
-                                            f'SELECT block_number FROM block_stats WHERE size <= {self.size_limit}' \
+                                            f'SELECT block_number FROM block_stats WHERE size <= {self.size_limit} ' \
+                                            f'UNION ALL ' \
+                                            f'(SELECT block_number FROM block_stats WHERE size > {self.size_limit} ' \
+                                            f'ORDER BY block_number LIMIT 1)' \
                                             f') ' \
                                             f'ORDER BY number'
 

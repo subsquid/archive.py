@@ -372,7 +372,7 @@ class _STraces(STable):
 
     def field_weights(self) -> dict[str, int]:
         return {
-            'createInit': 100,
+            'createInit': 50,
             'callInput': 8
         }
 
