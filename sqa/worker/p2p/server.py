@@ -29,7 +29,7 @@ LOG = logging.getLogger(__name__)
 # This is the maximum *decompressed* size of the message
 MAX_MESSAGE_LENGTH = 100 * 1024 * 1024  # 100 MiB
 PING_TOPIC = "worker_ping"
-WORKER_VERSION = "0.1.1"
+WORKER_VERSION = "0.1.2"
 
 
 def state_to_proto(state: State) -> msg_pb.WorkerState:
