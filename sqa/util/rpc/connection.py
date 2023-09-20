@@ -125,6 +125,7 @@ class RpcConnection:
             self,
             req_id: Any,
             request: Union[RpcRequest, BatchRpcRequest],
+            validate_result: Callable[[Any], bool],
             current_time: Optional[float] = None
     ) -> asyncio.Task:
         timer = _Timer(current_time=current_time)
@@ -135,11 +136,17 @@ class RpcConnection:
 
         self._pending_requests += 1
 
-        return asyncio.create_task(self._handle_request(req_id, request, timer))
+        return asyncio.create_task(self._handle_request(req_id, request, validate_result, timer))
 
-    async def _handle_request(self, req_id, request: Union[RpcRequest, BatchRpcRequest], timer: _Timer) -> Any:
+    async def _handle_request(
+            self,
+            req_id,
+            request: Union[RpcRequest, BatchRpcRequest],
+            validate_result: Callable[[Any], bool],
+            timer: _Timer
+        ) -> Any:
         try:
-            res = await self._perform_request(req_id, request, timer)
+            res = await self._perform_request(req_id, request, validate_result, timer)
             self._count_request(timer)
             return res
         except Exception as e:
@@ -153,7 +160,13 @@ class RpcConnection:
         finally:
             self._pending_requests -= 1
 
-    async def _perform_request(self, req_id: Any, request: Union[RpcRequest, BatchRpcRequest], timer: _Timer) -> Any:
+    async def _perform_request(
+            self,
+            req_id: Any,
+            request: Union[RpcRequest, BatchRpcRequest],
+            validate_result: Callable[[Any], bool],
+            timer: _Timer
+        ) -> Any:
         LOG.debug('rpc send', extra={**self._extra, 'rpc_req': req_id, 'rpc_request': request})
 
         http_response = await self._client.post(self.endpoint.url, json=request, headers={
@@ -183,17 +196,19 @@ class RpcConnection:
                 assert isinstance(result, list)
                 assert len(result) == len(request)
                 result.sort(key=lambda i: i['id'])
-                return [self._unpack_result(req, res) for req, res in zip(request, result)]
+                return [self._unpack_result(req, res, validate_result) for req, res in zip(request, result)]
         else:
-            return self._unpack_result(request, result)
+            return self._unpack_result(request, result, validate_result)
 
-    def _unpack_result(self, request: RpcRequest, result) -> Any:
+    def _unpack_result(self, request: RpcRequest, result, validate_result) -> Any:
         assert isinstance(result, dict)
         assert request['id'] == result['id']
         if 'error' in result:
             raise RpcError(result['error'], request, self.endpoint.url)
         elif result['result'] is None:
             raise RpcResultIsNull(request, self.endpoint.url)
+        elif not validate_result(result['result']):
+            raise RpcResultIsInvalid(request, self.endpoint.url)
         else:
             return result['result']
 
@@ -226,6 +241,8 @@ def _is_retryable_error(e: Exception) -> bool:
         return True
     elif isinstance(e, RpcResultIsNull):
         return True
+    elif isinstance(e, RpcResultIsInvalid):
+        return True
     elif isinstance(e, RpcError) and isinstance(e.info, dict):
         code = e.info.get('code')
         return code == 429 or code == -32603 or code == -32000
@@ -236,5 +253,12 @@ def _is_retryable_error(e: Exception) -> bool:
 class RpcResultIsNull(Exception):
     def __init__(self, request: Union[RpcRequest, BatchRpcRequest], url: str):
         self.message = 'rpc result is null'
+        self.request = request
+        self.url = url
+
+
+class RpcResultIsInvalid(Exception):
+    def __init__(self, request: Union[RpcRequest, BatchRpcRequest], url: str):
+        self.message = 'rpc result is invalid'
         self.request = request
         self.url = url

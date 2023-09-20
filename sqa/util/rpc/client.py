@@ -5,7 +5,7 @@ import sys
 import time
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Any, Optional, Union, Set, TypeVar, Iterable
+from typing import Any, Optional, Union, Set, TypeVar, Iterable, Callable
 
 from sqa.util.rpc.connection import RpcConnection, RpcEndpoint, RpcEndpointMetrics, RpcRequest, RpcRetryException
 
@@ -22,6 +22,7 @@ class _ReqItem:
     priority: int
     id: int
     request: Union[RpcRequest, list[RpcRequest]]
+    validate_result: Callable[[Any], bool]
     future: asyncio.Future
 
     @cached_property
@@ -64,7 +65,13 @@ class RpcClient:
                 total += c.endpoint.capacity
         return total
 
-    def call(self, method: str, params: Optional[list[Any]] = None, priority: int = 0) -> asyncio.Future[Any]:
+    def call(
+            self,
+            method: str,
+            params: Optional[list[Any]] = None,
+            priority: int = 0,
+            validate_result: Callable[[Any], bool] = lambda _: True
+        ) -> asyncio.Future[Any]:
         req_id = self._id
         self._id += 1
 
@@ -79,6 +86,7 @@ class RpcClient:
             priority,
             req_id,
             request,
+            validate_result,
             asyncio.get_event_loop().create_future()
         )
 
@@ -94,7 +102,12 @@ class RpcClient:
         self._schedule_soon()
         return item.future
 
-    def batch_call(self, calls: list[RpcBatchCallItem], priority: int = 0) -> asyncio.Future[list[Any]]:
+    def batch_call(
+            self,
+            calls: list[RpcBatchCallItem],
+            priority: int = 0,
+            validate_result: Callable[[Any], bool] = lambda _: True
+        ) -> asyncio.Future[list[Any]]:
         if not calls:
             f = asyncio.get_event_loop().create_future()
             f.set_result([])
@@ -129,6 +142,7 @@ class RpcClient:
                 priority,
                 req_id,
                 request,
+                validate_result,
                 asyncio.get_event_loop().create_future()
             )
 
@@ -261,7 +275,7 @@ class RpcClient:
                     item.future.set_exception(ex)
                 self._schedule_soon()
 
-        future = con.request(item.id, item.request, current_time=current_time)
+        future = con.request(item.id, item.request, item.validate_result, current_time=current_time)
         future.add_done_callback(callback)
 
 

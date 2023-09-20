@@ -319,7 +319,7 @@ class Ingest:
                     'withLog': True
                 }
             }
-        ], priority=block_number)
+        ], priority=block_number, validate_result=validate_debug_trace)
 
         if self._is_moonriver and qty2int(block['number']) == 2077600:
             _fix_moonriver_2077600(block)
@@ -331,9 +331,6 @@ class Ingest:
             transactions = [tx for tx in transactions if not is_moonbase_traceless(tx, block)]
         assert len(transactions) == len(traces)
         for tx, trace in zip(transactions, traces):
-            if len(trace.keys()) == 1 and trace.get('error') == 'execution timeout':
-                raise Exception(f'got invalid trace - {trace}')
-
             if 'result' not in trace:
                 trace = {'result': trace}
             tx['debugFrame_'] = trace
@@ -444,3 +441,12 @@ def _fix_moonriver_2077600(block: Block):
 def _fix_astar_995596(block: Block):
     assert len(block['transactions']) == 123
     block['transactions'] = block['transactions'][58:]
+
+
+def validate_debug_trace(result):
+    for trace in result:
+        if 'result' in trace:
+            trace = trace['result']
+        if trace.keys() == 1 and trace.get('error') == 'execution timeout':
+            return False
+    return True
