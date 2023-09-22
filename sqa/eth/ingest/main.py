@@ -511,4 +511,9 @@ class WriteService:
 
 
 def cli():
+    if os.getenv('SENTRY_DSN'):
+        import sentry_sdk
+        sentry_sdk.init(
+            traces_sample_rate=1.0
+        )
     run_async_program(run, parse_cli_arguments())

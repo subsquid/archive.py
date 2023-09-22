@@ -2,9 +2,11 @@ import argparse
 import json
 import logging
 import math
+import os
 import sys
 import time
 from typing import Iterable
+from sqa.substrate.writer.metrics import Metrics
 
 from sqa.writer import ArchiveWriteOptions, ArchiveWriter
 from .model import Block
@@ -62,6 +64,12 @@ def parse_cli_arguments():
         help='check the stored data, print the next block to write and exit'
     )
 
+    program.add_argument(
+        '--prom-port',
+        type=int,
+        help='port to use for built-in prometheus metrics server'
+    )
+
     return program.parse_args()
 
 
@@ -92,6 +100,11 @@ def main(args):
     if args.get_next_block:
         print(writer.get_next_block())
         return
+
+    if args.prom_port:
+        metrics = Metrics()
+        metrics.add_progress(writer._progress, writer._chunk_writer)
+        metrics.serve(args.prom_port)
 
     if args.src:
         blocks = read_from_url(args.src, options, writer.get_next_block())
@@ -152,4 +165,9 @@ def read_from_url(url: str, options: WriteOptions, next_block: int) -> Iterable[
 
 
 def cli():
+    if os.getenv('SENTRY_DSN'):
+        import sentry_sdk
+        sentry_sdk.init(
+            traces_sample_rate=1.0
+        )
     main(parse_cli_arguments())
