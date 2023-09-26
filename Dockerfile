@@ -24,7 +24,7 @@ ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.eth.ingest"]
 
 
 FROM builder AS substrate-writer-builder
-RUN pdm sync --no-editable --prod
+RUN pdm sync -G substrate-writer --no-editable --prod
 
 
 FROM base AS substrate-writer
