@@ -12,7 +12,7 @@ from .transport import Transport
 
 
 LOG = logging.getLogger(__name__)
-PING_INTERVAL_SEC = 10
+PING_INTERVAL_SEC = int(os.environ.get('PING_INTERVAL_SEC', '10'))
 
 
 class Worker:
