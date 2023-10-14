@@ -20,7 +20,7 @@ eth-ingest = [
 ]
 
 http-worker = [
-    "duckdb == 0.8.1",
+    "duckdb == 0.9.1",
     "falcon == 3.*",
     "marshmallow == 3.*",
     "uvicorn == 0.*",
@@ -28,7 +28,7 @@ http-worker = [
 ]
 
 p2p-worker = [
-    "duckdb == 0.8.1",
+    "duckdb == 0.9.1",
     "grpcio == 1.*",
     "marshmallow == 3.*",
     "protobuf == 4.*",

@@ -189,7 +189,7 @@ class _BlocksTable(STable):
     def project(self, fields: dict, prefix=''):
         def rewrite_timestamp(f: str):
             if f == 'timestamp':
-                return 'timestamp', f'epoch({prefix}timestamp)'
+                return 'timestamp', f'epoch_ms({prefix}timestamp)'
             else:
                 return f
 
