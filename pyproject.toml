@@ -17,6 +17,8 @@ dependencies = [
 eth-ingest = [
     "pycryptodome>=3.18.0",
     "prometheus-client==0.17.*",
+    "trie==2.1.1",
+    "rlp>=3.0.0",
 ]
 
 http-worker = [

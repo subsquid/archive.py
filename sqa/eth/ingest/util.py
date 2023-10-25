@@ -1,7 +1,9 @@
 import binascii
 from typing import TypedDict, NotRequired
 
+from trie import HexaryTrie
 from Crypto.Hash import keccak
+import rlp
 
 from sqa.eth.ingest.model import Qty, Hash32, Transaction, Address20
 
@@ -78,3 +80,21 @@ def logs_bloom(logs) -> str:
         for topic in log['topics']:
             _add_to_bloom(bloom, decode_hex(topic))
     return encode_hex(bloom)
+
+
+def transactions_root(transactions: list[Transaction]) -> str:
+    trie = HexaryTrie({})
+    for tx in transactions:
+        path = rlp.encode(qty2int(tx['transactionIndex']))
+        trie[path] = rlp.encode([
+            qty2int(tx['nonce']),
+            qty2int(tx['gasPrice']),
+            qty2int(tx['gas']),
+            decode_hex(tx['to']) if tx['to'] else b'',
+            qty2int(tx['value']),
+            decode_hex(tx['input']),
+            qty2int(tx['v']),
+            qty2int(tx['r']),
+            qty2int(tx['s'])
+        ])
+    return encode_hex(trie.root_hash)

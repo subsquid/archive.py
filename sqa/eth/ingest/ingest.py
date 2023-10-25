@@ -6,7 +6,7 @@ from typing import Optional, AsyncIterator, Literal, Iterable, Coroutine
 from sqa.eth.ingest.model import Block, Log, Receipt, DebugFrame, DebugFrameResult, \
     DebugStateDiffResult, TraceTransactionReplay, Transaction
 from sqa.util.rpc import RpcClient
-from sqa.eth.ingest.util import qty2int, get_tx_status_from_traces, logs_bloom
+from sqa.eth.ingest.util import qty2int, get_tx_status_from_traces, logs_bloom, transactions_root
 from sqa.eth.ingest.moonbase import fix_and_exclude_invalid_moonbase_blocks, is_moonbase_traceless
 
 
@@ -129,13 +129,7 @@ class Ingest:
 
         LOG.debug('fetching new stride', extra=extra)
 
-        blocks: list[Block] = await self._rpc.batch_call(
-            [
-                ('eth_getBlockByNumber', [hex(i), True])
-                for i in range(from_block, to_block + 1)
-            ],
-            priority=from_block
-        )
+        blocks = await self._fetch_blocks(from_block, to_block)
 
         await _run_subtasks(self._stride_subtasks(blocks))
 
@@ -195,6 +189,22 @@ class Ingest:
             tracers.append('stateDiff')
 
         return tracers
+
+    async def _fetch_blocks(self, from_block: int, to_block: int) -> list[Block]:
+        blocks: list[Block] = await self._rpc.batch_call(
+            [
+                ('eth_getBlockByNumber', [hex(i), True])
+                for i in range(from_block, to_block + 1)
+            ],
+            priority=from_block
+        )
+
+        for block in blocks:
+            tx_root = transactions_root(block['transactions'])
+            assert block['transactionsRoot'] == tx_root,\
+                f'calculated transactions root "{tx_root}" does not match "{block["transactionsRoot"]}" from block {qty2int(block["number"])}'
+
+        return blocks
 
     async def _fetch_logs(self, blocks: list[Block]) -> None:
         priority = qty2int(blocks[0]['number'])
