@@ -19,6 +19,7 @@ eth-ingest = [
     "prometheus-client==0.17.*",
     "trie==2.1.1",
     "rlp>=3.0.0",
+    "setuptools>=68.2.2",
 ]
 
 http-worker = [
