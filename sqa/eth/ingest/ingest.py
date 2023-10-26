@@ -25,7 +25,8 @@ class Ingest:
         with_traces: bool = False,
         with_statediffs: bool = False,
         use_trace_api: bool = False,
-        use_debug_api_for_statediffs: bool = False
+        use_debug_api_for_statediffs: bool = False,
+        validate_tx_root: bool = False,
     ):
         self._rpc = rpc
         self._finality_confirmation = finality_confirmation
@@ -34,6 +35,7 @@ class Ingest:
         self._with_statediffs = with_statediffs
         self._use_trace_api = use_trace_api
         self._use_debug_api_for_statediffs = use_debug_api_for_statediffs
+        self._validate_tx_root = validate_tx_root
         self._height = from_block - 1
         self._genesis = genesis_block
         self._end = to_block
@@ -199,10 +201,9 @@ class Ingest:
             priority=from_block
         )
 
-        for block in blocks:
-            tx_root = transactions_root(block['transactions'])
-            assert block['transactionsRoot'] == tx_root,\
-                f'calculated transactions root "{tx_root}" does not match "{block["transactionsRoot"]}" from block {qty2int(block["number"])}'
+        if self._validate_tx_root:
+            for block in blocks:
+                assert block['transactionsRoot'] == transactions_root(block['transactions'])
 
         return blocks
 
