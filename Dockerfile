@@ -8,6 +8,8 @@ RUN pdm venv create --with venv
 ADD pyproject.toml .
 ADD pdm.lock .
 RUN pdm sync --no-self --prod
+ADD sqa sqa/
+ADD README.md .
 
 
 FROM builder AS writer-builder
@@ -16,9 +18,8 @@ RUN pdm sync -G writer --no-editable --prod
 
 FROM base AS writer-base
 COPY --from=writer-builder /project/.venv /app/env/
-ADD sqa /app/sqa/
+COPY --from=writer-builder /project/sqa /app/sqa/
 ADD rewrite_archive.py /app/rewrite_archive.py
-ADD README.md .
 
 
 FROM writer-base AS eth-ingest
@@ -37,8 +38,7 @@ RUN pdm sync -G http-worker --no-editable --prod
 
 FROM base AS worker
 COPY --from=worker-builder /project/.venv /app/env/
-ADD sqa /app/sqa/
-ADD README.md .
+COPY --from=worker-builder /project/sqa /app/sqa/
 RUN /app/env/bin/python -m sqa.worker --help > /dev/null # win a little bit of startup time
 ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.worker"]
 
@@ -49,8 +49,7 @@ RUN pdm sync -G p2p-worker --no-editable --prod
 
 FROM base as p2p-worker
 COPY --from=p2p-worker-builder /project/.venv /app/env/
-ADD sqa /app/sqa/
-ADD README.md .
+COPY --from=p2p-worker-builder /project/sqa /app/sqa/
 VOLUME /app/data
 ENV DATA_DIR=/app/data/worker
 ENV PING_INTERVAL_SEC=20
