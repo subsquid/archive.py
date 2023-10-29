@@ -9,10 +9,10 @@ import psutil
 import sqa.eth.query
 import sqa.substrate.query
 from sqa.fs import LocalFs
-from sqa.layout import get_chunks, get_filelist
-from sqa.query.builder import ArchiveQuery, build_sql_query
+from sqa.layout import get_chunks, get_filelist, Partition
 from sqa.query.model import Model
-from sqa.query.runner import QueryRunner
+from sqa.query.plan import QueryPlan
+from sqa.query.schema import ArchiveQuery
 from .state.intervals import Range
 
 
@@ -72,7 +72,6 @@ def _get_model(q: dict) -> Model:
 class QueryResult(NamedTuple):
     result: str
     num_read_chunks: int
-    exec_plan: Optional[str] = None
     exec_time: Optional[dict] = None
 
 
@@ -95,13 +94,14 @@ def execute_query(
 
     fs = LocalFs(dataset_dir)
 
-    sql_query = build_sql_query(
-        _get_model(q),
-        q,
-        get_filelist(fs, first_block=first_block)
+    filelist = get_filelist(fs, first_block)
+
+    plan = QueryPlan(
+        model=_get_model(q),
+        q=q,
+        filelist=filelist
     )
 
-    runner = QueryRunner(dataset_dir, sql_query, profiling=profiling)
     num_read_chunks = 0
 
     def json_lines() -> Iterable[str]:
@@ -110,7 +110,9 @@ def execute_query(
 
         for chunk in get_chunks(fs, first_block=first_block, last_block=last_block):
             try:
-                rows = runner.visit(chunk)
+                rows = plan.fetch(
+                    Partition(dataset_dir, chunk)
+                ).column('data')
             except Exception as e:
                 e.add_note(f'data chunk: ${fs.abs(chunk.path())}')
                 raise e
@@ -122,8 +124,6 @@ def execute_query(
                 line = row.as_py()
                 yield line
                 size += len(line)
-                if size > 50 * 1024 * 1024:
-                    return
 
             if size > 20 * 1024 * 1024:
                 return
@@ -156,6 +156,5 @@ def execute_query(
     return QueryResult(
         result=result,
         num_read_chunks=num_read_chunks,
-        exec_plan=f'[{",".join(runner.exec_plans)}]' if profiling else None,
         exec_time=exec_time
     )

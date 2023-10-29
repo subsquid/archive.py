@@ -161,9 +161,9 @@ class LogTableBuilder(TableBuilder):
 class TraceTableBuilder(TableBuilder):
     def __init__(self):
         self.block_number = Column(pyarrow.int32())
+        self.transaction_index = Column(pyarrow.int32())
         self.trace_address = Column(pyarrow.list_(pyarrow.int32()))
         self.subtraces = Column(pyarrow.int32())
-        self.transaction_index = Column(pyarrow.int32())
         self.type = Column(pyarrow.string())
         self.error = Column(pyarrow.string())
         self.revert_reason = Column(pyarrow.string())

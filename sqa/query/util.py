@@ -1,33 +1,43 @@
 import re
-from typing import NamedTuple, Union, Iterable
+from typing import Any, Iterable
+
+import pyarrow.dataset
+import pyarrow.compute
 
 
-class And(NamedTuple):
-    ops: list['WhereExp']
+Exp = str
 
 
-class Or(NamedTuple):
-    ops: list['WhereExp']
+class Params:
+    def __init__(self):
+        self.list = []
+        self.variables = {}
+
+    def new_param(self, value: Any) -> Exp:
+        self.list.append(value)
+        return f'${len(self.list)}'
+
+    def new_variable(self, name: str) -> Exp:
+        assert name not in self.variables
+        self.list.append(None)
+        idx = len(self.list)
+        self.variables[name] = idx - 1
+        return f'${idx}'
+
+    def set_var(self, name: str, value: Any) -> None:
+        idx = self.variables[name]
+        self.list[idx] = value
 
 
-class Bin(NamedTuple):
-    op: str
-    lhs: str
-    rhs: str
-
-
-WhereExp = Union[And, Or, Bin]
-
-
-def print_where(exp: WhereExp) -> str:
-    if isinstance(exp, Bin):
-        return f"{exp.lhs} {exp.op} {exp.rhs}"
-    elif isinstance(exp, And):
-        return ' AND '.join(f"({e})" for e in (print_where(op) for op in exp.ops) if e)
-    elif isinstance(exp, Or):
-        return ' OR '.join(f"({e})" for e in (print_where(op) for op in exp.ops) if e)
-    else:
-        raise ValueError
+def include_columns(columns: list[str], columns_to_include: Iterable[str] | None) -> None:
+    if columns_to_include is None:
+        return
+    included = set(columns)
+    for c in columns_to_include:
+        if c in included:
+            pass
+        else:
+            columns.append(c)
 
 
 def to_snake_case(name: str) -> str:
@@ -39,54 +49,48 @@ def remove_camel_prefix(name: str, prefix: str) -> str:
     return name[len(prefix)].lower() + name[len(prefix) + 1:]
 
 
-class SelectBuilder:
-    def __init__(self, table: str):
-        self._table = table
-        self._columns = []
-        self._where = And([])
-
-    def add_columns(self, cols: Iterable[str]) -> None:
-        self._columns.extend(cols)
-
-    def add_where(self, exp: WhereExp) -> None:
-        self._where.ops.append(exp)
-
-    def build(self) -> str:
-        assert self._columns
-
-        sql = f"SELECT {', '.join(self._columns)} FROM {self._table}"
-
-        where = print_where(self._where)
-        if where:
-            sql += f" WHERE {where}"
-
-        return sql
-
-
-def json_project(fields: Iterable[str | tuple[str, str]], prefix: str = '') -> str:
-    props = []
-    for alias in fields:
-        if isinstance(alias, tuple):
-            exp = alias[1]
-            alias = alias[0]
-        else:
-            exp = f'{prefix}"{to_snake_case(alias)}"'
-
-        props.append(f"'{alias}'")
-        props.append(exp)
-
-    return f'json_object({", ".join(props)})'
-
-
 def project(columns: Iterable[str], prefix: str = '') -> str:
     return ', '.join(
         prefix + c for c in columns
     )
 
 
-def compute_item_weight(fields: Iterable[str], weights: dict[str, int]) -> int:
-    return sum(weights.get(f, 1) for f in fields)
+def join_condition(columns: Iterable[str], left: str, right: str) -> str:
+    return ' AND '.join(
+        f'{left}.{c} = {right}.{c}' for c in columns
+    )
 
 
-def union_all(relations: Iterable[str]) -> str:
-    return ' UNION ALL '.join(relations)
+def json_project(fields: Iterable[str | tuple[str, str]]) -> str:
+    props = []
+    for alias in fields:
+        if isinstance(alias, tuple):
+            exp = alias[1]
+            alias = alias[0]
+        else:
+            exp = f'"{to_snake_case(alias)}"'
+        props.append(f"'{alias}'")
+        props.append(exp)
+
+    return f'json_object({", ".join(props)})'
+
+
+def get_selected_fields(
+        fields: dict[str, bool] | None,
+        required_fields: list[str] | None = None
+) -> list[str]:
+    ls = list(required_fields) if required_fields else []
+    if fields:
+        include_columns(ls, (f for f, on in fields.items() if on))
+    return ls
+
+
+def field_in(field_name: str, value_list: list[Any] | None) -> pyarrow.dataset.Expression | None:
+    if value_list is None:
+        return
+    if len(value_list) == 0:
+        return pyarrow.compute.scalar(0) == pyarrow.compute.scalar(1)
+    elif len(value_list) == 1:
+        return pyarrow.compute.field(field_name) == pyarrow.compute.scalar(value_list[0])
+    else:
+        return pyarrow.compute.field(field_name).isin(value_list)

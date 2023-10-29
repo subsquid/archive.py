@@ -3,7 +3,8 @@ import logging
 import multiprocessing
 import os
 
-from sqa.query.builder import ArchiveQuery, MissingData
+from sqa.query import MissingData
+from sqa.query.schema import ArchiveQuery
 from sqa.util.asyncio import create_child_task, monitor_service_tasks
 from sqa.util.child_proc import init_child_process
 from .query import QueryResult, validate_query, execute_query

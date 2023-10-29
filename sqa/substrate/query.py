@@ -1,10 +1,11 @@
-from typing import TypedDict
+from typing import TypedDict, Iterable
 
 import marshmallow as mm
+import pyarrow.dataset
 
-from sqa.query.model import STable, RTable, Builder, Model, JoinRel, RefRel
+from sqa.query.model import Model, JoinRel, RefRel, Table, Item, FieldSelection, Scan, SubRel
 from sqa.query.schema import BaseQuerySchema
-from sqa.query.util import json_project
+from sqa.query.util import json_project, get_selected_fields, field_in
 
 
 class BlockFieldSelection(TypedDict, total=False):
@@ -168,307 +169,335 @@ class _QuerySchema(BaseQuerySchema):
 QUERY_SCHEMA = _QuerySchema()
 
 
-class _BlocksTable(STable):
-    def table_name(self) -> str:
+_blocks_table = Table(
+    name='blocks',
+    primary_key=[],
+    column_weights={
+        'digest': 32 * 4
+    }
+)
+
+
+_events_table = Table(
+    name='events',
+    primary_key=['index'],
+    column_weights={
+        'args': 'args_size'
+    }
+)
+
+
+_calls_table = Table(
+    name='calls',
+    primary_key=['extrinsic_index', 'address'],
+    column_weights={
+        'args': 'args_size'
+    }
+)
+
+
+_extrinsics_table = Table(
+    name='extrinsics',
+    primary_key=['index'],
+    column_weights={
+        'signature': 4 * 32
+    }
+)
+
+
+class _BlockItem(Item):
+    def table(self) -> Table:
+        return _blocks_table
+
+    def name(self) -> str:
         return 'blocks'
 
-    def field_selection_name(self) -> str:
-        return 'block'
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('block'), ['number', 'hash', 'parentHash'])
 
-    def primary_key(self) -> tuple[str, ...]:
-        return 'number',
-
-    def required_fields(self) -> tuple[str, ...]:
-        return 'number', 'hash', 'parentHash'
-
-    def field_weights(self) -> dict[str, int]:
-        return {
-            'digest': 2
-        }
-
-    def project(self, fields: dict, prefix=''):
+    def project(self, fields: FieldSelection) -> str:
         def rewrite_timestamp(f: str):
             if f == 'timestamp':
-                return 'timestamp', f'epoch_ms({prefix}timestamp)'
+                return 'timestamp', f'epoch_ms(timestamp)'
             else:
                 return f
 
         return json_project(
-            map(rewrite_timestamp, self.get_selected_fields(fields)),
-            prefix=prefix
+            map(rewrite_timestamp, self.get_selected_fields(fields))
         )
 
 
-class _R_BaseEvent(RTable):
-    def table_name(self) -> str:
+class _EventScan(Scan):
+    def table(self) -> Table:
+        return _events_table
+
+    def request_name(self) -> str:
         return 'events'
 
-    def columns(self) -> tuple[str, ...]:
-        return 'index', 'extrinsic_index', 'call_address'
+    def where(self, req: EventRequest) -> Iterable[pyarrow.dataset.Expression | None]:
+        yield field_in('name', req.get('name'))
 
 
-class _REvents(_R_BaseEvent):
-    def where(self, builder: Builder, req: EventRequest):
-        yield builder.in_condition('name', req.get('name'))
+class _EvmLogScan(Scan):
+    def table(self) -> Table:
+        return _events_table
 
-
-class _REvmLogs(_R_BaseEvent):
     def request_name(self) -> str:
         return 'evmLogs'
 
-    def where(self, builder: Builder, req: EvmLogRequest):
-        yield builder.in_condition('name', ['EVM.Log'])
-        yield builder.in_condition('_evm_log_address', req.get('address'))
-        yield builder.in_condition('_evm_log_topic0', req.get('topic0'))
-        yield builder.in_condition('_evm_log_topic1', req.get('topic1'))
-        yield builder.in_condition('_evm_log_topic2', req.get('topic2'))
-        yield builder.in_condition('_evm_log_topic3', req.get('topic3'))
+    def where(self, req: EvmLogRequest) -> Iterable[pyarrow.dataset.Expression | None]:
+        yield field_in('name', ['EVM.Log'])
+        yield field_in('_evm_log_address', req.get('address'))
+        yield field_in('_evm_log_topic0', req.get('topic0'))
+        yield field_in('_evm_log_topic1', req.get('topic1'))
+        yield field_in('_evm_log_topic2', req.get('topic2'))
+        yield field_in('_evm_log_topic3', req.get('topic3'))
 
 
-class _RContractsEvents(_R_BaseEvent):
+class _ContractEventScan(Scan):
+    def table(self) -> Table:
+        return _events_table
+
     def request_name(self) -> str:
         return 'contractsEvents'
 
-    def where(self, builder: Builder, req: ContractsContractEmittedRequest):
-        yield builder.in_condition('name', ['Contracts.ContractEmitted'])
-        yield builder.in_condition('_contract_address', req.get('contractAddress'))
+    def where(self, req: ContractsContractEmittedRequest) -> Iterable[pyarrow.dataset.Expression | None]:
+        yield field_in('name', ['Contracts.ContractEmitted'])
+        yield field_in('_contract_address', req.get('contractAddress'))
 
 
-class _RGearUserMessagesEnqueued(_R_BaseEvent):
+class _GearUserMessageEnqueuedScan(Scan):
+    def table(self) -> Table:
+        return _events_table
+
     def request_name(self) -> str:
         return 'gearMessagesEnqueued'
 
-    def where(self, builder: Builder, req: GearMessageEnqueuedRequest):
-        yield builder.in_condition('name', ['Gear.UserMessageEnqueued'])
-        yield builder.in_condition('_gear_program_id', req.get('programId'))
+    def where(self, req: GearMessageEnqueuedRequest) -> Iterable[pyarrow.dataset.Expression | None]:
+        yield field_in('name', ['Gear.UserMessageEnqueued'])
+        yield field_in('_gear_program_id', req.get('programId'))
 
 
-class _RGearUserMessagesSent(_R_BaseEvent):
+class _GearUserMessageSentScan(Scan):
+    def table(self) -> Table:
+        return _events_table
+
     def request_name(self) -> str:
         return 'gearUserMessagesSent'
 
-    def where(self, builder: Builder, req: GearUserMessageSentRequest):
-        yield builder.in_condition('name', ['Gear.UserMessageSent'])
-        yield builder.in_condition('_gear_program_id', req.get('programId'))
+    def where(self, req: GearUserMessageSentRequest) -> Iterable[pyarrow.dataset.Expression | None]:
+        yield field_in('name', ['Gear.UserMessageSent'])
+        yield field_in('_gear_program_id', req.get('programId'))
 
 
-class _SEvents(STable):
-    def table_name(self) -> str:
+class _EventItem(Item):
+    def table(self) -> Table:
+        return _events_table
+
+    def name(self) -> str:
         return 'events'
 
-    def field_selection_name(self) -> str:
-        return 'event'
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('event'), ['index', 'extrinsicIndex', 'callAddress'])
 
-    def primary_key(self) -> tuple[str, ...]:
-        return 'index',
-
-    def required_fields(self) -> tuple[str, ...]:
-        return 'index', 'extrinsicIndex', 'callAddress'
-
-    def field_weights(self) -> dict[str, int]:
-        return {
-            'args': 4
-        }
-
-    def project(self, fields: dict, prefix: str = '') -> str:
+    def project(self, fields: FieldSelection) -> str:
         def rewrite(f: str):
             if f == 'args':
-                return f, f'{prefix}{f}::json'
+                return f, f'{f}::json'
             else:
                 return f
 
         return json_project(
             map(rewrite, self.get_selected_fields(fields)),
-            prefix=prefix
         )
 
 
-class _RCalls(RTable):
-    def table_name(self) -> str:
+class _CallScan(Scan):
+    def table(self) -> Table:
+        return _calls_table
+
+    def request_name(self) -> str:
         return 'calls'
 
-    def columns(self) -> tuple[str, ...]:
-        return 'extrinsic_index', 'address'
-
-    def where(self, builder: Builder, req: CallRequest):
-        yield builder.in_condition('name', req.get('name'))
+    def where(self, req: CallRequest) -> Iterable[pyarrow.dataset.Expression | None]:
+        yield field_in('name', req.get('name'))
 
 
-class _REthereumTransactCalls(RTable):
-    def table_name(self) -> str:
-        return 'calls'
+class _EthereumTransactCallScan(Scan):
+    def table(self) -> Table:
+        return _calls_table
 
     def request_name(self) -> str:
         return 'ethereumTransactions'
 
-    def columns(self) -> tuple[str, ...]:
-        return 'extrinsic_index', 'address'
-
-    def where(self, builder: Builder, req: EthereumTransactRequest):
-        yield builder.in_condition('name', ['Ethereum.transact'])
-        yield builder.in_condition('_ethereum_transact_to', req.get('to'))
-        yield builder.in_condition('_ethereum_transact_sighash', req.get('sighash'))
+    def where(self, req: EthereumTransactRequest) -> Iterable[pyarrow.dataset.Expression | None]:
+        yield field_in('name', ['Ethereum.transact'])
+        yield field_in('_ethereum_transact_to', req.get('to'))
+        yield field_in('_ethereum_transact_sighash', req.get('sighash'))
 
 
-class _SCalls(STable):
-    def table_name(self) -> str:
+class _CallItem(Item):
+    def table(self) -> Table:
+        return _calls_table
+
+    def name(self) -> str:
         return 'calls'
 
-    def field_selection_name(self) -> str:
-        return 'call'
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('call'), ['extrinsicIndex', 'address'])
 
-    def primary_key(self) -> tuple[str, ...]:
-        return 'extrinsicIndex', 'address'
-
-    def field_weights(self) -> dict[str, int]:
-        return {
-            'args': 4
-        }
-
-    def project(self, fields: dict, prefix: str = '') -> str:
+    def project(self, fields: FieldSelection) -> str:
         def rewrite(f: str):
             if f in ('args', 'origin', 'error'):
-                return f, f'{prefix}{f}::json'
+                return f, f'{f}::json'
             else:
                 return f
 
         return json_project(
-            map(rewrite, self.get_selected_fields(fields)),
-            prefix=prefix
+            map(rewrite, self.get_selected_fields(fields))
         )
 
 
-class _SExtrinsics(STable):
-    def table_name(self) -> str:
+class _ExtrinsicItem(Item):
+    def table(self) -> Table:
+        return _extrinsics_table
+
+    def name(self) -> str:
         return 'extrinsics'
 
-    def field_selection_name(self) -> str:
-        return 'extrinsic'
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('extrinsic'), ['index'])
 
-    def primary_key(self) -> tuple[str, ...]:
-        return 'index',
-
-    def field_weights(self) -> dict[str, int]:
-        return {
-            'signature': 2
-        }
-
-    def project(self, fields: dict, prefix: str = '') -> str:
+    def project(self, fields: FieldSelection) -> str:
         def rewrite(f: str):
             if f in ('fee', 'tip'):
-                return f, f'{prefix}{f}::string'
+                return f, f'{f}::string'
             elif f in ('signature', 'error'):
-                return f, f'{prefix}{f}::json'
+                return f, f'{f}::json'
             else:
                 return f
 
         return json_project(
-            map(rewrite, self.get_selected_fields(fields)),
-            prefix=prefix
+            map(rewrite, self.get_selected_fields(fields))
         )
 
 
 def _build_model() -> Model:
-    r_events = _REvents()
-    r_evm_logs = _REvmLogs()
-    r_contracts_events = _RContractsEvents()
-    r_gear_enqueued = _RGearUserMessagesEnqueued()
-    r_gear_sent = _RGearUserMessagesSent()
+    event_scan = _EventScan()
+    evm_log_scan = _EvmLogScan()
+    gear_message_enqueued_scan = _GearUserMessageEnqueuedScan()
+    gear_message_sent_scan = _GearUserMessageSentScan()
+    contract_event_scan = _ContractEventScan()
 
-    r_calls = _RCalls()
-    r_ethereum_transact_calls = _REthereumTransactCalls()
+    call_scan = _CallScan()
+    ethereum_transact_scan = _EthereumTransactCallScan()
 
-    s_events = _SEvents()
-    s_calls = _SCalls()
-    s_extrinsics = _SExtrinsics()
+    block_item = _BlockItem()
+    event_item = _EventItem()
+    call_item = _CallItem()
+    extrinsic_item = _ExtrinsicItem()
 
-    s_events.sources.extend([
-        r_events,
-        r_evm_logs,
-        r_contracts_events,
-        r_gear_enqueued,
-        r_gear_sent
+    event_item.sources.extend([
+        event_scan,
+        evm_log_scan,
+        contract_event_scan,
+        gear_message_enqueued_scan,
+        gear_message_sent_scan
     ])
 
-    for rt in (r_calls, r_ethereum_transact_calls):
-        s_events.sources.append(
+    for s in (call_scan, ethereum_transact_scan):
+        event_item.sources.append(
             JoinRel(
-                table=rt,
+                scan=s,
                 include_flag_name='events',
-                join_condition='s.extrinsic_index = r.extrinsic_index AND '
-                               'len(s.call_address) >= len(r.address) AND '
-                               's.call_address[1:len(r.address)] = r.address'
+                query='SELECT * FROM events i, s WHERE '
+                      'i.block_number = s.block_number AND '
+                      'i.extrinsic_index = s.extrinsic_index AND '
+                      'len(i.call_address) >= len(s.address) AND '
+                      'i.call_address[1:len(s.address)] = s.address'
             )
         )
 
-    s_calls.sources.extend([
-        r_calls,
-        r_ethereum_transact_calls,
+    call_item.sources.extend([
+        call_scan,
+        ethereum_transact_scan,
         JoinRel(
-            table=r_calls,
+            scan=call_scan,
             include_flag_name='subcalls',
-            join_condition='s.extrinsic_index = r.extrinsic_index AND '
-                           'len(s.address) > len(r.address) AND '
-                           's.address[1:len(r.address)] = r.address'
+            query='SELECT * FROM calls i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.extrinsic_index = s.extrinsic_index AND '
+                  'len(i.address) > len(s.address) AND '
+                  'i.address[1:len(s.address)] = s.address'
         )
     ])
 
-    for rt in (r_calls, r_ethereum_transact_calls):
-        s_calls.sources.append(
+    for s in (call_scan, ethereum_transact_scan):
+        call_item.sources.append(
             JoinRel(
-                table=rt,
+                scan=s,
                 include_flag_name='stack',
-                join_condition='s.extrinsic_index = r.extrinsic_index AND '
-                               'len(s.address) < len(r.address) AND '
-                               's.address = r.address[1:len(s.address)]'
-            ),
+                query='SELECT * FROM calls i, s WHERE '
+                      'i.block_number = s.block_number AND '
+                      'i.extrinsic_index = s.extrinsic_index AND '
+                      'len(i.address) < len(s.address) AND '
+                      'i.address = s.address[1:len(i.address)]'
+            )
         )
 
-    for r_ev in (r_events, r_evm_logs, r_contracts_events, r_gear_enqueued, r_gear_sent):
-        s_calls.sources.extend([
+    for s in (event_scan,
+              evm_log_scan,
+              contract_event_scan,
+              gear_message_enqueued_scan,
+              gear_message_sent_scan
+              ):
+        call_item.sources.extend([
             RefRel(
-                table=r_ev,
+                scan=s,
                 include_flag_name='call',
-                key=['extrinsic_index', 'call_address']
+                scan_columns=['extrinsic_index', 'call_address']
             ),
             JoinRel(
-                table=r_ev,
+                scan=s,
                 include_flag_name='stack',
-                join_condition='s.extrinsic_index = r.extrinsic_index AND '
-                               'r.call_address is not null AND'
-                               'len(s.address) <= len(r.call_address) AND '
-                               's.address = r.call_address[1:len(s.address)]'
+                scan_columns=['extrinsic_index', 'call_address'],
+                query='SELECT * FROM calls i, s WHERE '
+                      'i.block_number = s.block_number AND '
+                      'i.extrinsic_index = s.extrinsic_index AND '
+                      's.call_address is not null AND '
+                      'len(i.address) <= len(s.call_address) AND '
+                      'i.address = s.call_address[1:len(i.address)]'
             )
         ])
 
-        s_extrinsics.sources.extend([
+        extrinsic_item.sources.extend([
             RefRel(
-                table=r_ev,
+                scan=s,
                 include_flag_name='extrinsic',
-                key=['extrinsic_index']
+                scan_columns=['extrinsic_index']
             ),
         ])
 
-    s_extrinsics.sources.extend([
+    extrinsic_item.sources.extend([
         RefRel(
-            table=r_calls,
+            scan=call_scan,
             include_flag_name='extrinsic',
-            key=['extrinsic_index']
+            scan_columns=['extrinsic_index']
         )
     ])
 
     return [
-        _BlocksTable(),
-        r_events,
-        r_evm_logs,
-        r_contracts_events,
-        r_gear_sent,
-        r_gear_enqueued,
-        r_calls,
-        r_ethereum_transact_calls,
-        s_events,
-        s_calls,
-        s_extrinsics
+        event_scan,
+        evm_log_scan,
+        gear_message_sent_scan,
+        gear_message_enqueued_scan,
+        contract_event_scan,
+        call_scan,
+        ethereum_transact_scan,
+        block_item,
+        event_item,
+        call_item,
+        extrinsic_item
     ]
 
 

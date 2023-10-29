@@ -1,47 +1,64 @@
-import os
 import glob
 import json
+import os
 import sys
-from typing import NamedTuple, Any
+from typing import NamedTuple, Any, Iterable
 
-from sqa.worker import query
+from sqa.worker.query import execute_query, QueryResult
 
 
 class Fixture(NamedTuple):
     name: str
+    data_dir: str
     query: Any
     result: Any
 
 
-def get_fixtures():
-    for path in glob.glob('tests/fixtures/*.result.json'):
-        name = os.path.basename(path).split('.')[0]
-        query_path = path.replace('.result', '')
-        with open(query_path) as query_file, open(path) as file:
-            query = json.load(query_file)
-            result = json.load(file)
-            yield Fixture(name, query, result)
+def get_fixtures(suite_dir: str) -> Iterable[Fixture]:
+    data_dir = os.path.join(suite_dir, 'data')
+    query_files = glob.glob('fixtures/*/query.json', root_dir=suite_dir)
+    query_files.sort()
+    for query_file in query_files:
+        fixture_dir = os.path.join(suite_dir, os.path.dirname(query_file))
+        fixture_name = os.path.basename(fixture_dir)
+        query_file = os.path.join(fixture_dir, 'query.json')
+        result_file = os.path.join(fixture_dir, 'result.json')
+
+        with open(query_file) as f:
+            query = json.load(f)
+
+        with open(result_file) as f:
+            result = json.load(f)
+
+        yield Fixture(fixture_name, data_dir, query, result)
 
 
-def execute_query(q: query.ArchiveQuery):
-    res = query.execute_query('tests/data/', (17881390, 17882786), q)
-    return json.loads(res.result)
+def execute_fixture_query(fixture: Fixture) -> QueryResult:
+    return execute_query(
+        fixture.data_dir,
+        (0, sys.maxsize),
+        fixture.query
+    )
 
 
-def run_test(fixture: Fixture) -> bool:
-    actual_result = execute_query(fixture.query)
-    return actual_result == fixture.result
+def run_test_suite(suite_dir: str) -> None:
+    suite_name = os.path.basename(suite_dir)
+    for fixture in get_fixtures(suite_dir):
+        print(f'test {suite_name}/{fixture.name}: ', end='')
+        result = execute_fixture_query(fixture)
+        result_data = json.loads(result.result)
+        if result_data == fixture.result:
+            print('ok')
+        else:
+            print('failed')
+            with open(os.path.join(fixture.data_dir, '../fixtures', fixture.name, 'actual.temp.json'), 'w') as f:
+                json.dump(result_data, f, indent=2)
+            sys.exit(1)
 
 
 def main():
-    for fixture in get_fixtures():
-        if run_test(fixture):
-            print(f'test "{fixture.name}" successfully passed')
-        else:
-            print(f'test "{fixture.name}" failed')
-            with open(f'{fixture.name}.actual.temp.json', 'w') as f:
-                json.dump(execute_query(fixture.query), f, indent=4)
-            sys.exit(1)
+    run_test_suite('tests/ethereum')
+    run_test_suite('tests/moonbeam')
 
 
 if __name__ == '__main__':

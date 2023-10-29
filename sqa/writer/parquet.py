@@ -4,6 +4,7 @@ from typing import Union, Any
 
 import pyarrow
 
+from sqa.duckdb import execute_sql
 from sqa.fs import Fs
 
 
@@ -114,3 +115,23 @@ class BaseParquetSink:
 
     def end(self):
         self._wait_for_prev_write()
+
+
+def add_size_column(table: pyarrow.Table, col: str) -> pyarrow.Table:
+    sizes = execute_sql(f'SELECT coalesce(strlen("{col}")::int8, 0) FROM "table"')
+    return table.append_column(f'{col}_size', sizes.column(0))
+
+
+def _get_size(v):
+    if v is None:
+        return 0
+    else:
+        return len(v)
+
+
+def add_index_column(table: pyarrow.Table) -> pyarrow.Table:
+    index = pyarrow.array(
+        range(0, table.shape[0]),
+        type=pyarrow.int32()
+    )
+    return table.append_column('_idx', index)

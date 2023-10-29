@@ -1,5 +1,16 @@
+from typing import TypedDict, NotRequired
+
 import marshmallow as mm
 import marshmallow.validate
+
+from .model import FieldSelection
+
+
+class ArchiveQuery(TypedDict):
+    fromBlock: int
+    toBlock: NotRequired[int]
+    includeAllBlocks: NotRequired[bool]
+    fields: NotRequired[FieldSelection]
 
 
 class BaseQuerySchema(mm.Schema):

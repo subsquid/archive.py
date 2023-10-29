@@ -6,7 +6,7 @@ import time
 import falcon
 import falcon.asgi as fa
 
-from sqa.query.builder import MissingData
+from sqa.query import MissingData
 from sqa.worker.query import InvalidQuery
 from sqa.worker.state.dataset import dataset_decode
 from sqa.worker.state.manager import StateManager
@@ -115,14 +115,7 @@ class QueryResource:
         end_time = time.time()
         duration = end_time - start_time
 
-        if query_result.exec_plan:
-            LOG.warning('query profile', extra={
-                'query_time': duration,
-                'query_exec_time': query_result.exec_time,
-                'query_exec_plan': json.loads(query_result.exec_plan),
-                **log_extra
-            })
-        elif duration > 10:
+        if duration > 10:
             LOG.warning('slow query', extra={
                 'query_time': duration,
                 'query_exec_time': query_result.exec_time,

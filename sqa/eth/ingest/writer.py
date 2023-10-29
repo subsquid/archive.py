@@ -1,5 +1,5 @@
 import logging
-from typing import NamedTuple
+from typing import TypedDict, NotRequired
 
 import pyarrow
 
@@ -9,17 +9,18 @@ from sqa.eth.ingest.tables import BlockTableBuilder, LogTableBuilder, TxTableBui
 from sqa.eth.ingest.util import short_hash
 from sqa.fs import Fs
 from sqa.layout import ChunkWriter
+from sqa.writer.parquet import add_size_column, add_index_column
 
 
 LOG = logging.getLogger(__name__)
 
 
-class ArrowDataBatch(NamedTuple):
+class ArrowDataBatch(TypedDict):
     blocks: pyarrow.Table
     transactions: pyarrow.Table
     logs: pyarrow.Table
-    traces: pyarrow.Table
-    statediffs: pyarrow.Table
+    traces: NotRequired[pyarrow.Table]
+    statediffs: NotRequired[pyarrow.Table]
     bytesize: int
 
 
@@ -72,14 +73,20 @@ class ArrowBatchBuilder:
 
     def build(self) -> ArrowDataBatch:
         bytesize = self.buffered_bytes()
+
         batch = ArrowDataBatch(
             blocks=self.block_table.to_table(),
             transactions=self.tx_table.to_table(),
             logs=self.log_table.to_table(),
-            traces=self.trace_table.to_table(),
-            statediffs=self.statediff_table.to_table(),
             bytesize=bytesize
         )
+
+        if self._with_traces:
+            batch['traces'] = self.trace_table.to_table()
+
+        if self._with_statediffs:
+            batch['statediffs'] = self.statediff_table.to_table()
+
         self._init()
         return batch
 
@@ -92,94 +99,123 @@ class ParquetWriter:
         self.with_statediffs = with_statediffs
 
     def write(self, batch: ArrowDataBatch) -> None:
-        blocks = batch.blocks
-        transactions = batch.transactions
-        logs = batch.logs
-        traces = batch.traces
-        statediffs = batch.statediffs
-
+        blocks = batch['blocks']
         block_numbers: pyarrow.ChunkedArray = blocks.column('number')
         first_block = block_numbers[0].as_py()
         last_block = block_numbers[-1].as_py()
         last_hash = short_hash(blocks.column('hash')[-1].as_py())
 
-        extra = {'first_block': first_block, 'last_block': last_block, 'last_hash': last_hash}
-        LOG.debug('saving data chunk', extra=extra)
-
-        transactions = transactions.sort_by([
-            ('to', 'ascending'),
-            ('sighash', 'ascending')
-        ])
-
-        logs = logs.sort_by([
-            ('address', 'ascending'),
-            ('topic0', 'ascending')
-        ])
-
         chunk = self.chunk_writer.next_chunk(first_block, last_block, last_hash)
+        LOG.debug('saving data chunk %s', chunk.path())
 
         with self.fs.transact(chunk.path()) as loc:
-            kwargs = {
-                'data_page_size': 32 * 1024,
-                'compression': 'zstd',
-                'compression_level': 12
-            }
+            write_parquet(loc, batch)
 
-            loc.write_parquet(
-                'logs.parquet',
-                logs,
-                use_dictionary=['address', 'topic0'],
-                row_group_size=15000,
-                **kwargs
-            )
 
-            LOG.debug('wrote %s', loc.abs('logs.parquet'))
+def write_parquet(loc: Fs, batch: ArrowDataBatch) -> None:
+    kwargs = {
+        'data_page_size': 128 * 1024,
+        'dictionary_pagesize_limit': 128 * 1024,
+        'compression': 'zstd',
+        # 'compression_level': 12,
+        'write_page_index': True,
+        'write_batch_size': 100
+    }
 
-            loc.write_parquet(
-                'transactions.parquet',
-                transactions,
-                use_dictionary=['to', 'sighash'],
-                row_group_size=15000,
-                **kwargs
-            )
+    transactions = batch['transactions']
+    transactions = transactions.sort_by([
+        ('to', 'ascending'),
+        ('sighash', 'ascending'),
+        ('block_number', 'ascending'),
+        ('transaction_index', 'ascending')
+    ])
+    transactions = add_size_column(transactions, 'input')
+    transactions = add_index_column(transactions)
 
-            LOG.debug('wrote %s', loc.abs('transactions.parquet'))
+    loc.write_parquet(
+        'transactions.parquet',
+        transactions,
+        use_dictionary=['to', 'sighash'],
+        row_group_size=10000,
+        write_statistics=['_idx', 'to', 'sighash', 'block_number'],
+        **kwargs
+    )
 
-            if self.with_traces:
-                loc.write_parquet(
-                    'traces.parquet',
-                    traces,
-                    use_dictionary=[
-                        'type',
-                        'call_from',
-                        'call_to',
-                        'call_type'
-                    ],
-                    row_group_size=15000,
-                    **kwargs
-                )
+    LOG.debug('wrote %s', loc.abs('transactions.parquet'))
 
-                LOG.debug('wrote %s', loc.abs('traces.parquet'))
+    logs = batch['logs']
+    logs = logs.sort_by([
+        ('address', 'ascending'),
+        ('topic0', 'ascending'),
+        ('block_number', 'ascending'),
+        ('log_index', 'ascending')
+    ])
+    logs = add_size_column(logs, 'data')
+    logs = add_index_column(logs)
 
-            if self.with_statediffs:
-                loc.write_parquet(
-                    'statediffs.parquet',
-                    statediffs,
-                    use_dictionary=[
-                        'address',
-                        'kind'
-                    ],
-                    row_group_size=15000,
-                    **kwargs
-                )
+    loc.write_parquet(
+        'logs.parquet',
+        logs,
+        use_dictionary=['address', 'topic0'],
+        row_group_size=10000,
+        write_statistics=['_idx', 'address', 'topic0', 'block_number'],
+        **kwargs
+    )
 
-                LOG.debug('wrote %s', loc.abs('statediffs.parquet'))
+    LOG.debug('wrote %s', loc.abs('logs.parquet'))
 
-            loc.write_parquet(
-                'blocks.parquet',
-                blocks,
-                use_dictionary=False,
-                **kwargs
-            )
+    if 'traces' in batch:
+        traces = batch['traces']
+        traces = add_size_column(traces, 'create_init')
+        traces = add_size_column(traces, 'create_result_code')
+        traces = add_size_column(traces, 'call_input')
+        traces = add_size_column(traces, 'call_result_output')
+        traces = add_index_column(traces)
 
-            LOG.debug('wrote %s', loc.abs('blocks.parquet'))
+        loc.write_parquet(
+            'traces.parquet',
+            traces,
+            use_dictionary=[
+                'type',
+                'call_from',
+                'call_to',
+                'call_type',
+                'call_sighash'
+            ],
+            write_statistics=['_idx', 'type', 'call_from', 'call_to', 'call_sighash', 'block_number'],
+            row_group_size=10000,
+            **kwargs
+        )
+
+        LOG.debug('wrote %s', loc.abs('traces.parquet'))
+
+    if 'statediffs' in batch:
+        statediffs = batch['statediffs']
+        statediffs = add_size_column(statediffs, 'prev')
+        statediffs = add_size_column(statediffs, 'next')
+        statediffs = add_index_column(statediffs)
+
+        loc.write_parquet(
+            'statediffs.parquet',
+            statediffs,
+            use_dictionary=[
+                'address',
+                'kind'
+            ],
+            write_statistics=['_idx', 'block_number', 'transaction_index', 'address', 'key'],
+            row_group_size=10000,
+            **kwargs
+        )
+
+    blocks = batch['blocks']
+    blocks = add_size_column(blocks, 'extra_data')
+
+    loc.write_parquet(
+        'blocks.parquet',
+        blocks,
+        write_statistics=['number'],
+        row_group_size=2000,
+        **kwargs
+    )
+
+    LOG.debug('wrote %s', loc.abs('blocks.parquet'))

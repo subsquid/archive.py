@@ -8,28 +8,25 @@ RUN pdm venv create --with venv
 ADD pyproject.toml .
 ADD pdm.lock .
 RUN pdm sync --no-self --prod
-ADD sqa sqa/
+
+
+FROM builder AS writer-builder
+RUN pdm sync -G writer --no-editable --prod
+
+
+FROM base AS writer-base
+COPY --from=writer-builder /project/.venv /app/env/
+ADD sqa /app/sqa/
+ADD rewrite_archive.py /app/rewrite_archive.py
 ADD README.md .
 
 
-FROM builder AS eth-ingest-builder
-RUN pdm sync -G eth-ingest --no-editable --prod
-
-
-FROM base AS eth-ingest
-COPY --from=eth-ingest-builder /project/.venv /app/env/
-COPY --from=eth-ingest-builder /project/sqa /app/sqa/
+FROM writer-base AS eth-ingest
 RUN /app/env/bin/python -m sqa.eth.ingest --help > /dev/null # win a little bit of startup time
 ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.eth.ingest"]
 
 
-FROM builder AS substrate-writer-builder
-RUN pdm sync -G substrate-writer --no-editable --prod
-
-
-FROM base AS substrate-writer
-COPY --from=substrate-writer-builder /project/.venv /app/env/
-COPY --from=substrate-writer-builder /project/sqa /app/sqa/
+FROM writer-base AS substrate-writer
 RUN /app/env/bin/python -m sqa.substrate.writer --help > /dev/null # win a little bit of startup time
 ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.substrate.writer"]
 
@@ -40,7 +37,8 @@ RUN pdm sync -G http-worker --no-editable --prod
 
 FROM base AS worker
 COPY --from=worker-builder /project/.venv /app/env/
-COPY --from=worker-builder /project/sqa /app/sqa/
+ADD sqa /app/sqa/
+ADD README.md .
 RUN /app/env/bin/python -m sqa.worker --help > /dev/null # win a little bit of startup time
 ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.worker"]
 
@@ -51,7 +49,8 @@ RUN pdm sync -G p2p-worker --no-editable --prod
 
 FROM base as p2p-worker
 COPY --from=p2p-worker-builder /project/.venv /app/env/
-COPY --from=p2p-worker-builder /project/sqa /app/sqa/
+ADD sqa /app/sqa/
+ADD README.md .
 VOLUME /app/data
 ENV DATA_DIR=/app/data/worker
 ENV PING_INTERVAL_SEC=20

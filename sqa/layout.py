@@ -200,3 +200,11 @@ class ChunkWriter:
 
 class LayoutConflictException(Exception):
     pass
+
+
+class Partition(NamedTuple):
+    dataset_dir: str
+    chunk: DataChunk
+
+    def get_table_file(self, table_name: str):
+        return f'{self.dataset_dir}/{self.chunk.path()}/{table_name}.parquet'
