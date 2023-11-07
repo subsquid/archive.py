@@ -245,7 +245,7 @@ def _is_retryable_error(e: Exception) -> bool:
         return True
     elif isinstance(e, RpcError) and isinstance(e.info, dict):
         code = e.info.get('code')
-        return code == 429 or code == -32603 or code == -32000
+        return code == 429 or code == -32603 or code == -32000 or code == -32002
     else:
         return False
 
