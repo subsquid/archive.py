@@ -2,7 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-import sqa.worker.p2p.p2p_transport_pb2 as p2p__transport__pb2
+import p2p_transport_pb2 as p2p__transport__pb2
 
 
 class P2PTransportStub(object):

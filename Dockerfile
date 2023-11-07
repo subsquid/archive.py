@@ -24,7 +24,7 @@ ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.eth.ingest"]
 
 
 FROM builder AS substrate-writer-builder
-RUN pdm sync --no-editable --prod
+RUN pdm sync -G substrate-writer --no-editable --prod
 
 
 FROM base AS substrate-writer
@@ -54,6 +54,7 @@ COPY --from=p2p-worker-builder /project/.venv /app/env/
 COPY --from=p2p-worker-builder /project/sqa /app/sqa/
 VOLUME /app/data
 ENV DATA_DIR=/app/data/worker
+ENV PING_INTERVAL_SEC=20
 RUN echo "#!/bin/bash \n exec /app/env/bin/python -m sqa.worker.p2p --data-dir \${DATA_DIR} --proxy \${PROXY_ADDR} --scheduler-id \${SCHEDULER_ID}" > ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 ENTRYPOINT ["./entrypoint.sh"]

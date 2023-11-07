@@ -14,11 +14,11 @@ from marshmallow import ValidationError
 
 from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
 from sqa.worker.p2p import messages_pb2 as msg_pb
-from sqa.worker.p2p.p2p_transport_pb2 import Message, Empty, Bytes
+from sqa.worker.p2p.p2p_transport_pb2 import Bytes, Empty, Message, Subscription
 from sqa.worker.p2p.p2p_transport_pb2_grpc import P2PTransportStub
 from sqa.worker.query import QueryResult, InvalidQuery
 from sqa.worker.state.controller import State
-from sqa.worker.state.dataset import dataset_encode, dataset_decode
+from sqa.worker.state.dataset import dataset_decode
 from sqa.worker.state.intervals import to_range_set
 from sqa.worker.state.manager import StateManager
 from sqa.worker.worker import Worker
@@ -28,6 +28,8 @@ LOG = logging.getLogger(__name__)
 
 # This is the maximum *decompressed* size of the message
 MAX_MESSAGE_LENGTH = 100 * 1024 * 1024  # 100 MiB
+PING_TOPIC = "worker_ping"
+WORKER_VERSION = "0.1.4"
 
 PING_TOPIC = "worker_ping"
 
@@ -86,6 +88,8 @@ class P2PTransport:
     async def initialize(self) -> None:
         self._local_peer_id = (await self._transport.LocalPeerId(Empty())).peer_id
         LOG.info(f"Local peer ID: {self._local_peer_id}")
+        # Subscribe to the ping topic so that our node also participates in broadcasting messages
+        await self._subscribe(topic=PING_TOPIC)
 
     async def run(self):
         receive_task = create_child_task('p2p_receive', self._receive_loop())
@@ -112,6 +116,9 @@ class P2PTransport:
                 self._query_info[envelope.query.query_id] = QueryInfo(msg.peer_id)
                 await self._query_tasks.put(envelope.query)
 
+            elif msg_type == 'ping':
+                continue  # Just ignore others' pings
+
             else:
                 LOG.warning(f"Unexpected message type received: {msg_type}")
 
@@ -128,13 +135,17 @@ class P2PTransport:
         )
         await self._transport.SendMessage(msg)
 
+    async def _subscribe(self, topic: str) -> None:
+        await self._transport.ToggleSubscription(Subscription(topic=topic, subscribed=True))
+
     async def send_ping(self, state: State, stored_bytes: int, pause=False) -> None:
         if self._local_peer_id is None:
             await self.initialize()
         ping = msg_pb.Ping(
             worker_id=self._local_peer_id,
             state=state_to_proto(state),
-            stored_bytes=stored_bytes
+            stored_bytes=stored_bytes,
+            version=WORKER_VERSION,
         )
         signature: Bytes = await self._transport.Sign(Bytes(bytes=ping.SerializeToString()))
         ping.signature = signature.bytes
@@ -146,11 +157,6 @@ class P2PTransport:
         self._expected_pong = sha3_256(ping.SerializeToString())
 
         await self._send(envelope, topic=PING_TOPIC)
-
-        for dataset, range_set in envelope.ping.state.datasets.items():
-            envelope = msg_pb.Envelope(dataset_state=range_set)
-            topic = dataset_encode(dataset)
-            await self._send(envelope, topic=topic)
 
     async def state_updates(self) -> AsyncIterator[State]:
         while True:
@@ -239,21 +245,22 @@ class P2PTransport:
             await self._send(envelope, peer_id=self._scheduler_id)
 
 
+async def execute_query(transport: P2PTransport, worker: Worker, query_task: msg_pb.Query):
+    try:
+        query = json.loads(query_task.query)
+        dataset = dataset_decode(query_task.dataset)
+        result = await worker.execute_query(query, dataset, query_task.profiling)
+        LOG.info(f"Query {query_task.query_id} success")
+        await transport.send_query_result(query_task, result)
+    except Exception as e:
+        LOG.exception(f"Query {query_task.query_id} execution failed")
+        await transport.send_query_error(query_task, e)
+
+
 async def run_queries(transport: P2PTransport, worker: Worker):
     async for query_task in transport.query_tasks():
-        async def task():
-            try:
-                query = json.loads(query_task.query)
-                dataset = dataset_decode(query_task.dataset)
-                result = await worker.execute_query(query,dataset, query_task.profiling)
-                LOG.info(f"Query {query_task.query_id} success")
-                await transport.send_query_result(query_task, result)
-            except Exception as e:
-                LOG.exception(f"Query {query_task.query_id} execution failed")
-                await transport.send_query_error(query_task, e)
-
         # FIXME: backpressure
-        asyncio.create_task(task())
+        asyncio.create_task(execute_query(transport, worker, query_task))
 
 
 async def _main():

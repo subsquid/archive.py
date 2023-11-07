@@ -31,9 +31,11 @@ class PeerId(_message.Message):
     def __init__(self, peer_id: _Optional[str] = ...) -> None: ...
 
 class Subscription(_message.Message):
-    __slots__ = ["subscribed", "topic"]
+    __slots__ = ["allow_unordered", "subscribed", "topic"]
+    ALLOW_UNORDERED_FIELD_NUMBER: _ClassVar[int]
     SUBSCRIBED_FIELD_NUMBER: _ClassVar[int]
     TOPIC_FIELD_NUMBER: _ClassVar[int]
+    allow_unordered: bool
     subscribed: bool
     topic: str
-    def __init__(self, topic: _Optional[str] = ..., subscribed: bool = ...) -> None: ...
+    def __init__(self, topic: _Optional[str] = ..., subscribed: bool = ..., allow_unordered: bool = ...) -> None: ...

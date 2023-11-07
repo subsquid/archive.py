@@ -73,6 +73,7 @@ class TraceFieldSelection(TypedDict, total=False):
     transactionIndex: bool
     type: bool
     error: bool
+    revertReason: bool
     createFrom: bool
     createValue: bool
     createGas: bool
@@ -113,7 +114,7 @@ class LogRequest(TypedDict, total=False):
     topic2: list[str]
     topic3: list[str]
     transaction: bool
-    transaction_traces: bool
+    transactionTraces: bool
 
 
 TxRequest = TypedDict('TxRequest', {
@@ -169,6 +170,7 @@ class _LogRequestSchema(mm.Schema):
     topic2 = mm.fields.List(mm.fields.Str())
     topic3 = mm.fields.List(mm.fields.Str())
     transaction = mm.fields.Boolean()
+    transactionTraces = mm.fields.Boolean()
 
 
 _TxRequestSchema = mm.Schema.from_dict({
@@ -272,8 +274,21 @@ class _STransactions(STable):
 
     def field_weights(self):
         return {
-            'input': 4
+            'input': 8
         }
+
+    def project(self, fields: dict, prefix: str = '') -> str:
+        def rewrite_chain_id(f: str):
+            if f == 'chainId':
+                chain_id = prefix + 'chain_id'
+                return 'chainId', f'IF({chain_id} > 9007199254740991, to_json({chain_id}::text), to_json({chain_id}))'
+            else:
+                return f
+
+        return json_project(
+            map(rewrite_chain_id, self.get_selected_fields(fields)),
+            prefix=prefix
+        )
 
 
 class _RLogs(RTable):
@@ -354,6 +369,12 @@ class _STraces(STable):
 
     def required_fields(self) -> tuple[str, ...]:
         return 'transactionIndex', 'traceAddress', 'type'
+
+    def field_weights(self) -> dict[str, int]:
+        return {
+            'createInit': 50,
+            'callInput': 8
+        }
 
     def project(self, fields: dict, prefix: str = ''):
         selected = self.get_selected_fields(fields)
@@ -459,6 +480,9 @@ class _SStateDiffs(STable):
     def table_name(self) -> str:
         return 'statediffs'
 
+    def prop_name(self) -> str:
+        return 'stateDiffs'
+
     def field_selection_name(self) -> str:
         return 'stateDiff'
 
@@ -500,7 +524,7 @@ def _build_model():
         ),
         JoinRel(
             table=r_logs,
-            include_flag_name='transaction_traces',
+            include_flag_name='transactionTraces',
             join_condition='s.transaction_index = r.transaction_index'
         ),
         JoinRel(

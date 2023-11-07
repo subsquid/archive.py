@@ -2,11 +2,11 @@
 # It is not intended for manual editing.
 
 [metadata]
-groups = ["default", "dev", "eth-ingest", "http-worker", "p2p-worker"]
+groups = ["default", "dev", "eth-ingest", "http-worker", "p2p-worker", "substrate-writer"]
 cross_platform = true
 static_urls = false
 lock_version = "4.3"
-content_hash = "sha256:4d3cf6a787c93f464435cb02c66818dce2867c714cb33281cdaabadb37716794"
+content_hash = "sha256:b5aa4a0f619de697288dbfb848f102385ec97dab08ee6b8f1a71e2ee3638100d"
 
 [[package]]
 name = "aiobotocore"

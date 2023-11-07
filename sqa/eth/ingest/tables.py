@@ -75,7 +75,7 @@ class TxTableBuilder(TableBuilder):
         self.r = Column(pyarrow.string())
         self.s = Column(pyarrow.string())
         self.y_parity = Column(pyarrow.int8())
-        self.chain_id = Column(pyarrow.int32())
+        self.chain_id = Column(pyarrow.uint64())
         self.sighash = Column(pyarrow.string())
         self.gas_used = Column(qty())
         self.cumulative_gas_used = Column(qty())
@@ -279,13 +279,6 @@ class TraceTableBuilder(TableBuilder):
         bn = qty2int(block_number)
         tix = qty2int(transaction_index)
         for addr, subtraces, frame in _traverse_frame(top, []):
-            self.block_number.append(bn)
-            self.transaction_index.append(tix)
-            self.trace_address.append(addr)
-            self.subtraces.append(subtraces)
-            self.error.append(frame.get('error'))
-            self.revert_reason.append(frame.get('revertReason'))
-
             trace_type: Literal['create', 'call', 'suicide']
             frame_type = frame['type']
             if frame_type in ('CALL', 'CALLCODE', 'STATICCALL', 'DELEGATECALL', 'INVALID', 'Call'):
@@ -294,9 +287,18 @@ class TraceTableBuilder(TableBuilder):
                 trace_type = 'create'
             elif frame_type == 'SELFDESTRUCT':
                 trace_type = 'suicide'
+            elif frame_type == 'STOP':
+                assert top['type'] == 'STOP'
+                return
             else:
                 raise Exception(f'Unknown frame type - {frame_type}')
 
+            self.block_number.append(bn)
+            self.transaction_index.append(tix)
+            self.trace_address.append(addr)
+            self.subtraces.append(subtraces)
+            self.error.append(frame.get('error'))
+            self.revert_reason.append(frame.get('revertReason'))
             self.type.append(trace_type)
 
             if trace_type == 'create':

@@ -89,7 +89,7 @@ class Receipt(TypedDict):
 
 
 DebugFrame = TypedDict('DebugFrame', {
-    'type': Literal['CALL', 'STATICCALL', 'DELEGATECALL', 'CREATE', 'CREATE2', 'SELFDESTRUCT'],
+    'type': Literal['CALL', 'STATICCALL', 'DELEGATECALL', 'CREATE', 'CREATE2', 'SELFDESTRUCT', 'STOP'],
     'from': Address20,
     'to': Address20,
     'value': NotRequired[Qty],

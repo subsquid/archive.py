@@ -1,3 +1,4 @@
+import json
 import math
 import time
 from typing import Iterable, Optional, NamedTuple
@@ -115,17 +116,23 @@ def execute_query(
                 raise e
 
             num_read_chunks += 1
+            line = None
 
             for row in rows:
                 line = row.as_py()
                 yield line
                 size += len(line)
+                if size > 50 * 1024 * 1024:
+                    return
 
             if size > 20 * 1024 * 1024:
-                break
+                return
 
             if time.time() - beg > 2:
-                break
+                return
+
+            if line and json.loads(line)['header']['number'] < chunk.last_block:
+                return
 
     result = f'[{",".join(json_lines())}]'
 
