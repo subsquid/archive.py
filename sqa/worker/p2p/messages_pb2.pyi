@@ -61,12 +61,18 @@ class Ping(_message.Message):
     def __init__(self, worker_id: _Optional[str] = ..., worker_url: _Optional[str] = ..., state: _Optional[_Union[WorkerState, _Mapping]] = ..., pause: bool = ..., stored_bytes: _Optional[int] = ..., version: _Optional[str] = ..., signature: _Optional[bytes] = ...) -> None: ...
 
 class Pong(_message.Message):
-    __slots__ = ["assigned_state", "ping_hash"]
-    ASSIGNED_STATE_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ["active", "jailed", "not_registered", "ping_hash", "unsupported_version"]
+    ACTIVE_FIELD_NUMBER: _ClassVar[int]
+    JAILED_FIELD_NUMBER: _ClassVar[int]
+    NOT_REGISTERED_FIELD_NUMBER: _ClassVar[int]
     PING_HASH_FIELD_NUMBER: _ClassVar[int]
-    assigned_state: WorkerState
+    UNSUPPORTED_VERSION_FIELD_NUMBER: _ClassVar[int]
+    active: WorkerState
+    jailed: _empty_pb2.Empty
+    not_registered: _empty_pb2.Empty
     ping_hash: bytes
-    def __init__(self, ping_hash: _Optional[bytes] = ..., assigned_state: _Optional[_Union[WorkerState, _Mapping]] = ...) -> None: ...
+    unsupported_version: _empty_pb2.Empty
+    def __init__(self, ping_hash: _Optional[bytes] = ..., not_registered: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., unsupported_version: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., jailed: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., active: _Optional[_Union[WorkerState, _Mapping]] = ...) -> None: ...
 
 class Query(_message.Message):
     __slots__ = ["dataset", "profiling", "query", "query_id"]

@@ -105,12 +105,7 @@ class P2PTransport:
                 if msg.peer_id != self._scheduler_id:
                     LOG.warning(f"Wrong message origin: {msg.peer_id}")
                     continue
-                if envelope.pong.ping_hash != self._expected_pong:
-                    LOG.warning("Invalid ping hash in received pong message")
-                    continue
-                self._expected_pong = None
-                if envelope.pong.assigned_state is not None:
-                    await self._state_updates.put(envelope.pong.assigned_state)
+                await self._pong(envelope.pong)
 
             elif msg_type == 'query':
                 self._query_info[envelope.query.query_id] = QueryInfo(msg.peer_id)
@@ -121,6 +116,23 @@ class P2PTransport:
 
             else:
                 LOG.warning(f"Unexpected message type received: {msg_type}")
+
+    async def _pong(self, msg: msg_pb.Pong):
+        if msg.ping_hash != self._expected_pong:
+            LOG.warning("Invalid ping hash in received pong message")
+            return
+        self._expected_pong = None
+
+        status = msg.WhichOneof('status')
+        if status == 'not_registered':
+            LOG.error("Worker not registered on chain")
+        elif status == 'unsupported_version':
+            LOG.error("Worker version not supported by the scheduler")
+        elif status == 'jailed':
+            LOG.info("Worker jailed until the end of epoch")
+        elif status == 'active':
+            # If the status is 'active', it contains assigned chunks
+            await self._state_updates.put(msg.active)
 
     async def _send(
             self,
