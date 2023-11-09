@@ -79,13 +79,33 @@ class LogRequest(TypedDict, total=False):
     transaction: bool
 
 
-TxRequest = TypedDict('TxRequest', {
-    'from': list[str],
-    'to': list[str],
-    'sighash': list[str],
-    'logs': bool,
-    'internalTransactions': bool,
-}, total=False)
+class TxRequest(TypedDict, total=False):
+    type: list[str]
+    logs: bool
+    internalTransactions: bool
+
+
+class TransferTxRequest(TypedDict, total=False):
+    owner: list[str]
+    to: list[str]
+    logs: bool
+    internalTransactions: bool
+
+
+class TransferAssetTxRequest(TypedDict, total=False):
+    owner: list[str]
+    to: list[str]
+    asset: list[str]
+    logs: bool
+    internalTransactions: bool
+
+
+class TriggerSmartContractTxRequest(TypedDict, total=False):
+    owner: list[str]
+    contract: list[str]
+    sighash: list[str]
+    logs: bool
+    internalTransactions: bool
 
 
 class TraceRequest(TypedDict, total=False):
@@ -118,13 +138,32 @@ class _LogRequestSchema(mm.Schema):
     transaction = mm.fields.Boolean()
 
 
-_TxRequestSchema = mm.Schema.from_dict({
-    'from': mm.fields.List(mm.fields.Str()),
-    'to': mm.fields.List(mm.fields.Str()),
-    'sighash': mm.fields.List(mm.fields.Str()),
-    'logs': mm.fields.Boolean(),
-    'internalTransactions': mm.fields.Boolean(),
-})
+class _TxRequestSchema(mm.Schema):
+    type = mm.fields.List(mm.fields.Str())
+    logs = mm.fields.Boolean()
+    internalTransactions = mm.fields.Boolean()
+
+
+class _TransferTxRequestSchema(mm.Schema):
+    owner = mm.fields.List(mm.fields.Str())
+    to = mm.fields.List(mm.fields.Str())
+    logs = mm.fields.Boolean()
+    internalTransactions = mm.fields.Boolean()
+
+
+class _TransferAssetTxRequestSchema(mm.Schema):
+    owner = mm.fields.List(mm.fields.Str())
+    to = mm.fields.List(mm.fields.Str())
+    asset = mm.fields.List(mm.fields.Str())
+    logs = mm.fields.Boolean()
+    internalTransactions = mm.fields.Boolean()
+
+
+class _TriggerSmartContractTxRequestSchema(mm.Schema):
+    owner = mm.fields.List(mm.fields.Str())
+    contract = mm.fields.List(mm.fields.Str())
+    logs = mm.fields.Boolean()
+    internalTransactions = mm.fields.Boolean()
 
 
 class _InternalTransactionRequestSchema(mm.Schema):
@@ -139,6 +178,12 @@ class _QuerySchema(BaseQuerySchema):
     logs = mm.fields.List(mm.fields.Nested(_LogRequestSchema()))
 
     transactions = mm.fields.List(mm.fields.Nested(_TxRequestSchema()))
+
+    transferTransactions = mm.fields.List(mm.fields.Nested(_TransferTxRequestSchema()))
+
+    transferAssetTransactions = mm.fields.List(mm.fields.Nested(_TransferAssetTxRequestSchema()))
+
+    triggerSmartContractTransactions = mm.fields.List(mm.fields.Nested(_TriggerSmartContractTxRequestSchema()))
 
     internalTransactions = mm.fields.List(mm.fields.Nested(_InternalTransactionRequestSchema()))
 
@@ -206,9 +251,45 @@ class _TxScan(Scan):
         return 'transactions'
 
     def where(self, req: TxRequest) -> Iterable[Expression | None]:
-        yield field_in('to', req.get('to'))
-        yield field_in('from', req.get('from'))
-        yield field_in('sighash', req.get('sighash'))
+        yield field_in('type', req.get('type'))
+
+
+class _TransferTxScan(Scan):
+    def table(self) -> Table:
+        return _tx_table
+
+    def request_name(self) -> str:
+        return 'transferTransactions'
+
+    def where(self, req: TransferTxRequest) -> Iterable[Expression | None]:
+        yield field_in('_transfer_contract_owner', req.get('owner'))
+        yield field_in('_transfer_contract_to', req.get('to'))
+
+
+class _TransferAssetTxScan(Scan):
+    def table(self) -> Table:
+        return _tx_table
+
+    def request_name(self) -> str:
+        return 'transferAssetTransactions'
+
+    def where(self, req: TransferAssetTxRequest) -> Iterable[Expression | None]:
+        yield field_in('_transfer_asset_contract_owner', req.get('owner'))
+        yield field_in('_transfer_asset_contract_to', req.get('to'))
+        yield field_in('_transfer_asset_contract_asset', req.get('asset'))
+
+
+class _TriggerSmartContractTransferTxScan(Scan):
+    def table(self) -> Table:
+        return _tx_table
+
+    def request_name(self) -> str:
+        return 'triggerSmartContractTransactions'
+
+    def where(self, req: TriggerSmartContractTxRequest) -> Iterable[Expression | None]:
+        yield field_in('_trigger_smart_contract_owner', req.get('owner'))
+        yield field_in('_trigger_smart_contract_contract', req.get('contract'))
+        yield field_in('_trigger_smart_contract_sighash', req.get('sighash'))
 
 
 class _TxItem(Item):
@@ -297,6 +378,9 @@ class _InternalTxItem(Item):
 
 def _build_model():
     tx_scan = _TxScan()
+    transfer_tx_scan = _TransferTxScan()
+    transfer_asset_tx_scan = _TransferAssetTxScan()
+    trigger_contract_tx_scan = _TriggerSmartContractTransferTxScan()
     log_scan = _LogScan()
     internal_tx_scan = _InternalTxScan()
 
@@ -327,6 +411,9 @@ def _build_model():
 
     tx_item.sources.extend([
         tx_scan,
+        transfer_tx_scan,
+        transfer_asset_tx_scan,
+        trigger_contract_tx_scan,
         RefRel(
             scan=log_scan,
             include_flag_name='transaction',
@@ -341,6 +428,9 @@ def _build_model():
 
     return [
         tx_scan,
+        transfer_tx_scan,
+        transfer_asset_tx_scan,
+        trigger_contract_tx_scan,
         log_scan,
         internal_tx_scan,
         block_item,

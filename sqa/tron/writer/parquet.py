@@ -31,6 +31,11 @@ def _to_json(val: Any) -> str | None:
         return json.dumps(val)
 
 
+def _to_sighash(data: str) -> str | None:
+    assert len(data) > 8
+    return data[:8]
+
+
 class BlockTable(TableBuilder):
     def __init__(self):
         self.number = Column(pyarrow.int32())
@@ -89,6 +94,20 @@ class TransactionTable(TableBuilder):
         self.origin_energy_usage = Column(pyarrow.int64())
         self.energy_penalty_total = Column(pyarrow.int64())
 
+        # TransferContract
+        self._transfer_contract_owner = Column(pyarrow.string())
+        self._transfer_contract_to = Column(pyarrow.string())
+
+        # TransferAssetContract
+        self._transfer_asset_contract_owner = Column(pyarrow.string())
+        self._transfer_asset_contract_to = Column(pyarrow.string())
+        self._transfer_asset_contract_asset = Column(pyarrow.string())
+
+        # TriggerSmartContract
+        self._trigger_smart_contract_owner = Column(pyarrow.string())
+        self._trigger_smart_contract_contract = Column(pyarrow.string())
+        self._trigger_smart_contract_sighash = Column(pyarrow.string())
+
     def append(self, block_number: int, tx: Transaction) -> None:
         self.block_number.append(block_number)
         self.hash.append(tx['txID'])
@@ -126,6 +145,31 @@ class TransactionTable(TableBuilder):
             self.net_fee.append(info['receipt'].get('net_fee'))
             self.origin_energy_usage.append(info['receipt'].get('origin_energy_usage'))
             self.energy_penalty_total.append(info['receipt'].get('energy_penalty_total'))
+
+            if contract['type'] == 'TransferContract':
+                self._transfer_contract_owner.append(contract['parameter']['value']['owner_address'])
+                self._transfer_contract_to.append(contract['parameter']['value']['to_address'])
+            else:
+                self._transfer_contract_owner.append(None)
+                self._transfer_contract_to.append(None)
+
+            if contract['type'] == 'TransferAssetContract':
+                self._transfer_asset_contract_owner.append(contract['parameter']['value']['owner_address'])
+                self._transfer_asset_contract_to.append(contract['parameter']['value']['to_address'])
+                self._transfer_asset_contract_asset.append(contract['parameter']['value']['asset'])
+            else:
+                self._transfer_asset_contract_owner.append(None)
+                self._transfer_asset_contract_to.append(None)
+                self._transfer_asset_contract_asset.append(None)
+
+            if contract['type'] == 'TriggerSmartContract':
+                self._trigger_smart_contract_owner.append(contract['parameter']['value']['owner_address'])
+                self._trigger_smart_contract_contract.append(contract['parameter']['value']['contract_address'])
+                self._trigger_smart_contract_sighash.append(_to_sighash(contract['parameter']['value']['data']))
+            else:
+                self._trigger_smart_contract_owner.append(None)
+                self._trigger_smart_contract_contract.append(None)
+                self._trigger_smart_contract_sighash.append(None)
         else:
             self.fee.append(None)
             self.contract_result.append(None)
@@ -144,6 +188,17 @@ class TransactionTable(TableBuilder):
             self.net_fee.append(None)
             self.origin_energy_usage.append(None)
             self.energy_penalty_total.append(None)
+
+            self._transfer_contract_owner.append(None)
+            self._transfer_contract_to.append(None)
+
+            self._transfer_asset_contract_owner.append(None)
+            self._transfer_asset_contract_to.append(None)
+            self._transfer_asset_contract_asset.append(None)
+
+            self._trigger_smart_contract_owner.append(None)
+            self._trigger_smart_contract_contract.append(None)
+            self._trigger_smart_contract_sighash.append(None)
 
 
 class LogTable(TableBuilder):
