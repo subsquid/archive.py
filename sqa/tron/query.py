@@ -262,6 +262,7 @@ class _TransferTxScan(Scan):
         return 'transferTransactions'
 
     def where(self, req: TransferTxRequest) -> Iterable[Expression | None]:
+        yield field_in('type', ['TransferContract'])
         yield field_in('_transfer_contract_owner', req.get('owner'))
         yield field_in('_transfer_contract_to', req.get('to'))
 
@@ -274,6 +275,7 @@ class _TransferAssetTxScan(Scan):
         return 'transferAssetTransactions'
 
     def where(self, req: TransferAssetTxRequest) -> Iterable[Expression | None]:
+        yield field_in('type', ['TransferAssetContract'])
         yield field_in('_transfer_asset_contract_owner', req.get('owner'))
         yield field_in('_transfer_asset_contract_to', req.get('to'))
         yield field_in('_transfer_asset_contract_asset', req.get('asset'))
@@ -287,6 +289,7 @@ class _TriggerSmartContractTransferTxScan(Scan):
         return 'triggerSmartContractTransactions'
 
     def where(self, req: TriggerSmartContractTxRequest) -> Iterable[Expression | None]:
+        yield field_in('type', ['TriggerSmartContract'])
         yield field_in('_trigger_smart_contract_owner', req.get('owner'))
         yield field_in('_trigger_smart_contract_contract', req.get('contract'))
         yield field_in('_trigger_smart_contract_sighash', req.get('sighash'))
@@ -301,6 +304,17 @@ class _TxItem(Item):
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
         return get_selected_fields(fields.get('transaction'), [])
+
+    def project(self, fields: FieldSelection) -> str:
+        def rewrite_timestamp(f: str):
+            if f in ['timestamp', 'expiration']:
+                return f, f'epoch_ms({f})'
+            else:
+                return f
+
+        return json_project(
+            map(rewrite_timestamp, self.get_selected_fields(fields))
+        )
 
 
 class _LogScan(Scan):

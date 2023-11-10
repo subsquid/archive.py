@@ -8,20 +8,8 @@ from sqa.writer.parquet import TableBuilder, Column, BaseParquetSink, add_size_c
 from .model import Block, Transaction, Log, InternalTransaction, BlockData
 
 
-def bigint():
-    return pyarrow.decimal128(38)
-
-
-def binary():
-    return pyarrow.string()
-
-
 def JSON():
     return pyarrow.string()
-
-
-def address():
-    return pyarrow.list_(pyarrow.uint32())
 
 
 def _to_json(val: Any) -> str | None:
@@ -39,8 +27,8 @@ def _to_sighash(data: str) -> str | None:
 class BlockTable(TableBuilder):
     def __init__(self):
         self.number = Column(pyarrow.int32())
-        self.hash = Column(binary())
-        self.parent_hash = Column(binary())
+        self.hash = Column(pyarrow.string())
+        self.parent_hash = Column(pyarrow.string())
         self.tx_trie_root = Column(pyarrow.string())
         self.version = Column(pyarrow.int32())
         self.timestamp = Column(pyarrow.timestamp('ms', tz='UTC'))
@@ -61,7 +49,7 @@ class BlockTable(TableBuilder):
 class TransactionTable(TableBuilder):
     def __init__(self):
         self.block_number = Column(pyarrow.int32())
-        self.hash = Column(binary())
+        self.hash = Column(pyarrow.string())
         self.ret = Column(pyarrow.string())
         self.signature = Column(pyarrow.list_(pyarrow.string()))
         self.type = Column(pyarrow.string())
@@ -145,31 +133,6 @@ class TransactionTable(TableBuilder):
             self.net_fee.append(info['receipt'].get('net_fee'))
             self.origin_energy_usage.append(info['receipt'].get('origin_energy_usage'))
             self.energy_penalty_total.append(info['receipt'].get('energy_penalty_total'))
-
-            if contract['type'] == 'TransferContract':
-                self._transfer_contract_owner.append(contract['parameter']['value']['owner_address'])
-                self._transfer_contract_to.append(contract['parameter']['value']['to_address'])
-            else:
-                self._transfer_contract_owner.append(None)
-                self._transfer_contract_to.append(None)
-
-            if contract['type'] == 'TransferAssetContract':
-                self._transfer_asset_contract_owner.append(contract['parameter']['value']['owner_address'])
-                self._transfer_asset_contract_to.append(contract['parameter']['value']['to_address'])
-                self._transfer_asset_contract_asset.append(contract['parameter']['value']['asset'])
-            else:
-                self._transfer_asset_contract_owner.append(None)
-                self._transfer_asset_contract_to.append(None)
-                self._transfer_asset_contract_asset.append(None)
-
-            if contract['type'] == 'TriggerSmartContract':
-                self._trigger_smart_contract_owner.append(contract['parameter']['value']['owner_address'])
-                self._trigger_smart_contract_contract.append(contract['parameter']['value']['contract_address'])
-                self._trigger_smart_contract_sighash.append(_to_sighash(contract['parameter']['value']['data']))
-            else:
-                self._trigger_smart_contract_owner.append(None)
-                self._trigger_smart_contract_contract.append(None)
-                self._trigger_smart_contract_sighash.append(None)
         else:
             self.fee.append(None)
             self.contract_result.append(None)
@@ -189,13 +152,27 @@ class TransactionTable(TableBuilder):
             self.origin_energy_usage.append(None)
             self.energy_penalty_total.append(None)
 
+        if contract['type'] == 'TransferContract':
+            self._transfer_contract_owner.append(contract['parameter']['value']['owner_address'])
+            self._transfer_contract_to.append(contract['parameter']['value']['to_address'])
+        else:
             self._transfer_contract_owner.append(None)
             self._transfer_contract_to.append(None)
 
+        if contract['type'] == 'TransferAssetContract':
+            self._transfer_asset_contract_owner.append(contract['parameter']['value']['owner_address'])
+            self._transfer_asset_contract_to.append(contract['parameter']['value']['to_address'])
+            self._transfer_asset_contract_asset.append(contract['parameter']['value']['asset'])
+        else:
             self._transfer_asset_contract_owner.append(None)
             self._transfer_asset_contract_to.append(None)
             self._transfer_asset_contract_asset.append(None)
 
+        if contract['type'] == 'TriggerSmartContract':
+            self._trigger_smart_contract_owner.append(contract['parameter']['value']['owner_address'])
+            self._trigger_smart_contract_contract.append(contract['parameter']['value']['contract_address'])
+            self._trigger_smart_contract_sighash.append(_to_sighash(contract['parameter']['value']['data']))
+        else:
             self._trigger_smart_contract_owner.append(None)
             self._trigger_smart_contract_contract.append(None)
             self._trigger_smart_contract_sighash.append(None)
@@ -282,7 +259,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     logs = logs.sort_by([
         ('address', 'ascending'),
         ('topic0', 'ascending'),
-        ('block_number', 'ascending'),
+        ('block_number', 'ascending')
     ])
     logs = add_size_column(logs, 'data')
     logs = add_index_column(logs)
@@ -298,7 +275,8 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
 
     transactions = tables['transactions']
     transactions = transactions.sort_by([
-        ('block_number', 'ascending'),
+        ('type', 'ascending'),
+        ('block_number', 'ascending')
     ])
     transactions = add_size_column(transactions, 'raw_data_hex')
     transactions = add_index_column(transactions)
@@ -307,7 +285,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         'transactions.parquet',
         transactions,
         row_group_size=10_000,
-        use_dictionary=[],
+        use_dictionary=['type', 'ret'],
         write_statistics=['_idx', 'block_number'],
         **kwargs
     )
@@ -319,7 +297,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         'internal_transactions.parquet',
         internal_transactions,
         use_dictionary=False,
-        write_statistics=['_idx'],
+        write_statistics=['_idx', 'block_number'],
         **kwargs
     )
 
