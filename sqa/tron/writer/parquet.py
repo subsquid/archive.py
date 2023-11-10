@@ -20,7 +20,7 @@ def _to_json(val: Any) -> str | None:
 
 
 def _to_sighash(data: str) -> str | None:
-    assert len(data) > 8
+    assert len(data) >= 8
     return data[:8]
 
 
@@ -162,7 +162,7 @@ class TransactionTable(TableBuilder):
         if contract['type'] == 'TransferAssetContract':
             self._transfer_asset_contract_owner.append(contract['parameter']['value']['owner_address'])
             self._transfer_asset_contract_to.append(contract['parameter']['value']['to_address'])
-            self._transfer_asset_contract_asset.append(contract['parameter']['value']['asset'])
+            self._transfer_asset_contract_asset.append(contract['parameter']['value']['asset_name'])
         else:
             self._transfer_asset_contract_owner.append(None)
             self._transfer_asset_contract_to.append(None)

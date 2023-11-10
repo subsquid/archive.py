@@ -59,6 +59,7 @@ def run_test_suite(suite_dir: str) -> None:
 def main():
     run_test_suite('tests/ethereum')
     run_test_suite('tests/moonbeam')
+    run_test_suite('tests/tron')
 
 
 if __name__ == '__main__':
