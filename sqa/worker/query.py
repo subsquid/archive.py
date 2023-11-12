@@ -8,6 +8,7 @@ import psutil
 
 import sqa.eth.query
 import sqa.substrate.query
+import sqa.tron.query
 from sqa.fs import LocalFs
 from sqa.layout import get_chunks, get_filelist, Partition
 from sqa.query.model import Model
@@ -65,6 +66,8 @@ def _get_model(q: dict) -> Model:
         return sqa.eth.query.MODEL
     elif query_type == 'substrate':
         return sqa.substrate.query.MODEL
+    elif query_type == 'tron':
+        return sqa.tron.query.MODEL
     else:
         raise TypeError(f'unknown query type - {query_type}')
 

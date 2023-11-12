@@ -181,6 +181,7 @@ class TransactionTable(TableBuilder):
 class LogTable(TableBuilder):
     def __init__(self):
         self.block_number = Column(pyarrow.int32())
+        self.log_index = Column(pyarrow.int32())
         self.transaction_hash = Column(pyarrow.string())
         self.address = Column(pyarrow.string())
         self.data = Column(pyarrow.string())
@@ -189,8 +190,9 @@ class LogTable(TableBuilder):
         self.topic2 = Column(pyarrow.string())
         self.topic3 = Column(pyarrow.string())
 
-    def append(self, block_number: int, tx_hash: str, log: Log):
+    def append(self, block_number: int, index: int, tx_hash: str, log: Log):
         self.block_number.append(block_number)
+        self.log_index.append(index)
         self.transaction_hash.append(tx_hash)
         self.address.append(log['address'])
         self.data.append(log.get('data'))
@@ -234,11 +236,13 @@ class ParquetSink(BaseParquetSink):
 
     def push(self, data: BlockData) -> None:
         self.blocks.append(data['block'])
+        log_index = 0
         for tx in data['block'].get('transactions', []):
             self.transactions.append(data['height'], tx)
             if info := tx.get('info'):
                 for log in info.get('log', []):
-                    self.logs.append(data['height'], tx['txID'], log)
+                    self.logs.append(data['height'], log_index, tx['txID'], log)
+                    log_index += 1
                 for internal_tx in info.get('internal_transactions', []):
                     self.internal_transactions.append(data['height'], tx['txID'], internal_tx)
 

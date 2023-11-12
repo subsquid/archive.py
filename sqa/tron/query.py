@@ -208,7 +208,7 @@ _tx_table = Table(
 
 _logs_table = Table(
     name='logs',
-    primary_key=[],
+    primary_key=['log_index'],
     column_weights={
         'data': 'data_size'
     }
@@ -303,7 +303,7 @@ class _TxItem(Item):
         return 'transactions'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('transaction'), [])
+        return get_selected_fields(fields.get('transaction'), ['hash'])
 
     def project(self, fields: FieldSelection) -> str:
         def rewrite_timestamp(f: str):
@@ -340,7 +340,7 @@ class _LogItem(Item):
         return 'logs'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('log'), ['transactionHash'])
+        return get_selected_fields(fields.get('log'), ['logIndex', 'transactionHash'])
 
     def selected_columns(self, fields: FieldSelection) -> list[str]:
         columns = []
