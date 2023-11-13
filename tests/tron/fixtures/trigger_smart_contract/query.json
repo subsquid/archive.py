@@ -1,0 +1,16 @@
+{
+  "type": "tron",
+  "fromBlock": 11322942,
+  "toBlock": 11323358,
+  "fields": {
+    "transaction": {
+      "parameter": true
+    }
+  },
+  "triggerSmartContractTransactions": [
+    {
+      "contract": ["41a614f803b6fd780986a42c78ec9c7f77e6ded13c"],
+      "sighash": ["a9059cbb"]
+    }
+  ]
+}
