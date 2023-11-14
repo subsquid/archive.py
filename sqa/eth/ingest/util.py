@@ -1,7 +1,10 @@
 import binascii
 from typing import TypedDict, NotRequired
 
+from trie import HexaryTrie
 from Crypto.Hash import keccak
+import rlp
+from eth_utils.encoding import int_to_big_endian
 
 from sqa.eth.ingest.model import Qty, Hash32, Transaction, Address20
 
@@ -78,3 +81,65 @@ def logs_bloom(logs) -> str:
         for topic in log['topics']:
             _add_to_bloom(bloom, decode_hex(topic))
     return encode_hex(bloom)
+
+
+def _encode_access_list(access_list: list) -> list[list[bytes | list[bytes]]]:
+    encoded = []
+    for item in access_list:
+        address = decode_hex(item['address'])
+        keys = []
+        for key in item['storageKeys']:
+            val = int_to_big_endian(qty2int(key))
+            keys.append(b'\x00' * max(0, 32 - len(val)) + val)
+        encoded.append([address, keys])
+    return encoded
+
+
+def transactions_root(transactions: list[Transaction]) -> str:
+    trie = HexaryTrie({})
+    for tx in transactions:
+        path = rlp.encode(qty2int(tx['transactionIndex']))
+        if tx['type'] == '0x0':
+            trie[path] = rlp.encode([
+                qty2int(tx['nonce']),
+                qty2int(tx['gasPrice']),
+                qty2int(tx['gas']),
+                decode_hex(tx['to']) if tx['to'] else b'',
+                qty2int(tx['value']),
+                decode_hex(tx['input']),
+                qty2int(tx['v']),
+                qty2int(tx['r']),
+                qty2int(tx['s'])
+            ])
+        elif tx['type'] == '0x1':
+            trie[path] = b'\x01' + rlp.encode([
+                qty2int(tx['chainId']),
+                qty2int(tx['nonce']),
+                qty2int(tx['gasPrice']),
+                qty2int(tx['gas']),
+                decode_hex(tx['to']) if tx['to'] else b'',
+                qty2int(tx['value']),
+                decode_hex(tx['input']),
+                _encode_access_list(tx['accessList']),
+                qty2int(tx['v']),
+                qty2int(tx['r']),
+                qty2int(tx['s'])
+            ])
+        elif tx['type'] == '0x2':
+            trie[path] = b'\x02' + rlp.encode([
+                qty2int(tx['chainId']),
+                qty2int(tx['nonce']),
+                qty2int(tx['maxPriorityFeePerGas']),
+                qty2int(tx['maxFeePerGas']),
+                qty2int(tx['gas']),
+                decode_hex(tx['to']) if tx['to'] else b'',
+                qty2int(tx['value']),
+                decode_hex(tx['input']),
+                _encode_access_list(tx['accessList']),
+                qty2int(tx['v']),
+                qty2int(tx['r']),
+                qty2int(tx['s'])
+            ])
+        else:
+            raise Exception(f'Unknown tx type {tx["type"]}')
+    return encode_hex(trie.root_hash)

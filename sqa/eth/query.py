@@ -1,11 +1,12 @@
 import itertools
-from typing import TypedDict
+from typing import TypedDict, Iterable
 
 import marshmallow as mm
+from pyarrow.dataset import Expression
 
-from sqa.query.model import STable, Builder, JoinRel, RefRel, RTable
+from sqa.query.model import JoinRel, RefRel, Table, Item, FieldSelection, Scan, SubRel
 from sqa.query.schema import BaseQuerySchema
-from sqa.query.util import json_project, remove_camel_prefix, to_snake_case
+from sqa.query.util import to_snake_case, json_project, get_selected_fields, field_in, remove_camel_prefix
 
 
 class BlockFieldSelection(TypedDict, total=False):
@@ -218,165 +219,191 @@ class _QuerySchema(BaseQuerySchema):
 QUERY_SCHEMA = _QuerySchema()
 
 
-class _BlocksTable(STable):
-    def table_name(self):
+_blocks_table = Table(
+    name='blocks',
+    primary_key=[],
+    column_weights={
+        'logs_bloom': 512,
+        'extra_data': 'extra_data_size'
+    }
+)
+
+
+_tx_table = Table(
+    name='transactions',
+    primary_key=['transaction_index'],
+    column_weights={
+        'input': 'input_size'
+    }
+)
+
+
+_logs_table = Table(
+    name='logs',
+    primary_key=['log_index'],
+    column_weights={
+        'data': 'data_size'
+    }
+)
+
+
+_traces_table = Table(
+    name='traces',
+    primary_key=['transaction_index', 'trace_address'],
+    column_weights={
+        'create_init': 'create_init_size',
+        'create_result_code': 'create_result_code_size',
+        'call_input': 'call_input_size',
+        'call_result_output': 'call_result_output_size'
+    }
+)
+
+
+_statediffs_table = Table(
+    name='statediffs',
+    primary_key=['transaction_index', 'address', 'key'],
+    column_weights={
+        'prev': 'prev_size',
+        'next': 'next_size'
+    }
+)
+
+
+class _BlockItem(Item):
+    def table(self) -> Table:
+        return _blocks_table
+
+    def name(self) -> str:
         return 'blocks'
 
-    def field_selection_name(self) -> str:
-        return 'block'
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('block'), ['number', 'hash', 'parentHash'])
 
-    def primary_key(self):
-        return ('number',)
-
-    def project(self, fields: dict, prefix=''):
+    def project(self, fields: FieldSelection) -> str:
         def rewrite_timestamp(f: str):
             if f == 'timestamp':
-                return 'timestamp', f'epoch({prefix}timestamp)'
+                return 'timestamp', f'epoch(timestamp)'
             else:
                 return f
 
         return json_project(
-            map(rewrite_timestamp, self.get_selected_fields(fields)),
-            prefix=prefix
+            map(rewrite_timestamp, self.get_selected_fields(fields))
         )
 
-    def field_weights(self) -> dict[str, int]:
-        return {
-            'logsBloom': 10
-        }
 
-    def required_fields(self) -> tuple[str, ...]:
-        return 'number', 'hash', 'parentHash'
+class _TxScan(Scan):
+    def table(self) -> Table:
+        return _tx_table
 
-
-class _RTransactions(RTable):
-    def table_name(self) -> str:
+    def request_name(self) -> str:
         return 'transactions'
 
-    def columns(self) -> tuple[str, ...]:
-        return ('transaction_index',)
-
-    def where(self, builder: Builder, req: TxRequest):
-        yield builder.in_condition('"to"', req.get('to'))
-        yield builder.in_condition('"from"', req.get('from'))
-        yield builder.in_condition('sighash', req.get('sighash'))
+    def where(self, req: TxRequest) -> Iterable[Expression | None]:
+        yield field_in('to', req.get('to'))
+        yield field_in('from', req.get('from'))
+        yield field_in('sighash', req.get('sighash'))
 
 
-class _STransactions(STable):
-    def table_name(self):
+class _TxItem(Item):
+    def table(self) -> Table:
+        return _tx_table
+
+    def name(self) -> str:
         return 'transactions'
 
-    def field_selection_name(self) -> str:
-        return 'transaction'
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('transaction'), ['transactionIndex'])
 
-    def primary_key(self):
-        return ('transactionIndex',)
-
-    def field_weights(self):
-        return {
-            'input': 8
-        }
-
-    def project(self, fields: dict, prefix: str = '') -> str:
+    def project(self, fields: FieldSelection) -> str:
         def rewrite_chain_id(f: str):
             if f == 'chainId':
-                chain_id = prefix + 'chain_id'
-                return 'chainId', f'IF({chain_id} > 9007199254740991, to_json({chain_id}::text), to_json({chain_id}))'
+                return 'chainId', f'IF(chain_id > 9007199254740991, to_json(chain_id::text), to_json(chain_id))'
             else:
                 return f
 
         return json_project(
-            map(rewrite_chain_id, self.get_selected_fields(fields)),
-            prefix=prefix
+            map(rewrite_chain_id, self.get_selected_fields(fields))
         )
 
 
-class _RLogs(RTable):
-    def table_name(self) -> str:
+class _LogScan(Scan):
+    def table(self) -> Table:
+        return _logs_table
+
+    def request_name(self) -> str:
         return 'logs'
 
-    def columns(self) -> tuple[str, ...]:
-        return 'log_index', 'transaction_index'
-
-    def where(self, builder: Builder, req: LogRequest):
-        yield builder.in_condition('address', req.get('address'))
-        yield builder.in_condition('topic0', req.get('topic0'))
-        yield builder.in_condition('topic1', req.get('topic1'))
-        yield builder.in_condition('topic2', req.get('topic2'))
-        yield builder.in_condition('topic3', req.get('topic3'))
+    def where(self, req: LogRequest) -> Iterable[Expression | None]:
+        yield field_in('address', req.get('address'))
+        yield field_in('topic0', req.get('topic0'))
+        yield field_in('topic1', req.get('topic1'))
+        yield field_in('topic2', req.get('topic2'))
+        yield field_in('topic3', req.get('topic3'))
 
 
-class _SLogs(STable):
-    def table_name(self):
+class _LogItem(Item):
+    def table(self) -> Table:
+        return _logs_table
+
+    def name(self) -> str:
         return 'logs'
 
-    def field_selection_name(self) -> str:
-        return 'log'
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('log'), ['logIndex', 'transactionIndex'])
 
-    def primary_key(self):
-        return ('logIndex',)
+    def selected_columns(self, fields: FieldSelection) -> list[str]:
+        columns = []
+        for name in self.get_selected_fields(fields):
+            if name == 'topics':
+                columns.append('topic0')
+                columns.append('topic1')
+                columns.append('topic2')
+                columns.append('topic3')
+            else:
+                columns.append(to_snake_case(name))
+        return columns
 
-    def field_weights(self):
-        return {
-            'data': 4,
-            'input': 4
-        }
-
-    def project(self, fields: dict, prefix: str = ''):
+    def project(self, fields: FieldSelection) -> str:
         def rewrite_topics(f: str):
             if f == 'topics':
-                p = prefix
-                return 'topics', f'[topic for topic in list_value({p}topic0, {p}topic1, {p}topic2, {p}topic3) ' \
+                return 'topics', f'[topic for topic in list_value(topic0, topic1, topic2, topic3) ' \
                                  f'if topic is not null]'
             else:
                 return f
 
         return json_project(
-            map(rewrite_topics, self.get_selected_fields(fields)),
-            prefix=prefix
+            map(rewrite_topics, self.get_selected_fields(fields))
         )
 
-    def required_fields(self) -> tuple[str, ...]:
-        return 'logIndex', 'transactionIndex'
 
+class _TraceScan(Scan):
+    def table(self) -> Table:
+        return _traces_table
 
-class _RTraces(RTable):
-    def table_name(self) -> str:
+    def request_name(self) -> str:
         return 'traces'
 
-    def columns(self) -> tuple[str, ...]:
-        return 'transaction_index', 'trace_address'
-
-    def where(self, builder: Builder, req: TraceRequest):
-        yield builder.in_condition('type', req.get('type'))
-        yield builder.in_condition('create_from', req.get('createFrom'))
-        yield builder.in_condition('call_from', req.get('callFrom'))
-        yield builder.in_condition('call_to', req.get('callTo'))
-        yield builder.in_condition('call_sighash', req.get('callSighash'))
-        yield builder.in_condition('suicide_refund_address', req.get('suicideRefundAddress'))
-        yield builder.in_condition('reward_author', req.get('rewardAuthor'))
+    def where(self, req: TraceRequest) -> Iterable[Expression | None]:
+        yield field_in('type', req.get('type'))
+        yield field_in('create_from', req.get('createFrom'))
+        yield field_in('call_from', req.get('callFrom'))
+        yield field_in('call_to', req.get('callTo'))
+        yield field_in('call_sighash', req.get('callSighash'))
+        yield field_in('suicide_refund_address', req.get('suicideRefundAddress'))
+        yield field_in('reward_author', req.get('rewardAuthor'))
 
 
-class _STraces(STable):
-    def table_name(self) -> str:
+class _TraceItem(Item):
+    def table(self) -> Table:
+        return _traces_table
+
+    def name(self) -> str:
         return 'traces'
 
-    def field_selection_name(self) -> str:
-        return 'trace'
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('trace'), ['transactionIndex', 'traceAddress', 'type'])
 
-    def primary_key(self) -> tuple[str, ...]:
-        return 'transactionIndex', 'traceAddress'
-
-    def required_fields(self) -> tuple[str, ...]:
-        return 'transactionIndex', 'traceAddress', 'type'
-
-    def field_weights(self) -> dict[str, int]:
-        return {
-            'createInit': 50,
-            'callInput': 8
-        }
-
-    def project(self, fields: dict, prefix: str = ''):
+    def project(self, fields: FieldSelection) -> str:
         selected = self.get_selected_fields(fields)
 
         create_result_fields = [f for f in selected if f.startswith('createResult')]
@@ -418,19 +445,19 @@ class _STraces(STable):
                 ext = []
 
                 if action_fields:
-                    ext.append(('action', _trace_topic_projection(prefix, topic, action_fields)))
+                    ext.append(('action', _trace_topic_projection(topic, action_fields)))
 
                 if result_fields:
-                    ext.append(('result', _trace_topic_projection(prefix, f'{topic}Result', result_fields)))
+                    ext.append(('result', _trace_topic_projection(f'{topic}Result', result_fields)))
 
                 proj = itertools.chain(rest_fields, ext)
 
                 cases.append(
-                    f"WHEN {prefix}type='{topic}' THEN {json_project(proj, prefix)}"
+                    f"WHEN type='{topic}' THEN {json_project(proj)}"
                 )
 
             when_exps = ' '.join(cases)
-            exp = f'CASE {when_exps} ELSE {json_project(rest_fields, prefix)} END'
+            exp = f'CASE {when_exps} ELSE {json_project(rest_fields)} END'
             if create_result_fields or call_result_fields:
                 return f"list_transform([{exp}], o -> " \
                        "CASE len(json_keys(o, '$.result')) " \
@@ -440,15 +467,15 @@ class _STraces(STable):
             else:
                 return exp
         else:
-            return json_project(rest_fields, prefix)
+            return json_project(rest_fields)
 
 
-def _trace_topic_projection(prefix: str, topic: str, topic_fields: list[str]) -> str:
+def _trace_topic_projection(topic: str, topic_fields: list[str]) -> str:
     assert topic_fields
     components = []
     for f in topic_fields:
         alias = remove_camel_prefix(f, topic)
-        ref = f'{prefix}"{to_snake_case(f)}"'
+        ref = f'"{to_snake_case(f)}"'
         components.append(
             f"CASE WHEN {ref} is null THEN "
             "'{}'::json ELSE "
@@ -460,127 +487,138 @@ def _trace_topic_projection(prefix: str, topic: str, topic_fields: list[str]) ->
         return f'json_merge_patch({", ".join(components)})'
 
 
-class _RStateDiffs(RTable):
-    def table_name(self) -> str:
-        return 'statediffs'
+class _StateDiffScan(Scan):
+    def table(self) -> Table:
+        return _statediffs_table
 
     def request_name(self) -> str:
         return 'stateDiffs'
 
-    def columns(self) -> tuple[str, ...]:
-        return 'transaction_index', 'address', 'key'
-
-    def where(self, builder: Builder, req: StateDiffRequest):
-        yield builder.in_condition('address', req.get('address'))
-        yield builder.in_condition('key', req.get('key'))
-        yield builder.in_condition('kind', req.get('kind'))
+    def where(self, req: StateDiffRequest) -> Iterable[Expression | None]:
+        yield field_in('address', req.get('address'))
+        yield field_in('key', req.get('key'))
+        yield field_in('kind', req.get('kind'))
 
 
-class _SStateDiffs(STable):
-    def table_name(self) -> str:
-        return 'statediffs'
+class _StateDiffItem(Item):
+    def table(self) -> Table:
+        return _statediffs_table
 
-    def prop_name(self) -> str:
+    def name(self) -> str:
         return 'stateDiffs'
 
-    def field_selection_name(self) -> str:
-        return 'stateDiff'
-
-    def primary_key(self) -> tuple[str, ...]:
-        return 'transactionIndex', 'address', 'key'
-
-    def required_fields(self):
-        return 'transactionIndex', 'address', 'key', 'kind'
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(
+            fields.get('stateDiff'),
+            ['transactionIndex', 'address', 'key', 'kind']
+        )
 
 
 def _build_model():
-    blocks = _BlocksTable()
+    tx_scan = _TxScan()
+    log_scan = _LogScan()
+    trace_scan = _TraceScan()
+    state_diff_scan = _StateDiffScan()
 
-    r_transactions = _RTransactions()
-    r_logs = _RLogs()
-    r_traces = _RTraces()
-    r_statediffs = _RStateDiffs()
+    block_item = _BlockItem()
+    tx_item = _TxItem()
+    log_item = _LogItem()
+    trace_item = _TraceItem()
+    state_diff_item = _StateDiffItem()
 
-    s_transactions = _STransactions()
-    s_logs = _SLogs()
-    s_traces = _STraces()
-    s_statediffs = _SStateDiffs()
-
-    s_statediffs.sources.extend([
-        r_statediffs,
+    state_diff_item.sources.extend([
+        state_diff_scan,
         JoinRel(
-            table=r_transactions,
+            scan=tx_scan,
             include_flag_name='stateDiffs',
-            join_condition='s.transaction_index = r.transaction_index'
+            scan_columns=[],
+            query='SELECT * FROM statediffs i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
         )
     ])
 
-    s_traces.sources.extend([
-        r_traces,
+    trace_item.sources.extend([
+        trace_scan,
         JoinRel(
-            table=r_transactions,
+            scan=tx_scan,
             include_flag_name='traces',
-            join_condition='s.transaction_index = r.transaction_index'
+            query='SELECT * FROM traces i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
         ),
         JoinRel(
-            table=r_logs,
+            scan=log_scan,
             include_flag_name='transactionTraces',
-            join_condition='s.transaction_index = r.transaction_index'
+            scan_columns=['transaction_index'],
+            query='SELECT * FROM traces i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        ),
+        SubRel(
+            scan=trace_scan,
+            scan_columns=['transaction_index', 'trace_address'],
+            include_flag_name='subtraces'
         ),
         JoinRel(
-            table=r_traces,
-            include_flag_name='subtraces',
-            join_condition='s.transaction_index = r.transaction_index AND '
-                           'len(s.trace_address) > len(r.trace_address) AND '
-                           's.trace_address[1:len(r.trace_address)] = r.trace_address'
-        ),
-        JoinRel(
-            table=r_traces,
+            scan=trace_scan,
             include_flag_name='parents',
-            join_condition='s.transaction_index = r.transaction_index AND '
-                           'len(s.trace_address) < len(r.trace_address) AND '
-                           's.trace_address = r.trace_address[1:len(s.trace_address)]'
+            query='SELECT * FROM traces s, ('
+                  'WITH RECURSIVE selected_traces(block_number, transaction_index, trace_address) AS ('
+                  'SELECT block_number, transaction_index, array_pop_back(trace_address) AS trace_address '
+                  'FROM s WHERE length(s.trace_address) > 0 '
+                  'UNION ALL '
+                  'SELECT block_number, transaction_index, array_pop_back(trace_address) AS trace_address '
+                  'FROM selected_traces WHERE length(trace_address) > 0'
+                  ') SELECT DISTINCT * FROM selected_traces'
+                  ') AS ss '
+                  'WHERE '
+                  'i.block_number = ss.block_number AND '
+                  'i.transaction_index = ss.transaction_index AND '
+                  'i.trace_address = ss.trace_address'
         )
     ])
 
-    s_logs.sources.extend([
-        r_logs,
+    log_item.sources.extend([
+        log_scan,
         JoinRel(
-            table=r_transactions,
+            scan=tx_scan,
             include_flag_name='logs',
-            join_condition='s.transaction_index = r.transaction_index'
+            query='SELECT * FROM logs i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
         )
     ])
 
-    s_transactions.sources.extend([
-        r_transactions,
+    tx_item.sources.extend([
+        tx_scan,
         RefRel(
-            table=r_logs,
+            scan=log_scan,
             include_flag_name='transaction',
-            key=['transaction_index']
+            scan_columns=['transaction_index']
         ),
         RefRel(
-            table=r_traces,
+            scan=trace_scan,
             include_flag_name='transaction',
-            key=['transaction_index']
+            scan_columns=['transaction_index']
         ),
         RefRel(
-            table=r_statediffs,
+            scan=state_diff_scan,
             include_flag_name='transaction',
-            key=['transaction_index']
+            scan_columns=['transaction_index']
         )
     ])
 
     return [
-        blocks,
-        r_transactions,
-        r_logs,
-        r_traces,
-        r_statediffs,
-        s_transactions,
-        s_logs,
-        s_traces,
-        s_statediffs
+        tx_scan,
+        log_scan,
+        trace_scan,
+        state_diff_scan,
+        block_item,
+        tx_item,
+        log_item,
+        trace_item,
+        state_diff_item
     ]
 
 

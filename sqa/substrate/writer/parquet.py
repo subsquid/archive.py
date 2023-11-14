@@ -4,7 +4,7 @@ from typing import Any
 import pyarrow
 
 from sqa.fs import Fs
-from sqa.writer.parquet import TableBuilder, Column, BaseParquetSink
+from sqa.writer.parquet import TableBuilder, Column, BaseParquetSink, add_size_column, add_index_column
 from .model import BlockHeader, Extrinsic, Call, BigInt, Event, Block
 
 
@@ -177,104 +177,118 @@ class ParquetSink(BaseParquetSink):
             self.events.append(block_number, event)
 
     def _write(self, fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
-        blocks = tables['blocks']
-        extrinsics = tables['extrinsics']
-        calls = tables['calls']
-        events = tables['events']
+        write_parquet(fs, tables)
 
-        calls = calls.sort_by([
-            ('name', 'ascending'),
-            ('_ethereum_transact_to', 'ascending'),
-            ('_ethereum_transact_sighash', 'ascending'),
-            ('block_number', 'ascending'),
-            ('extrinsic_index', 'ascending')
-        ])
 
-        events = events.sort_by([
-            ('name', 'ascending'),
-            ('_evm_log_address', 'ascending'),
-            ('_evm_log_topic0', 'ascending'),
-            ('_contract_address', 'ascending'),
-            ('_gear_program_id', 'ascending'),
-            ('block_number', 'ascending'),
-            ('extrinsic_index', 'ascending'),
-            ('index', 'ascending')
-        ])
+def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
+    kwargs = {
+        'data_page_size': 128 * 1024,
+        'dictionary_pagesize_limit': 128 * 1024,
+        'compression': 'zstd',
+        'write_page_index': True,
+        'write_batch_size': 100
+    }
 
-        kwargs = {
-            'data_page_size': 32 * 1024,
-            'compression': 'zstd',
-            'compression_level': 12
-        }
+    events = tables['events']
+    events = events.sort_by([
+        ('name', 'ascending'),
+        ('_evm_log_address', 'ascending'),
+        ('_evm_log_topic0', 'ascending'),
+        ('_contract_address', 'ascending'),
+        ('_gear_program_id', 'ascending'),
+        ('block_number', 'ascending'),
+        ('index', 'ascending')
+    ])
+    events = add_size_column(events, 'args')
+    events = add_index_column(events)
 
-        fs.write_parquet(
-            'events.parquet',
-            events,
-            row_group_size=20_000,
-            use_dictionary=[
-                'name',
-                'phase',
-                '_evm_log_address',
-                '_evm_log_topic0',
-                '_contract_address',
-                '_gear_program_id'
-            ],
-            write_statistics=[
-                'block_number',
-                'index',
-                'extrinsic_index',
-                'name',
-                '_evm_log_address',
-                '_evm_log_topic0',
-                '_contract_address',
-                '_gear_program_id'
-            ],
-            **kwargs
-        )
+    fs.write_parquet(
+        'events.parquet',
+        events,
+        row_group_size=20_000,
+        use_dictionary=[
+            'name',
+            'phase',
+            '_evm_log_address',
+            '_evm_log_topic0',
+            '_contract_address',
+            '_gear_program_id'
+        ],
+        write_statistics=[
+            'block_number',
+            'index',
+            'extrinsic_index',
+            'name',
+            '_evm_log_address',
+            '_evm_log_topic0',
+            '_contract_address',
+            '_gear_program_id',
+            '_idx'
+        ],
+        **kwargs
+    )
 
-        fs.write_parquet(
-            'calls.parquet',
-            calls,
-            row_group_size=20_000,
-            use_dictionary=[
-                'name',
-                '_ethereum_transact_to',
-                '_ethereum_transact_sighash'
-            ],
-            write_statistics=[
-                'block_number',
-                'extrinsic_index',
-                'name',
-                '_ethereum_transact_to',
-                '_ethereum_transact_sighash'
-            ],
-            **kwargs
-        )
+    calls = tables['calls']
+    calls = calls.sort_by([
+        ('name', 'ascending'),
+        ('_ethereum_transact_to', 'ascending'),
+        ('_ethereum_transact_sighash', 'ascending'),
+        ('block_number', 'ascending'),
+        ('extrinsic_index', 'ascending')
+    ])
+    calls = add_size_column(calls, 'args')
+    calls = add_index_column(calls)
 
-        fs.write_parquet(
-            'extrinsics.parquet',
-            extrinsics,
-            use_dictionary=False,
-            write_statistics=[
-                'block_number',
-                'index',
-                'version'
-            ],
-            **kwargs
-        )
+    fs.write_parquet(
+        'calls.parquet',
+        calls,
+        row_group_size=20_000,
+        use_dictionary=[
+            'name',
+            '_ethereum_transact_to',
+            '_ethereum_transact_sighash'
+        ],
+        write_statistics=[
+            'block_number',
+            'extrinsic_index',
+            'name',
+            '_ethereum_transact_to',
+            '_ethereum_transact_sighash',
+            '_idx'
+        ],
+        **kwargs
+    )
 
-        fs.write_parquet(
-            'blocks.parquet',
-            blocks,
-            use_dictionary=['spec_name', 'impl_name', 'validator'],
-            write_statistics=[
-                'number',
-                'spec_name',
-                'spec_version',
-                'impl_name',
-                'impl_version',
-                'timestamp',
-                'validator'
-            ],
-            **kwargs
-        )
+    extrinsics = tables['extrinsics']
+    extrinsics = add_index_column(extrinsics)
+
+    fs.write_parquet(
+        'extrinsics.parquet',
+        extrinsics,
+        use_dictionary=False,
+        write_statistics=[
+            'block_number',
+            'index',
+            'version',
+            '_idx'
+        ],
+        **kwargs
+    )
+
+    blocks = tables['blocks']
+
+    fs.write_parquet(
+        'blocks.parquet',
+        blocks,
+        use_dictionary=['spec_name', 'impl_name', 'validator'],
+        write_statistics=[
+            'number',
+            'spec_name',
+            'spec_version',
+            'impl_name',
+            'impl_version',
+            'timestamp',
+            'validator'
+        ],
+        **kwargs
+    )

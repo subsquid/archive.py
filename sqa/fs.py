@@ -34,7 +34,10 @@ class Fs:
     def upload(self, local_src: str, dest: str):
         raise NotImplementedError()
 
-    def write_parquet(self, name: str, table, **kwargs):
+    def read_parquet(self, file: str, **kwargs) -> pyarrow.Table:
+        raise NotImplementedError()
+
+    def write_parquet(self, dest: str, table, **kwargs):
         raise NotImplementedError()
 
     def cd(self, *segments) -> 'Fs':
@@ -67,8 +70,12 @@ class LocalFs(Fs):
             shutil.rmtree(temp_dir, ignore_errors=True)
             raise ex
 
-    def write_parquet(self, file: str, table, **kwargs):
+    def read_parquet(self, file: str, **kwargs) -> pyarrow.Table:
         path = self.abs(file)
+        return pyarrow.parquet.read_table(path, **kwargs)
+
+    def write_parquet(self, dest: str, table, **kwargs):
+        path = self.abs(dest)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         pyarrow.parquet.write_table(table, path, **kwargs)
 
@@ -173,6 +180,10 @@ class S3Fs(Fs):
 
     def upload(self, local_src: str, dest: str):
         self._s3.upload(local_src, self._abs_path(dest), recursive=True)
+
+    def read_parquet(self, file: str, **kwargs) -> pyarrow.Table:
+        path = self._abs_path(file)
+        return pyarrow.parquet.read_table(path, filesystem=self._s3, **kwargs)
 
     def write_parquet(self, dest: str, table, **kwargs):
         # Save via temporary local file to work around - https://github.com/fsspec/s3fs/issues/749

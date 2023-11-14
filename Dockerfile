@@ -12,24 +12,22 @@ ADD sqa sqa/
 ADD README.md .
 
 
-FROM builder AS eth-ingest-builder
-RUN pdm sync -G eth-ingest --no-editable --prod
+FROM builder AS writer-builder
+RUN pdm sync -G writer --no-editable --prod
 
 
-FROM base AS eth-ingest
-COPY --from=eth-ingest-builder /project/.venv /app/env/
-COPY --from=eth-ingest-builder /project/sqa /app/sqa/
+FROM base AS writer-base
+COPY --from=writer-builder /project/.venv /app/env/
+COPY --from=writer-builder /project/sqa /app/sqa/
+ADD rewrite_archive.py /app/rewrite_archive.py
+
+
+FROM writer-base AS eth-ingest
 RUN /app/env/bin/python -m sqa.eth.ingest --help > /dev/null # win a little bit of startup time
 ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.eth.ingest"]
 
 
-FROM builder AS substrate-writer-builder
-RUN pdm sync -G substrate-writer --no-editable --prod
-
-
-FROM base AS substrate-writer
-COPY --from=substrate-writer-builder /project/.venv /app/env/
-COPY --from=substrate-writer-builder /project/sqa /app/sqa/
+FROM writer-base AS substrate-writer
 RUN /app/env/bin/python -m sqa.substrate.writer --help > /dev/null # win a little bit of startup time
 ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.substrate.writer"]
 

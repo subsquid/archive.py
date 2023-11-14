@@ -188,13 +188,12 @@ class P2PTransport:
         exec_time_ms = query_info.exec_time_ms
 
         result_bytes = gzip.compress(result.result.encode())
-        exec_plan = gzip.compress(result.exec_plan.encode()) if result.exec_plan is not None else None
         envelope = msg_pb.Envelope(
             query_result=msg_pb.QueryResult(
                 query_id=query.query_id,
                 ok=msg_pb.OkResult(
                     data=result_bytes,
-                    exec_plan=exec_plan,
+                    exec_plan=None,
                 )
             )
         )

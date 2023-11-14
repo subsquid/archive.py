@@ -6,7 +6,7 @@ from typing import Optional, AsyncIterator, Literal, Iterable, Coroutine
 from sqa.eth.ingest.model import Block, Log, Receipt, DebugFrame, DebugFrameResult, \
     DebugStateDiffResult, TraceTransactionReplay, Transaction
 from sqa.util.rpc import RpcClient
-from sqa.eth.ingest.util import qty2int, get_tx_status_from_traces, logs_bloom
+from sqa.eth.ingest.util import qty2int, get_tx_status_from_traces, logs_bloom, transactions_root
 from sqa.eth.ingest.moonbase import fix_and_exclude_invalid_moonbase_blocks, is_moonbase_traceless
 
 
@@ -25,7 +25,8 @@ class Ingest:
         with_traces: bool = False,
         with_statediffs: bool = False,
         use_trace_api: bool = False,
-        use_debug_api_for_statediffs: bool = False
+        use_debug_api_for_statediffs: bool = False,
+        validate_tx_root: bool = False,
     ):
         self._rpc = rpc
         self._finality_confirmation = finality_confirmation
@@ -34,6 +35,7 @@ class Ingest:
         self._with_statediffs = with_statediffs
         self._use_trace_api = use_trace_api
         self._use_debug_api_for_statediffs = use_debug_api_for_statediffs
+        self._validate_tx_root = validate_tx_root
         self._height = from_block - 1
         self._genesis = genesis_block
         self._end = to_block
@@ -43,6 +45,7 @@ class Ingest:
         self._closed = False
         self._running = False
         self._is_arbitrum_one = False
+        self._is_moonbeam = False
         self._is_moonriver = False
         self._is_moonbase = False
         self._is_polygon = False
@@ -74,6 +77,7 @@ class Ingest:
         genesis: Block = await self._rpc.call('eth_getBlockByNumber', [hex(self._genesis), False])
         genesis_hash = genesis['hash']
         self._is_arbitrum_one = genesis_hash == '0x7ee576b35482195fc49205cec9af72ce14f003b9ae69f6ba0faef4514be8b442'
+        self._is_moonbeam = genesis_hash == '0x7e6b3bbed86828a558271c9c9f62354b1d8b5aa15ff85fd6f1e7cbe9af9dde7e'
         self._is_moonriver = genesis_hash == '0xce24348303f7a60c4d2d3c82adddf55ca57af89cd9e2cd4b863906ef53b89b3c'
         self._is_moonbase = genesis_hash == '0x33638dde636f9264b6472b9d976d58e757fe88badac53f204f3f530ecc5aacfa'
         self._is_polygon = genesis_hash == '0xa9c28ce2141b56c474f1dc504bee9b01eb1bd7d1a507580d5519d4437a97de1b'
@@ -127,13 +131,7 @@ class Ingest:
 
         LOG.debug('fetching new stride', extra=extra)
 
-        blocks: list[Block] = await self._rpc.batch_call(
-            [
-                ('eth_getBlockByNumber', [hex(i), True])
-                for i in range(from_block, to_block + 1)
-            ],
-            priority=from_block
-        )
+        blocks = await self._fetch_blocks(from_block, to_block)
 
         await _run_subtasks(self._stride_subtasks(blocks))
 
@@ -193,6 +191,21 @@ class Ingest:
             tracers.append('stateDiff')
 
         return tracers
+
+    async def _fetch_blocks(self, from_block: int, to_block: int) -> list[Block]:
+        blocks: list[Block] = await self._rpc.batch_call(
+            [
+                ('eth_getBlockByNumber', [hex(i), True])
+                for i in range(from_block, to_block + 1)
+            ],
+            priority=from_block
+        )
+
+        if self._validate_tx_root:
+            for block in blocks:
+                assert block['transactionsRoot'] == transactions_root(block['transactions'])
+
+        return blocks
 
     async def _fetch_logs(self, blocks: list[Block]) -> None:
         priority = qty2int(blocks[0]['number'])
@@ -319,7 +332,7 @@ class Ingest:
                     'withLog': True
                 }
             }
-        ], priority=block_number, validate_result=validate_debug_trace)
+        ], priority=block_number, validate_result=_validate_debug_trace)
 
         if self._is_moonriver and qty2int(block['number']) == 2077600:
             _fix_moonriver_2077600(block)
@@ -329,6 +342,9 @@ class Ingest:
             transactions = [tx for tx in transactions if not _is_polygon_precompiled(tx)]
         if self._is_moonbase:
             transactions = [tx for tx in transactions if not is_moonbase_traceless(tx, block)]
+        if self._is_moonbeam and len(traces) > len(transactions):
+            _delete_extra_traces(transactions, traces)
+
         assert len(transactions) == len(traces)
         for tx, trace in zip(transactions, traces):
             if 'result' not in trace:
@@ -443,8 +459,25 @@ def _fix_astar_995596(block: Block):
     block['transactions'] = block['transactions'][58:]
 
 
-def validate_debug_trace(result):
+def _validate_debug_trace(result):
     for trace in result:
         if len(trace.keys()) == 1 and trace.get('error') == 'execution timeout':
             return False
     return True
+
+
+def _is_trace_from_tx(trace: DebugFrame, tx: Transaction):
+    if trace['from'] != tx['from']:
+        return False
+    if trace['to'] != tx['to']:
+        return False
+    return trace['value'] == tx['value']
+
+def _delete_extra_traces(transactions: list[Transaction], traces: list[DebugFrame]):
+    for idx, tx in enumerate(transactions):
+        while True:
+            trace = traces[idx]
+            if _is_trace_from_tx(trace, tx):
+                break
+            else:
+                del traces[idx]
