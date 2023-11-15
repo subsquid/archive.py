@@ -1,6 +1,8 @@
+import gzip
 import json
 import math
 import time
+from functools import cached_property
 from typing import Iterable, Optional, NamedTuple
 
 import marshmallow as mm
@@ -73,6 +75,10 @@ class QueryResult(NamedTuple):
     result: str
     num_read_chunks: int
     exec_time: Optional[dict] = None
+
+    @cached_property
+    def gzipped_bytes(self) -> bytes:
+        return gzip.compress(self.result.encode())
 
 
 _PS = psutil.Process()

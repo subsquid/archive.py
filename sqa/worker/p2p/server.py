@@ -1,11 +1,8 @@
 import argparse
 import asyncio
-import gzip
-import hashlib
 import json
 import logging
 import os
-from datetime import datetime
 from json import JSONDecodeError
 from typing import AsyncIterator, Optional, Dict
 
@@ -16,10 +13,11 @@ from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async
 from sqa.worker.p2p import messages_pb2 as msg_pb
 from sqa.worker.p2p.p2p_transport_pb2 import Bytes, Empty, Message, Subscription
 from sqa.worker.p2p.p2p_transport_pb2_grpc import P2PTransportStub
+from sqa.worker.p2p.query_logs import LogsStorage
+from sqa.worker.p2p.util import state_to_proto, sha3_256, state_from_proto, QueryInfo
 from sqa.worker.query import QueryResult, InvalidQuery
 from sqa.worker.state.controller import State
 from sqa.worker.state.dataset import dataset_decode
-from sqa.worker.state.intervals import to_range_set
 from sqa.worker.state.manager import StateManager
 from sqa.worker.worker import Worker
 
@@ -28,72 +26,37 @@ LOG = logging.getLogger(__name__)
 
 # This is the maximum *decompressed* size of the message
 MAX_MESSAGE_LENGTH = 100 * 1024 * 1024  # 100 MiB
+LOGS_SEND_INTERVAL_SEC = int(os.environ.get('LOGS_SEND_INTERVAL_SEC', '600'))
 PING_TOPIC = "worker_ping"
+LOGS_TOPIC = "worker_query_logs"
 WORKER_VERSION = "0.1.4"
-
-PING_TOPIC = "worker_ping"
-
-
-def state_to_proto(state: State) -> msg_pb.WorkerState:
-    return msg_pb.WorkerState(datasets={
-        ds: msg_pb.RangeSet(ranges=[
-            msg_pb.Range(begin=begin, end=end)
-            for begin, end in range_set
-        ])
-        for ds, range_set in state.items()
-    })
-
-
-def state_from_proto(state: msg_pb.WorkerState) -> State:
-    return {
-        ds: to_range_set((r.begin, r.end) for r in range_set.ranges)
-        for ds, range_set in state.datasets.items()
-    }
-
-
-def sha3_256(data: bytes) -> bytes:
-    hasher = hashlib.sha3_256()
-    hasher.update(data)
-    return hasher.digest()
-
-
-def hash_and_size(data: bytes) -> msg_pb.SizeAndHash:
-    return msg_pb.SizeAndHash(
-        size=len(data),
-        sha3_256=sha3_256(data),
-    )
-
-
-class QueryInfo:
-    def __init__(self, client_id: str):
-        self.client_id = client_id
-        self.start_time = datetime.now()
-
-    @property
-    def exec_time_ms(self) -> int:
-        return int((datetime.now() - self.start_time).total_seconds() * 1000)
 
 
 class P2PTransport:
-    def __init__(self, channel: grpc.aio.Channel, scheduler_id: str, send_metrics: bool = True):
+    def __init__(self, channel: grpc.aio.Channel, scheduler_id: str, logs_collector_id: str):
         self._transport = P2PTransportStub(channel)
         self._scheduler_id = scheduler_id
+        self._logs_collector_id = logs_collector_id
         self._state_updates = asyncio.Queue(maxsize=100)
         self._query_tasks = asyncio.Queue(maxsize=100)
         self._query_info: 'Dict[str, QueryInfo]' = {}
+        self._logs_storage: 'Optional[LogsStorage]' = None
         self._local_peer_id: 'Optional[str]' = None
-        self._send_metrics = send_metrics
         self._expected_pong: 'Optional[bytes]' = None  # Hash of the last sent ping
 
     async def initialize(self) -> None:
         self._local_peer_id = (await self._transport.LocalPeerId(Empty())).peer_id
         LOG.info(f"Local peer ID: {self._local_peer_id}")
-        # Subscribe to the ping topic so that our node also participates in broadcasting messages
+        self._logs_storage = LogsStorage(self._local_peer_id)
+
+        # Subscribe to the ping & logs topics so that our node also participates in broadcasting messages
         await self._subscribe(topic=PING_TOPIC)
+        await self._subscribe(topic=LOGS_TOPIC)
 
     async def run(self):
         receive_task = create_child_task('p2p_receive', self._receive_loop())
-        await monitor_service_tasks([receive_task], log=LOG)
+        send_logs_task = create_child_task('p2p_send_logs', self._send_logs_loop())
+        await monitor_service_tasks([receive_task, send_logs_task], log=LOG)
 
     async def _receive_loop(self) -> None:
         async for msg in self._transport.GetMessages(Empty()):
@@ -103,7 +66,7 @@ class P2PTransport:
 
             if msg_type == 'pong':
                 if msg.peer_id != self._scheduler_id:
-                    LOG.warning(f"Wrong message origin: {msg.peer_id}")
+                    LOG.warning(f"Wrong pong message origin: {msg.peer_id}")
                     continue
                 await self._pong(envelope.pong)
 
@@ -111,13 +74,29 @@ class P2PTransport:
                 self._query_info[envelope.query.query_id] = QueryInfo(msg.peer_id)
                 await self._query_tasks.put(envelope.query)
 
-            elif msg_type == 'ping':
-                continue  # Just ignore others' pings
+            elif msg_type == 'next_seq_no':
+                if msg.peer_id != self._logs_collector_id:
+                    LOG.warning(f"Wrong next_seq_no message origin: {msg.peer_id}")
+                    continue
+                self._logs_storage.logs_collected(envelope.next_seq_no)
+
+            elif msg_type in ('ping', 'query_logs'):
+                continue  # Just ignore pings and logs from other workers
 
             else:
                 LOG.warning(f"Unexpected message type received: {msg_type}")
 
-    async def _pong(self, msg: msg_pb.Pong):
+    async def _send_logs_loop(self) -> None:
+        while True:
+            await asyncio.sleep(LOGS_SEND_INTERVAL_SEC // 2)
+            envelope = msg_pb.Envelope(get_next_seq_no=Empty())
+            await self._send(envelope, peer_id=self._logs_collector_id)
+            # Sleep half of the interval here to receive next_seq_no before sending logs
+            await asyncio.sleep(LOGS_SEND_INTERVAL_SEC // 2)
+            envelope = msg_pb.Envelope(query_logs=self._logs_storage.get_logs())
+            await self._send(envelope, topic=LOGS_TOPIC)
+
+    async def _pong(self, msg: msg_pb.Pong) -> None:
         if msg.ping_hash != self._expected_pong:
             LOG.warning("Invalid ping hash in received pong message")
             return
@@ -151,8 +130,6 @@ class P2PTransport:
         await self._transport.ToggleSubscription(Subscription(topic=topic, subscribed=True))
 
     async def send_ping(self, state: State, stored_bytes: int, pause=False) -> None:
-        if self._local_peer_id is None:
-            await self.initialize()
         ping = msg_pb.Ping(
             worker_id=self._local_peer_id,
             state=state_to_proto(state),
@@ -185,37 +162,19 @@ class P2PTransport:
         except KeyError:
             LOG.error(f"Unknown query: {query.query_id}")
             return
-        exec_time_ms = query_info.exec_time_ms
+        query_info.finished()
 
-        result_bytes = gzip.compress(result.result.encode())
         envelope = msg_pb.Envelope(
             query_result=msg_pb.QueryResult(
                 query_id=query.query_id,
                 ok=msg_pb.OkResult(
-                    data=result_bytes,
+                    data=result.gzipped_bytes,
                     exec_plan=None,
                 )
             )
         )
         await self._send(envelope, peer_id=query_info.client_id)
-
-        # Send execution metrics to the scheduler
-        if self._send_metrics:
-            envelope = msg_pb.Envelope(
-                query_executed=msg_pb.QueryExecuted(
-                    client_id=query_info.client_id,
-                    worker_id=self._local_peer_id,
-                    query_id=query.query_id,
-                    query_hash=sha3_256(query.query.encode()),
-                    dataset=query.dataset,
-                    ok=msg_pb.InputAndOutput(
-                        num_read_chunks=result.num_read_chunks,
-                        output=hash_and_size(result_bytes),
-                    ),
-                    exec_time_ms=exec_time_ms,
-                )
-            )
-            await self._send(envelope, peer_id=self._scheduler_id)
+        self._logs_storage.query_executed(query, query_info, result)
 
     async def send_query_error(self, query: msg_pb.Query, error: Exception) -> None:
         try:
@@ -223,7 +182,7 @@ class P2PTransport:
         except KeyError:
             LOG.error(f"Unknown query: {query.query_id}")
             return
-        exec_time_ms = query_info.exec_time_ms
+        query_info.finished()
 
         if isinstance(error, (JSONDecodeError, ValidationError, InvalidQuery)):
             bad_request, server_error = str(error), None
@@ -238,22 +197,7 @@ class P2PTransport:
             )
         )
         await self._send(envelope, peer_id=query_info.client_id)
-
-        # Send execution metrics to the scheduler
-        if self._send_metrics:
-            envelope = msg_pb.Envelope(
-                query_executed=msg_pb.QueryExecuted(
-                    client_id=query_info.client_id,
-                    worker_id=self._local_peer_id,
-                    query_id=query.query_id,
-                    query_hash=sha3_256(query.query.encode()),
-                    dataset=query.dataset,
-                    bad_request=bad_request,
-                    server_error=server_error,
-                    exec_time_ms=exec_time_ms,
-                )
-            )
-            await self._send(envelope, peer_id=self._scheduler_id)
+        self._logs_storage.query_error(query, query_info, bad_request, server_error)
 
 
 async def execute_query(transport: P2PTransport, worker: Worker, query_task: msg_pb.Query):
@@ -290,6 +234,11 @@ async def _main():
         help='Peer ID of the scheduler'
     )
     program.add_argument(
+        '--logs-collector-id',
+        required=True,
+        help='Peer ID of the logs collector'
+    )
+    program.add_argument(
         '--data-dir',
         metavar='DIR',
         help='directory to keep in the data and state of this worker (defaults to cwd)'
@@ -299,12 +248,6 @@ async def _main():
         type=int,
         help='number of processes to use to execute data queries'
     )
-    program.add_argument(
-        '--no-metrics',
-        action='store_true',
-        help='disable sending query execution metrics to the scheduler'
-    )
-
     args = program.parse_args()
 
     sm = StateManager(data_dir=args.data_dir or os.getcwd())
@@ -316,7 +259,8 @@ async def _main():
         ),
     )
     async with channel as chan:
-        transport = P2PTransport(chan, args.scheduler_id, send_metrics=(not args.no_metrics))
+        transport = P2PTransport(chan, args.scheduler_id, args.logs_collector_id)
+        await transport.initialize()
 
         worker = Worker(sm, transport, args.procs)
 
