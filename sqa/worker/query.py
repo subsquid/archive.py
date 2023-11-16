@@ -31,6 +31,8 @@ def validate_query(q) -> ArchiveQuery:
         q = _validate_shape(q, sqa.eth.query.QUERY_SCHEMA)
     elif query_type == 'substrate':
         q = _validate_shape(q, sqa.substrate.query.QUERY_SCHEMA)
+    elif query_type == 'tron':
+        q = _validate_shape(q, sqa.tron.query.QUERY_SCHEMA)
     else:
         raise InvalidQuery(f'unknown query type - {query_type}"')
 
