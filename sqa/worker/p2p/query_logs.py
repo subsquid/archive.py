@@ -1,4 +1,5 @@
 import logging
+import sqlite3
 from typing import Optional
 
 from sqa.worker.p2p.messages_pb2 import Query, QueryLogs, QueryExecuted, InputAndOutput
@@ -10,10 +11,24 @@ LOG = logging.getLogger(__name__)
 
 class LogsStorage:
 
-    def __init__(self, local_peer_id: str) -> None:
+    def __init__(self, local_peer_id: str, logs_db_path: str) -> None:
         self._local_peer_id = local_peer_id
-        self._next_seq_no = 0
-        self._logs: [QueryExecuted] = []
+        self.is_initialized = False
+        self._db_conn = sqlite3.connect(logs_db_path)
+        self._init_db()
+
+    def _init_db(self):
+        LOG.info("Initializing logs storage")
+        with self._db_conn:
+            self._db_conn.execute("CREATE TABLE IF NOT EXISTS query_logs(seq_no INTEGER PRIMARY KEY, log_msg BLOB)")
+            self._db_conn.execute("CREATE TABLE IF NOT EXISTS next_seq_no(seq_no)")
+            next_seq_no = self._db_conn.execute("SELECT seq_no FROM next_seq_no").fetchone()
+            # If there is no next_seq_no stored in DB, wait for logs_collected message from the collector to make sure
+            # we start from the right number (that's in case the worker's db was lost)
+            if next_seq_no is not None:
+                self.is_initialized = True
+            else:
+                LOG.info("Next log sequence number unknown. Waiting for message from logs collector.")
 
     def query_executed(self, query: Query, info: QueryInfo, result: QueryResult) -> None:
         """ Store information about successfully executed query. """
@@ -49,27 +64,38 @@ class LogsStorage:
         )
 
     def _store_log(self, query_log: QueryExecuted) -> None:
-        query_log.seq_no = self._next_seq_no
+        assert self.is_initialized
         LOG.debug(f"Storing query log: {query_log}")
-        self._logs.append(query_log)
-        self._next_seq_no += 1
+        with self._db_conn:
+            self._db_conn.execute(
+                "INSERT INTO query_logs SELECT seq_no, ? FROM next_seq_no",
+                (query_log.SerializeToString(),)
+            )
+            self._db_conn.execute("UPDATE next_seq_no SET seq_no = seq_no + 1")
 
-    def logs_collected(self, last_collected_seq_no: int) -> None:
+    def logs_collected(self, last_collected_seq_no: Optional[int]) -> None:
         """ All logs with sequence numbers up to `last_collected_seq_no` have been saved by the logs collector
             and should be discarded from the storage. """
         LOG.debug(f"Logs up to {last_collected_seq_no} collected.")
-        next_seq_no = last_collected_seq_no + 1
-        self._logs = [log for log in self._logs if log.seq_no >= next_seq_no]
-        if self._next_seq_no < next_seq_no:
-            # There are some logs saved by the collector that we miss (possible when worker restarts).
-            # We need to re-number the stored logs so that they're not rejected by the collector as duplicates.
-            LOG.debug(f"Updating log sequence number {self._next_seq_no} -> {next_seq_no}")
-            for seq_no, log in enumerate(self._logs, start=next_seq_no):
-                log.seq_no = seq_no
-            self._next_seq_no = next_seq_no
+        next_seq_no = last_collected_seq_no + 1 if last_collected_seq_no is not None else 0
+        with self._db_conn:
+            if self.is_initialized:
+                LOG.debug("Deleting collected logs")
+                self._db_conn.execute("DELETE FROM query_logs WHERE seq_no < ?", (next_seq_no,))
+            else:
+                LOG.info("Initializing logs storage")
+                self._db_conn.execute("INSERT INTO next_seq_no VALUES(?)", (next_seq_no,))
+                self.is_initialized = True
 
     def get_logs(self) -> QueryLogs:
         """ Get all stored query logs. """
-        return QueryLogs(queries_executed=self._logs.copy())
+        def log_from_db(seq_no, log_msg):
+            log = QueryExecuted.FromString(log_msg)
+            log.seq_no = seq_no
+            return log
+        with self._db_conn:
+            rows = self._db_conn.execute("SELECT seq_no, log_msg FROM query_logs").fetchall()
+            logs = [log_from_db(*r) for r in rows]
+        return QueryLogs(queries_executed=logs)
 
 

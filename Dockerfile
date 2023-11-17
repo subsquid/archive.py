@@ -52,8 +52,14 @@ COPY --from=p2p-worker-builder /project/.venv /app/env/
 COPY --from=p2p-worker-builder /project/sqa /app/sqa/
 VOLUME /app/data
 ENV DATA_DIR=/app/data/worker
+ENV LOGS_DB=/app/data/logs.db
 ENV PING_INTERVAL_SEC=20
 ENV LOGS_SEND_INTERVAL_SEC=600
-RUN echo "#!/bin/bash \n exec /app/env/bin/python -m sqa.worker.p2p --data-dir \${DATA_DIR} --proxy \${PROXY_ADDR} --scheduler-id \${SCHEDULER_ID} --logs-collector-id \${LOGS_COLLECTOR_ID}" > ./entrypoint.sh
+RUN echo "#!/bin/bash \n exec /app/env/bin/python -m sqa.worker.p2p  \
+    --data-dir \${DATA_DIR}  \
+    --logs-db \${LOGS_DB}  \
+    --proxy \${PROXY_ADDR}  \
+    --scheduler-id \${SCHEDULER_ID}  \
+    --logs-collector-id \${LOGS_COLLECTOR_ID}" > ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 ENTRYPOINT ["./entrypoint.sh"]

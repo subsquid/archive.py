@@ -44,10 +44,10 @@ class P2PTransport:
         self._local_peer_id: 'Optional[str]' = None
         self._expected_pong: 'Optional[bytes]' = None  # Hash of the last sent ping
 
-    async def initialize(self) -> None:
+    async def initialize(self, logs_db_path: str) -> None:
         self._local_peer_id = (await self._transport.LocalPeerId(Empty())).peer_id
         LOG.info(f"Local peer ID: {self._local_peer_id}")
-        self._logs_storage = LogsStorage(self._local_peer_id)
+        self._logs_storage = LogsStorage(self._local_peer_id, logs_db_path)
 
         # Subscribe to the ping & logs topics so that our node also participates in broadcasting messages
         await self._subscribe(topic=PING_TOPIC)
@@ -72,15 +72,17 @@ class P2PTransport:
 
             elif msg_type == 'query':
                 self._query_info[envelope.query.query_id] = QueryInfo(msg.peer_id)
-                await self._query_tasks.put(envelope.query)
+                if self._logs_storage.is_initialized:
+                    await self._query_tasks.put(envelope.query)
+                else:
+                    LOG.warning("Logs storage not initialized. Cannot execute queries yet.")
 
             elif msg_type == 'logs_collected':
                 if msg.peer_id != self._logs_collector_id:
                     LOG.warning(f"Wrong next_seq_no message origin: {msg.peer_id}")
                     continue
                 last_collected_seq_no = envelope.logs_collected.sequence_numbers.get(self._local_peer_id)
-                if last_collected_seq_no is not None:
-                    self._logs_storage.logs_collected(last_collected_seq_no)
+                self._logs_storage.logs_collected(last_collected_seq_no)
 
             elif msg_type in ('ping', 'query_logs'):
                 continue  # Just ignore pings and logs from other workers
@@ -91,6 +93,8 @@ class P2PTransport:
     async def _send_logs_loop(self) -> None:
         while True:
             await asyncio.sleep(LOGS_SEND_INTERVAL_SEC)
+            if not self._logs_storage.is_initialized:
+                continue
             envelope = msg_pb.Envelope(query_logs=self._logs_storage.get_logs())
             LOG.debug("Sending out query logs")
             await self._send(envelope, topic=LOGS_TOPIC)
@@ -207,7 +211,7 @@ async def execute_query(transport: P2PTransport, worker: Worker, query_task: msg
         LOG.info(f"Query {query_task.query_id} success")
         await transport.send_query_result(query_task, result)
     except Exception as e:
-        LOG.exception(f"Query {query_task.query_id} execution failed")
+        LOG.warning(f"Query {query_task.query_id} execution failed")
         await transport.send_query_error(query_task, e)
 
 
@@ -243,6 +247,11 @@ async def _main():
         help='directory to keep in the data and state of this worker (defaults to cwd)'
     )
     program.add_argument(
+        '--logs-db',
+        metavar='PATH',
+        help='path to the logs DB file (defaults to ./logs.db)'
+    )
+    program.add_argument(
         '--procs',
         type=int,
         help='number of processes to use to execute data queries'
@@ -259,7 +268,7 @@ async def _main():
     )
     async with channel as chan:
         transport = P2PTransport(chan, args.scheduler_id, args.logs_collector_id)
-        await transport.initialize()
+        await transport.initialize(args.logs_db or os.path.join(os.getcwd(), 'logs.db'))
 
         worker = Worker(sm, transport, args.procs)
 
