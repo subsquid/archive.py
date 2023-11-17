@@ -74,11 +74,13 @@ class P2PTransport:
                 self._query_info[envelope.query.query_id] = QueryInfo(msg.peer_id)
                 await self._query_tasks.put(envelope.query)
 
-            elif msg_type == 'next_seq_no':
+            elif msg_type == 'logs_collected':
                 if msg.peer_id != self._logs_collector_id:
                     LOG.warning(f"Wrong next_seq_no message origin: {msg.peer_id}")
                     continue
-                self._logs_storage.logs_collected(envelope.next_seq_no)
+                last_collected_seq_no = envelope.logs_collected.sequence_numbers.get(self._local_peer_id)
+                if last_collected_seq_no is not None:
+                    self._logs_storage.logs_collected(last_collected_seq_no)
 
             elif msg_type in ('ping', 'query_logs'):
                 continue  # Just ignore pings and logs from other workers
@@ -88,12 +90,9 @@ class P2PTransport:
 
     async def _send_logs_loop(self) -> None:
         while True:
-            await asyncio.sleep(LOGS_SEND_INTERVAL_SEC // 2)
-            envelope = msg_pb.Envelope(get_next_seq_no=Empty())
-            await self._send(envelope, peer_id=self._logs_collector_id)
-            # Sleep half of the interval here to receive next_seq_no before sending logs
-            await asyncio.sleep(LOGS_SEND_INTERVAL_SEC // 2)
+            await asyncio.sleep(LOGS_SEND_INTERVAL_SEC)
             envelope = msg_pb.Envelope(query_logs=self._logs_storage.get_logs())
+            LOG.debug("Sending out query logs")
             await self._send(envelope, topic=LOGS_TOPIC)
 
     async def _pong(self, msg: msg_pb.Pong) -> None:

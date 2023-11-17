@@ -7,10 +7,9 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Map
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Envelope(_message.Message):
-    __slots__ = ["dataset_state", "get_next_seq_no", "next_seq_no", "ping", "pong", "query", "query_finished", "query_logs", "query_result", "query_submitted"]
+    __slots__ = ["dataset_state", "logs_collected", "ping", "pong", "query", "query_finished", "query_logs", "query_result", "query_submitted"]
     DATASET_STATE_FIELD_NUMBER: _ClassVar[int]
-    GET_NEXT_SEQ_NO_FIELD_NUMBER: _ClassVar[int]
-    NEXT_SEQ_NO_FIELD_NUMBER: _ClassVar[int]
+    LOGS_COLLECTED_FIELD_NUMBER: _ClassVar[int]
     PING_FIELD_NUMBER: _ClassVar[int]
     PONG_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
@@ -19,8 +18,7 @@ class Envelope(_message.Message):
     QUERY_RESULT_FIELD_NUMBER: _ClassVar[int]
     QUERY_SUBMITTED_FIELD_NUMBER: _ClassVar[int]
     dataset_state: RangeSet
-    get_next_seq_no: _empty_pb2.Empty
-    next_seq_no: int
+    logs_collected: LogsCollected
     ping: Ping
     pong: Pong
     query: Query
@@ -28,7 +26,7 @@ class Envelope(_message.Message):
     query_logs: QueryLogs
     query_result: QueryResult
     query_submitted: QuerySubmitted
-    def __init__(self, ping: _Optional[_Union[Ping, _Mapping]] = ..., pong: _Optional[_Union[Pong, _Mapping]] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_result: _Optional[_Union[QueryResult, _Mapping]] = ..., dataset_state: _Optional[_Union[RangeSet, _Mapping]] = ..., query_submitted: _Optional[_Union[QuerySubmitted, _Mapping]] = ..., query_finished: _Optional[_Union[QueryFinished, _Mapping]] = ..., query_logs: _Optional[_Union[QueryLogs, _Mapping]] = ..., get_next_seq_no: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., next_seq_no: _Optional[int] = ...) -> None: ...
+    def __init__(self, ping: _Optional[_Union[Ping, _Mapping]] = ..., pong: _Optional[_Union[Pong, _Mapping]] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_result: _Optional[_Union[QueryResult, _Mapping]] = ..., dataset_state: _Optional[_Union[RangeSet, _Mapping]] = ..., query_submitted: _Optional[_Union[QuerySubmitted, _Mapping]] = ..., query_finished: _Optional[_Union[QueryFinished, _Mapping]] = ..., query_logs: _Optional[_Union[QueryLogs, _Mapping]] = ..., logs_collected: _Optional[_Union[LogsCollected, _Mapping]] = ...) -> None: ...
 
 class InputAndOutput(_message.Message):
     __slots__ = ["num_read_chunks", "output"]
@@ -37,6 +35,19 @@ class InputAndOutput(_message.Message):
     num_read_chunks: int
     output: SizeAndHash
     def __init__(self, num_read_chunks: _Optional[int] = ..., output: _Optional[_Union[SizeAndHash, _Mapping]] = ...) -> None: ...
+
+class LogsCollected(_message.Message):
+    __slots__ = ["sequence_numbers"]
+    class SequenceNumbersEntry(_message.Message):
+        __slots__ = ["key", "value"]
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: int
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[int] = ...) -> None: ...
+    SEQUENCE_NUMBERS_FIELD_NUMBER: _ClassVar[int]
+    sequence_numbers: _containers.ScalarMap[str, int]
+    def __init__(self, sequence_numbers: _Optional[_Mapping[str, int]] = ...) -> None: ...
 
 class OkResult(_message.Message):
     __slots__ = ["data", "exec_plan"]

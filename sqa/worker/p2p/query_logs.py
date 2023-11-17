@@ -33,8 +33,10 @@ class LogsStorage:
     ) -> None:
         """ Store information about query execution error. """
         query_log = self._generate_log(query, info)
-        query_log.bad_request = bad_request
-        query_log.server_error = server_error
+        if bad_request is not None:
+            query_log.bad_request = bad_request
+        elif server_error is not None:
+            query_log.server_error = server_error
         self._store_log(query_log)
 
     def _generate_log(self, query: Query, info: QueryInfo) -> QueryExecuted:
@@ -52,10 +54,11 @@ class LogsStorage:
         self._logs.append(query_log)
         self._next_seq_no += 1
 
-    def logs_collected(self, next_seq_no: int) -> None:
-        """ All logs with sequence numbers lower than `next_seq_no` have been saved by the logs collector
+    def logs_collected(self, last_collected_seq_no: int) -> None:
+        """ All logs with sequence numbers up to `last_collected_seq_no` have been saved by the logs collector
             and should be discarded from the storage. """
-        LOG.debug(f"Logs before {next_seq_no} collected.")
+        LOG.debug(f"Logs up to {last_collected_seq_no} collected.")
+        next_seq_no = last_collected_seq_no + 1
         self._logs = [log for log in self._logs if log.seq_no >= next_seq_no]
         if self._next_seq_no < next_seq_no:
             # There are some logs saved by the collector that we miss (possible when worker restarts).
