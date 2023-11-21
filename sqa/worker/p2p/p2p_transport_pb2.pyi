@@ -30,6 +30,16 @@ class PeerId(_message.Message):
     peer_id: str
     def __init__(self, peer_id: _Optional[str] = ...) -> None: ...
 
+class SignedData(_message.Message):
+    __slots__ = ["data", "peer_id", "signature"]
+    DATA_FIELD_NUMBER: _ClassVar[int]
+    PEER_ID_FIELD_NUMBER: _ClassVar[int]
+    SIGNATURE_FIELD_NUMBER: _ClassVar[int]
+    data: bytes
+    peer_id: str
+    signature: bytes
+    def __init__(self, data: _Optional[bytes] = ..., signature: _Optional[bytes] = ..., peer_id: _Optional[str] = ...) -> None: ...
+
 class Subscription(_message.Message):
     __slots__ = ["allow_unordered", "subscribed", "topic"]
     ALLOW_UNORDERED_FIELD_NUMBER: _ClassVar[int]
@@ -39,3 +49,9 @@ class Subscription(_message.Message):
     subscribed: bool
     topic: str
     def __init__(self, topic: _Optional[str] = ..., subscribed: bool = ..., allow_unordered: bool = ...) -> None: ...
+
+class VerificationResult(_message.Message):
+    __slots__ = ["signature_ok"]
+    SIGNATURE_OK_FIELD_NUMBER: _ClassVar[int]
+    signature_ok: bool
+    def __init__(self, signature_ok: bool = ...) -> None: ...

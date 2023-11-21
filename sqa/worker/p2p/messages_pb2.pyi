@@ -90,16 +90,18 @@ class Pong(_message.Message):
     def __init__(self, ping_hash: _Optional[bytes] = ..., not_registered: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., unsupported_version: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., jailed: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., active: _Optional[_Union[WorkerState, _Mapping]] = ...) -> None: ...
 
 class Query(_message.Message):
-    __slots__ = ["dataset", "profiling", "query", "query_id"]
+    __slots__ = ["dataset", "profiling", "query", "query_id", "signature"]
     DATASET_FIELD_NUMBER: _ClassVar[int]
     PROFILING_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
     QUERY_ID_FIELD_NUMBER: _ClassVar[int]
+    SIGNATURE_FIELD_NUMBER: _ClassVar[int]
     dataset: str
     profiling: bool
     query: str
     query_id: str
-    def __init__(self, query_id: _Optional[str] = ..., dataset: _Optional[str] = ..., query: _Optional[str] = ..., profiling: bool = ...) -> None: ...
+    signature: bytes
+    def __init__(self, query_id: _Optional[str] = ..., dataset: _Optional[str] = ..., query: _Optional[str] = ..., profiling: bool = ..., signature: _Optional[bytes] = ...) -> None: ...
 
 class QueryExecuted(_message.Message):
     __slots__ = ["bad_request", "client_id", "exec_time_ms", "ok", "query", "query_hash", "seq_no", "server_error", "worker_id"]
@@ -144,10 +146,12 @@ class QueryFinished(_message.Message):
     def __init__(self, client_id: _Optional[str] = ..., worker_id: _Optional[str] = ..., query_id: _Optional[str] = ..., exec_time_ms: _Optional[int] = ..., ok: _Optional[_Union[SizeAndHash, _Mapping]] = ..., bad_request: _Optional[str] = ..., server_error: _Optional[str] = ..., timeout: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ...) -> None: ...
 
 class QueryLogs(_message.Message):
-    __slots__ = ["queries_executed"]
+    __slots__ = ["queries_executed", "signature"]
     QUERIES_EXECUTED_FIELD_NUMBER: _ClassVar[int]
+    SIGNATURE_FIELD_NUMBER: _ClassVar[int]
     queries_executed: _containers.RepeatedCompositeFieldContainer[QueryExecuted]
-    def __init__(self, queries_executed: _Optional[_Iterable[_Union[QueryExecuted, _Mapping]]] = ...) -> None: ...
+    signature: bytes
+    def __init__(self, queries_executed: _Optional[_Iterable[_Union[QueryExecuted, _Mapping]]] = ..., signature: _Optional[bytes] = ...) -> None: ...
 
 class QueryResult(_message.Message):
     __slots__ = ["bad_request", "ok", "query_id", "server_error"]

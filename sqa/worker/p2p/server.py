@@ -11,7 +11,7 @@ from marshmallow import ValidationError
 
 from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
 from sqa.worker.p2p import messages_pb2 as msg_pb
-from sqa.worker.p2p.p2p_transport_pb2 import Bytes, Empty, Message, Subscription
+from sqa.worker.p2p.p2p_transport_pb2 import Bytes, Empty, Message, Subscription, SignedData
 from sqa.worker.p2p.p2p_transport_pb2_grpc import P2PTransportStub
 from sqa.worker.p2p.query_logs import LogsStorage
 from sqa.worker.p2p.util import state_to_proto, sha3_256, state_from_proto, QueryInfo
@@ -65,17 +65,10 @@ class P2PTransport:
             msg_type = envelope.WhichOneof('msg')
 
             if msg_type == 'pong':
-                if msg.peer_id != self._scheduler_id:
-                    LOG.warning(f"Wrong pong message origin: {msg.peer_id}")
-                    continue
-                await self._pong(envelope.pong)
+                await self._handle_pong(msg.peer_id, envelope.pong)
 
             elif msg_type == 'query':
-                self._query_info[envelope.query.query_id] = QueryInfo(msg.peer_id)
-                if self._logs_storage.is_initialized:
-                    await self._query_tasks.put(envelope.query)
-                else:
-                    LOG.warning("Logs storage not initialized. Cannot execute queries yet.")
+                await self._handle_query(msg.peer_id, envelope.query)
 
             elif msg_type == 'logs_collected':
                 if msg.peer_id != self._logs_collector_id:
@@ -95,11 +88,21 @@ class P2PTransport:
             await asyncio.sleep(LOGS_SEND_INTERVAL_SEC)
             if not self._logs_storage.is_initialized:
                 continue
-            envelope = msg_pb.Envelope(query_logs=self._logs_storage.get_logs())
+
+            # Sign the message
+            query_logs = self._logs_storage.get_logs()
+            signature: Bytes = await self._transport.Sign(Bytes(bytes=query_logs.SerializeToString()))
+            query_logs.signature = signature.bytes
+
+            # Send out
+            envelope = msg_pb.Envelope(query_logs=query_logs)
             LOG.debug("Sending out query logs")
             await self._send(envelope, topic=LOGS_TOPIC)
 
-    async def _pong(self, msg: msg_pb.Pong) -> None:
+    async def _handle_pong(self, peer_id: str, msg: msg_pb.Pong) -> None:
+        if peer_id != self._scheduler_id:
+            LOG.warning(f"Wrong pong message origin: {peer_id}")
+            return
         if msg.ping_hash != self._expected_pong:
             LOG.warning("Invalid ping hash in received pong message")
             return
@@ -115,6 +118,28 @@ class P2PTransport:
         elif status == 'active':
             # If the status is 'active', it contains assigned chunks
             await self._state_updates.put(msg.active)
+
+    async def _handle_query(self, peer_id: str, query: msg_pb.Query) -> None:
+        if not self._logs_storage.is_initialized:
+            LOG.warning("Logs storage not initialized. Cannot execute queries yet.")
+            return
+
+        # Verify query signature
+        signature = query.signature
+        query.signature = b""
+        signed_data = SignedData(
+            data=query.SerializeToString(),
+            signature=signature,
+            peer_id=peer_id
+        )
+        verification_result = await self._transport.VerifySignature(signed_data)
+        if not verification_result.signature_ok:
+            LOG.warning(f"Query with invalid signature received from {peer_id}")
+            return
+        query.signature = signature
+
+        self._query_info[query.query_id] = QueryInfo(peer_id)
+        await self._query_tasks.put(query)
 
     async def _send(
             self,

@@ -39,6 +39,11 @@ class P2PTransportStub(object):
                 request_serializer=p2p__transport__pb2.Bytes.SerializeToString,
                 response_deserializer=p2p__transport__pb2.Bytes.FromString,
                 )
+        self.VerifySignature = channel.unary_unary(
+                '/p2p_transport.P2PTransport/VerifySignature',
+                request_serializer=p2p__transport__pb2.SignedData.SerializeToString,
+                response_deserializer=p2p__transport__pb2.VerificationResult.FromString,
+                )
 
 
 class P2PTransportServicer(object):
@@ -74,6 +79,12 @@ class P2PTransportServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def VerifySignature(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_P2PTransportServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -101,6 +112,11 @@ def add_P2PTransportServicer_to_server(servicer, server):
                     servicer.Sign,
                     request_deserializer=p2p__transport__pb2.Bytes.FromString,
                     response_serializer=p2p__transport__pb2.Bytes.SerializeToString,
+            ),
+            'VerifySignature': grpc.unary_unary_rpc_method_handler(
+                    servicer.VerifySignature,
+                    request_deserializer=p2p__transport__pb2.SignedData.FromString,
+                    response_serializer=p2p__transport__pb2.VerificationResult.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -194,5 +210,22 @@ class P2PTransport(object):
         return grpc.experimental.unary_unary(request, target, '/p2p_transport.P2PTransport/Sign',
             p2p__transport__pb2.Bytes.SerializeToString,
             p2p__transport__pb2.Bytes.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def VerifySignature(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/p2p_transport.P2PTransport/VerifySignature',
+            p2p__transport__pb2.SignedData.SerializeToString,
+            p2p__transport__pb2.VerificationResult.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
