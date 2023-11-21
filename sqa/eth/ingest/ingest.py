@@ -85,6 +85,7 @@ class Ingest:
         self._is_optimism = genesis_hash == '0x7ca38a1916c42007829c55e69d3e9a73265554b586a499015373241b8a3fa48b'
         self._is_astar = genesis_hash == '0x0d28a86ac0fe37871285bd1dac45d83a4b3833e01a37571a1ac4f0a44c64cdc2'
         self._is_zksync = genesis_hash == '0xe8e77626586f73b955364c7b4bbf0bb7f7685ebd40e852b164633a4acbd3244c'
+        self._is_skale_nebula = genesis_hash == '0x28e07f346c28a837dfd2897ce70c8500de6e67ddbc33cb5b9cd720fff4aeb598'
 
     def _schedule_strides(self):
         while len(self._strides) < max(1, min(10, self._rpc.get_total_capacity())) \
@@ -203,6 +204,9 @@ class Ingest:
 
         if self._validate_tx_root:
             for block in blocks:
+                if self._is_skale_nebula:
+                    for tx in block['transactions']:
+                        tx['type'] = '0x0'
                 assert block['transactionsRoot'] == transactions_root(block['transactions'])
 
         return blocks
@@ -260,6 +264,8 @@ class Ingest:
 
             if self._is_arbitrum_one and r['transactionHash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800':
                 continue
+            if self._is_skale_nebula:
+                r['type'] = '0x0'
 
             try:
                 tx = tx_by_index[r['blockHash']][r['transactionIndex']]
@@ -314,6 +320,9 @@ class Ingest:
             [tx['hash']],
             priority=block_number
         )
+
+        if self._is_skale_nebula:
+            receipt['type'] = '0x0'
 
         assert receipt['transactionHash'] == tx['hash']
         tx['receipt_'] = receipt
