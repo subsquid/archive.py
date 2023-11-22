@@ -2,7 +2,7 @@ import logging
 import sqlite3
 from typing import Optional
 
-from sqa.worker.p2p.messages_pb2 import Query, QueryLogs, QueryExecuted, InputAndOutput
+from sqa.worker.p2p.messages_pb2 import Query, QueryExecuted, InputAndOutput
 from sqa.worker.p2p.util import sha3_256, size_and_hash, QueryInfo
 from sqa.worker.query import QueryResult
 
@@ -87,7 +87,7 @@ class LogsStorage:
                 self._db_conn.execute("INSERT INTO next_seq_no VALUES(?)", (next_seq_no,))
                 self.is_initialized = True
 
-    def get_logs(self) -> QueryLogs:
+    def get_logs(self) -> [QueryExecuted]:
         """ Get all stored query logs. """
         def log_from_db(seq_no, log_msg):
             log = QueryExecuted.FromString(log_msg)
@@ -95,7 +95,6 @@ class LogsStorage:
             return log
         with self._db_conn:
             rows = self._db_conn.execute("SELECT seq_no, log_msg FROM query_logs").fetchall()
-            logs = [log_from_db(*r) for r in rows]
-        return QueryLogs(queries_executed=logs)
+            return [log_from_db(*r) for r in rows]
 
 

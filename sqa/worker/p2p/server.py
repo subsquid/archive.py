@@ -29,7 +29,7 @@ MAX_MESSAGE_LENGTH = 100 * 1024 * 1024  # 100 MiB
 LOGS_SEND_INTERVAL_SEC = int(os.environ.get('LOGS_SEND_INTERVAL_SEC', '600'))
 PING_TOPIC = "worker_ping"
 LOGS_TOPIC = "worker_query_logs"
-WORKER_VERSION = "0.1.4"
+WORKER_VERSION = "0.1.5"
 
 
 class P2PTransport:
@@ -89,13 +89,14 @@ class P2PTransport:
             if not self._logs_storage.is_initialized:
                 continue
 
-            # Sign the message
+            # Sign all the logs
             query_logs = self._logs_storage.get_logs()
-            signature: Bytes = await self._transport.Sign(Bytes(bytes=query_logs.SerializeToString()))
-            query_logs.signature = signature.bytes
+            for log in query_logs:
+                signature: Bytes = await self._transport.Sign(Bytes(bytes=log.SerializeToString()))
+                log.signature = signature.bytes
 
             # Send out
-            envelope = msg_pb.Envelope(query_logs=query_logs)
+            envelope = msg_pb.Envelope(query_logs=msg_pb.QueryLogs(queries_executed=query_logs))
             LOG.debug("Sending out query logs")
             await self._send(envelope, topic=LOGS_TOPIC)
 
