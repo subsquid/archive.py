@@ -140,6 +140,18 @@ def transactions_root(transactions: list[Transaction]) -> str:
                 qty2int(tx['r']),
                 qty2int(tx['s'])
             ])
+        elif tx['type'] == '0x7e':
+            # https://github.com/ethereum-optimism/optimism/blob/9ff3ebb3983be52c3ca189423ae7b4aec94e0fde/specs/deposits.md#the-deposited-transaction-type
+            trie[path] = b'\x7e' + rlp.encode([
+                decode_hex(tx['sourceHash']),
+                decode_hex(tx['from']),
+                decode_hex(tx['to']) if tx['to'] else b'',
+                qty2int(tx['mint']),
+                qty2int(tx['value']),
+                qty2int(tx['gas']),
+                False,
+                decode_hex(tx['input']),
+            ])
         else:
             raise Exception(f'Unknown tx type {tx["type"]}')
     return encode_hex(trie.root_hash)
