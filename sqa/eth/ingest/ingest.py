@@ -53,6 +53,7 @@ class Ingest:
         self._is_optimism = False
         self._is_astar = False
         self._is_zksync = False
+        self._is_skale_nebula = False
 
     async def loop(self) -> AsyncIterator[list[Block]]:
         assert not self._running
@@ -202,11 +203,13 @@ class Ingest:
             priority=from_block
         )
 
+        if self._is_skale_nebula:
+            for block in blocks:
+                for tx in block['transactions']:
+                    tx['type'] = '0x0'
+
         if self._validate_tx_root:
             for block in blocks:
-                if self._is_skale_nebula:
-                    for tx in block['transactions']:
-                        tx['type'] = '0x0'
                 assert block['transactionsRoot'] == transactions_root(block['transactions'])
 
         return blocks
