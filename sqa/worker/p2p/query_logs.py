@@ -1,5 +1,6 @@
 import logging
 import sqlite3
+import time
 from typing import Optional
 
 from sqa.worker.p2p.messages_pb2 import Query, QueryExecuted, InputAndOutput
@@ -67,6 +68,7 @@ class LogsStorage:
         assert self.is_initialized
         LOG.debug(f"Storing query log: {query_log}")
         with self._db_conn:
+            query_log.timestamp_ms = time.time_ns() // 1000_000
             self._db_conn.execute(
                 "INSERT INTO query_logs SELECT seq_no, ? FROM next_seq_no",
                 (query_log.SerializeToString(),)
