@@ -7,6 +7,7 @@ from sqa.query import MissingData
 from sqa.query.schema import ArchiveQuery
 from sqa.util.asyncio import create_child_task, monitor_service_tasks
 from sqa.util.child_proc import init_child_process
+from sqa.gateway_controller import Gateways
 from .query import QueryResult, validate_query, execute_query
 from .state.manager import StateManager
 from .transport import Transport
@@ -17,12 +18,13 @@ PING_INTERVAL_SEC = int(os.environ.get('PING_INTERVAL_SEC', '10'))
 
 
 class Worker:
-    def __init__(self, sm: StateManager, transport: Transport, procs: int | None = None):
+    def __init__(self, sm: StateManager, transport: Transport, gateways: Gateways, procs: int | None = None):
         self._sm = sm
         self._transport = transport
         self._procs = procs or (os.cpu_count() or 1) * 3 // 2
         self._pool = multiprocessing.Pool(processes=self._procs, initializer=init_child_process)
         self._shutdown = False
+        self._gateways = gateways
 
     def get_processes_count(self) -> int:
         return self._procs
@@ -30,7 +32,8 @@ class Worker:
     async def run(self):
         state_update_task = create_child_task('state_update', self._state_update_loop())
         ping_task = create_child_task('ping', self._ping_loop())
-        await monitor_service_tasks([state_update_task, ping_task], log=LOG)
+        gateway_monitoring_task = create_child_task('gateway_monitor', self._monitor_gateways())
+        await monitor_service_tasks([state_update_task, ping_task, gateway_monitoring_task], log=LOG)
 
     async def _state_update_loop(self):
         state_updates = self._transport.state_updates()
@@ -50,6 +53,11 @@ class Worker:
             pass
             # FIXME: for some reason httpx fails to work after SIGINT/SIGTERM
             # await self._pause_ping()
+
+    async def _monitor_gateways(self):
+        while not self._shutdown:
+            self._gateways.update()
+            await asyncio.sleep(10)
 
     async def _pause_ping(self):
         state = self._sm.get_state()

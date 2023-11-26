@@ -9,6 +9,7 @@ from typing import AsyncIterator, Optional, Dict
 import grpc.aio
 from marshmallow import ValidationError
 
+from sqa.gateway_controller import Gateways
 from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
 from sqa.worker.p2p import messages_pb2 as msg_pb
 from sqa.worker.p2p.p2p_transport_pb2 import Bytes, Empty, Message, Subscription, SignedData
@@ -44,7 +45,7 @@ class P2PTransport:
         self._local_peer_id: 'Optional[str]' = None
         self._expected_pong: 'Optional[bytes]' = None  # Hash of the last sent ping
 
-    async def initialize(self, logs_db_path: str) -> None:
+    async def initialize(self, logs_db_path: str) -> str:
         self._local_peer_id = (await self._transport.LocalPeerId(Empty())).peer_id
         LOG.info(f"Local peer ID: {self._local_peer_id}")
         self._logs_storage = LogsStorage(self._local_peer_id, logs_db_path)
@@ -52,6 +53,8 @@ class P2PTransport:
         # Subscribe to the ping & logs topics so that our node also participates in broadcasting messages
         await self._subscribe(topic=PING_TOPIC)
         await self._subscribe(topic=LOGS_TOPIC)
+
+        return self._local_peer_id
 
     async def run(self):
         receive_task = create_child_task('p2p_receive', self._receive_loop())
@@ -284,7 +287,8 @@ async def _main():
     )
     args = program.parse_args()
 
-    sm = StateManager(data_dir=args.data_dir or os.getcwd())
+    data_dir = args.data_dir or os.getcwd()
+    sm = StateManager(data_dir=data_dir)
     channel = grpc.aio.insecure_channel(
         args.proxy,
         options=(
@@ -295,8 +299,9 @@ async def _main():
     async with channel as chan:
         transport = P2PTransport(chan, args.scheduler_id, args.logs_collector_id)
         await transport.initialize(args.logs_db or os.path.join(os.getcwd(), 'logs.db'))
+        peer_id = await transport.initialize()
 
-        worker = Worker(sm, transport, args.procs)
+        worker = Worker(sm, transport, Gateways(peer_id, data_dir), args.procs)
 
         await monitor_service_tasks([
             asyncio.create_task(transport.run(), name='p2p_transport'),

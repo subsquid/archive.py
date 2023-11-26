@@ -12,6 +12,9 @@ dependencies = [
     "pyarrow == 13.*",
     "s3fs >= 2021.8.0",
     "sentry-sdk == 1.28.*",
+    "web3>=6.11.3",
+    "setuptools>=68.2.2",
+    "base58>=2.1.1",
 ]
 
 [project.optional-dependencies]

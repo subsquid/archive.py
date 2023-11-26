@@ -13,6 +13,7 @@ from sqa.worker.state.controller import State
 from sqa.worker.state.intervals import to_range_set
 from sqa.worker.state.manager import StateManager
 from sqa.worker.worker import Worker
+from sqa.gateway_controller import Gateways
 
 
 LOG = logging.getLogger(__name__)
@@ -115,7 +116,8 @@ def parse_cli_args():
 
 
 async def serve(args):
-    sm = StateManager(data_dir=args.data_dir or os.getcwd())
+    data_dir = args.data_dir or os.getcwd()
+    sm = StateManager(data_dir=data_dir)
 
     transport = HttpTransport(
         worker_id=args.worker_id,
@@ -123,7 +125,9 @@ async def serve(args):
         router_url=args.router,
     )
 
-    worker = Worker(sm, transport, args.procs)
+    gateways = Gateways(args.worker_id, data_dir)
+
+    worker = Worker(sm, transport, gateways, args.procs)
 
     app = fa.App()
 
