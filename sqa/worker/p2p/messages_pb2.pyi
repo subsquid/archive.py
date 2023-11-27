@@ -90,22 +90,24 @@ class Pong(_message.Message):
     def __init__(self, ping_hash: _Optional[bytes] = ..., not_registered: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., unsupported_version: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., jailed: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., active: _Optional[_Union[WorkerState, _Mapping]] = ...) -> None: ...
 
 class Query(_message.Message):
-    __slots__ = ["dataset", "profiling", "query", "query_id", "signature", "client_id"]
+    __slots__ = ["client_state_json", "dataset", "profiling", "query", "query_id", "signature", "client_id"]
+    CLIENT_STATE_JSON_FIELD_NUMBER: _ClassVar[int]
     DATASET_FIELD_NUMBER: _ClassVar[int]
     PROFILING_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
     QUERY_ID_FIELD_NUMBER: _ClassVar[int]
     SIGNATURE_FIELD_NUMBER: _ClassVar[int]
+    client_state_json: str
     dataset: str
     profiling: bool
     query: str
     query_id: str
     client_id: str
     signature: bytes
-    def __init__(self, query_id: _Optional[str] = ..., dataset: _Optional[str] = ..., query: _Optional[str] = ..., profiling: bool = ..., signature: _Optional[bytes] = ...) -> None: ...
+    def __init__(self, query_id: _Optional[str] = ..., dataset: _Optional[str] = ..., query: _Optional[str] = ..., profiling: bool = ..., client_state_json: _Optional[str] = ..., signature: _Optional[bytes] = ...) -> None: ...
 
 class QueryExecuted(_message.Message):
-    __slots__ = ["bad_request", "client_id", "exec_time_ms", "ok", "query", "query_hash", "seq_no", "server_error", "signature", "worker_id"]
+    __slots__ = ["bad_request", "client_id", "exec_time_ms", "ok", "query", "query_hash", "seq_no", "server_error", "signature", "timestamp_ms", "worker_id"]
     BAD_REQUEST_FIELD_NUMBER: _ClassVar[int]
     CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
     EXEC_TIME_MS_FIELD_NUMBER: _ClassVar[int]
@@ -115,6 +117,7 @@ class QueryExecuted(_message.Message):
     SEQ_NO_FIELD_NUMBER: _ClassVar[int]
     SERVER_ERROR_FIELD_NUMBER: _ClassVar[int]
     SIGNATURE_FIELD_NUMBER: _ClassVar[int]
+    TIMESTAMP_MS_FIELD_NUMBER: _ClassVar[int]
     WORKER_ID_FIELD_NUMBER: _ClassVar[int]
     bad_request: str
     client_id: str
@@ -125,8 +128,9 @@ class QueryExecuted(_message.Message):
     seq_no: int
     server_error: str
     signature: bytes
+    timestamp_ms: int
     worker_id: str
-    def __init__(self, client_id: _Optional[str] = ..., worker_id: _Optional[str] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_hash: _Optional[bytes] = ..., exec_time_ms: _Optional[int] = ..., ok: _Optional[_Union[InputAndOutput, _Mapping]] = ..., bad_request: _Optional[str] = ..., server_error: _Optional[str] = ..., seq_no: _Optional[int] = ..., signature: _Optional[bytes] = ...) -> None: ...
+    def __init__(self, client_id: _Optional[str] = ..., worker_id: _Optional[str] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_hash: _Optional[bytes] = ..., exec_time_ms: _Optional[int] = ..., ok: _Optional[_Union[InputAndOutput, _Mapping]] = ..., bad_request: _Optional[str] = ..., server_error: _Optional[str] = ..., seq_no: _Optional[int] = ..., timestamp_ms: _Optional[int] = ..., signature: _Optional[bytes] = ...) -> None: ...
 
 class QueryFinished(_message.Message):
     __slots__ = ["bad_request", "client_id", "exec_time_ms", "ok", "query_id", "server_error", "timeout", "worker_id"]
