@@ -12,9 +12,9 @@ from .query import QueryResult, validate_query, execute_query
 from .state.manager import StateManager
 from .transport import Transport
 
-
 LOG = logging.getLogger(__name__)
 PING_INTERVAL_SEC = int(os.environ.get('PING_INTERVAL_SEC', '10'))
+ENABLE_ALLOCATIONS = bool(os.environ.get('ENABLE_ALLOCATIONS', False))
 
 
 class Worker:
@@ -32,8 +32,12 @@ class Worker:
     async def run(self):
         state_update_task = create_child_task('state_update', self._state_update_loop())
         ping_task = create_child_task('ping', self._ping_loop())
-        gateway_monitoring_task = create_child_task('gateway_monitor', self._monitor_gateways())
-        await monitor_service_tasks([state_update_task, ping_task, gateway_monitoring_task], log=LOG)
+        if ENABLE_ALLOCATIONS:
+            gateway_monitoring_task = create_child_task('gateway_monitor', self._monitor_gateways())
+        else:
+            gateway_monitoring_task = None
+        tasks = (state_update_task, ping_task, gateway_monitoring_task)
+        await monitor_service_tasks([i for i in tasks if i is not None], log=LOG)
 
     async def _state_update_loop(self):
         state_updates = self._transport.state_updates()
@@ -57,7 +61,7 @@ class Worker:
     async def _monitor_gateways(self):
         while not self._shutdown:
             self._gateways.update()
-            await asyncio.sleep(10)
+            await asyncio.sleep(PING_INTERVAL_SEC)
 
     async def _pause_ping(self):
         state = self._sm.get_state()
