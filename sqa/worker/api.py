@@ -97,7 +97,7 @@ class QueryResource:
 
         self._pending_requests += 1
         try:
-            query_result = await self._worker.execute_query(query, dataset, profiling=profiling)
+            query_result = await self._worker.execute_query(query, dataset, query.client_id, profiling=profiling)
             res.text = query_result.result
             res.content_type = 'application/json'
         except InvalidQuery as e:

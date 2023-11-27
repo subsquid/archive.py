@@ -28,3 +28,10 @@ class ComputationUnitsStorage:
         if res is None:
             return {}
         return dict(res)
+
+    def increase_gateway_usage(self, used_units: int, gateway: str, worker_id: int):
+        self._cursor.execute(
+            'UPDATE SET used = used+? WHERE address=? AND workerId=?',
+            (used_units, gateway, worker_id)
+        )
+        self._db.commit()

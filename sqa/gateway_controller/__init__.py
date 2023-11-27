@@ -27,6 +27,9 @@ class Gateways:
 
         self._storage.increase_allocations(allocations, self._own_id)
 
+    def on_query_executed(self, gateway_id: str):
+        self._storage.increase_gateway_usage(1, gateway_id, self._own_id)
+
     def _filter_own_allocations(self, allocations: tuple[AttributeDict]):
         return [
             Allocation(

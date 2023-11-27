@@ -72,8 +72,9 @@ class Worker:
         except:
             LOG.exception('failed to send a pause ping')
 
-    async def execute_query(self, query: ArchiveQuery, dataset: str, profiling: bool = False) -> QueryResult:
+    async def execute_query(self, query: ArchiveQuery, dataset: str, client_id: str, profiling: bool = False) -> QueryResult:
         query = validate_query(query)
+        self._gateways.on_query_executed(client_id)
 
         first_block = query['fromBlock']
         data_range_lock = self._sm.use_range(dataset, first_block)

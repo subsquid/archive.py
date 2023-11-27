@@ -141,6 +141,7 @@ class P2PTransport:
             LOG.warning(f"Query with invalid signature received from {peer_id}")
             return
         query.signature = signature
+        query.client_id = peer_id
 
         self._query_info[query.query_id] = QueryInfo(peer_id)
         await self._query_tasks.put(query)
@@ -236,7 +237,7 @@ async def execute_query(transport: P2PTransport, worker: Worker, query_task: msg
     try:
         query = json.loads(query_task.query)
         dataset = dataset_decode(query_task.dataset)
-        result = await worker.execute_query(query, dataset, query_task.profiling)
+        result = await worker.execute_query(query, dataset, query_task.client_id, query_task.profiling)
         LOG.info(f"Query {query_task.query_id} success")
         await transport.send_query_result(query_task, result)
     except Exception as e:
@@ -298,8 +299,7 @@ async def _main():
     )
     async with channel as chan:
         transport = P2PTransport(chan, args.scheduler_id, args.logs_collector_id)
-        await transport.initialize(args.logs_db or os.path.join(os.getcwd(), 'logs.db'))
-        peer_id = await transport.initialize()
+        peer_id = await transport.initialize(args.logs_db or os.path.join(os.getcwd(), 'logs.db'))
 
         worker = Worker(sm, transport, Gateways(peer_id, data_dir), args.procs)
 

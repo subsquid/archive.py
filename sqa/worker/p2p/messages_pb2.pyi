@@ -90,7 +90,7 @@ class Pong(_message.Message):
     def __init__(self, ping_hash: _Optional[bytes] = ..., not_registered: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., unsupported_version: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., jailed: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., active: _Optional[_Union[WorkerState, _Mapping]] = ...) -> None: ...
 
 class Query(_message.Message):
-    __slots__ = ["dataset", "profiling", "query", "query_id", "signature"]
+    __slots__ = ["dataset", "profiling", "query", "query_id", "signature", "client_id"]
     DATASET_FIELD_NUMBER: _ClassVar[int]
     PROFILING_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
@@ -100,6 +100,7 @@ class Query(_message.Message):
     profiling: bool
     query: str
     query_id: str
+    client_id: str
     signature: bytes
     def __init__(self, query_id: _Optional[str] = ..., dataset: _Optional[str] = ..., query: _Optional[str] = ..., profiling: bool = ..., signature: _Optional[bytes] = ...) -> None: ...
 
