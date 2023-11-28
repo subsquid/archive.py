@@ -33,11 +33,11 @@ class LogsStorage:
 
     def query_executed(self, query: Query, info: QueryInfo, result: QueryResult) -> None:
         """ Store information about successfully executed query. """
-        query_log = self._generate_log(query, info)
-        query_log.ok = InputAndOutput(
+        result = InputAndOutput(
             num_read_chunks=result.num_read_chunks,
             output=size_and_hash(result.gzipped_bytes),
         )
+        query_log = self._generate_log(query, info, ok=result)
         self._store_log(query_log)
 
     def query_error(
@@ -48,20 +48,22 @@ class LogsStorage:
             server_error: Optional[str] = None
     ) -> None:
         """ Store information about query execution error. """
-        query_log = self._generate_log(query, info)
         if bad_request is not None:
-            query_log.bad_request = bad_request
+            query_log = self._generate_log(query, info, bad_request=bad_request)
         elif server_error is not None:
-            query_log.server_error = server_error
+            query_log = self._generate_log(query, info, server_error=server_error)
+        else:
+            raise AssertionError("Either bad_request or server_error should be not None")
         self._store_log(query_log)
 
-    def _generate_log(self, query: Query, info: QueryInfo) -> QueryExecuted:
+    def _generate_log(self, query: Query, info: QueryInfo, **kwargs) -> QueryExecuted:
         return QueryExecuted(
             client_id=info.client_id,
             worker_id=self._local_peer_id,
             query=query,
             query_hash=sha3_256(query.query.encode()),
             exec_time_ms=info.exec_time_ms,
+            **kwargs
         )
 
     def _store_log(self, query_log: QueryExecuted) -> None:

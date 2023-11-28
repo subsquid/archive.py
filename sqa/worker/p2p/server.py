@@ -205,18 +205,18 @@ class P2PTransport:
         await self._send(envelope, peer_id=query_info.client_id)
         self._logs_storage.query_executed(query, query_info, result)
 
-    async def send_query_error(self, query: msg_pb.Query, error: Exception) -> None:
+    async def send_query_error(
+            self,
+            query: msg_pb.Query,
+            bad_request: Optional[str] = None,
+            server_error: Optional[str] = None
+    ) -> None:
         try:
             query_info = self._query_info.pop(query.query_id)
         except KeyError:
             LOG.error(f"Unknown query: {query.query_id}")
             return
         query_info.finished()
-
-        if isinstance(error, (JSONDecodeError, ValidationError, InvalidQuery)):
-            bad_request, server_error = str(error), None
-        else:
-            bad_request, server_error = None, str(error)
 
         envelope = msg_pb.Envelope(
             query_result=msg_pb.QueryResult(
@@ -236,9 +236,12 @@ async def execute_query(transport: P2PTransport, worker: Worker, query_task: msg
         result = await worker.execute_query(query, dataset, query_task.profiling)
         LOG.info(f"Query {query_task.query_id} success")
         await transport.send_query_result(query_task, result)
-    except Exception as e:
+    except (JSONDecodeError, ValidationError, InvalidQuery) as e:
         LOG.warning(f"Query {query_task.query_id} execution failed")
-        await transport.send_query_error(query_task, e)
+        await transport.send_query_error(query_task, bad_request=str(e))
+    except Exception as e:
+        LOG.exception(f"Query {query_task.query_id} execution failed")
+        await transport.send_query_error(query_task, server_error=str(e))
 
 
 async def run_queries(transport: P2PTransport, worker: Worker):

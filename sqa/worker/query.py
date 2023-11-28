@@ -2,8 +2,9 @@ import gzip
 import json
 import math
 import time
+from dataclasses import dataclass
 from functools import cached_property
-from typing import Iterable, Optional, NamedTuple
+from typing import Iterable, Optional
 
 import marshmallow as mm
 import psutil
@@ -71,7 +72,8 @@ def _get_model(q: dict) -> Model:
         raise TypeError(f'unknown query type - {query_type}')
 
 
-class QueryResult(NamedTuple):
+@dataclass(frozen=True)
+class QueryResult:
     result: str
     num_read_chunks: int
     exec_time: Optional[dict] = None
