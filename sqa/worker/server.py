@@ -13,7 +13,6 @@ from sqa.worker.state.controller import State
 from sqa.worker.state.intervals import to_range_set
 from sqa.worker.state.manager import StateManager
 from sqa.worker.worker import Worker
-from sqa.gateway_controller import Gateways
 
 
 LOG = logging.getLogger(__name__)
@@ -125,9 +124,7 @@ async def serve(args):
         router_url=args.router,
     )
 
-    gateways = Gateways(args.worker_id, data_dir)
-
-    worker = Worker(sm, transport, gateways, args.procs)
+    worker = Worker(sm, transport, args.procs)
 
     app = fa.App()
 

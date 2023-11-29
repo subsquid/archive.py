@@ -9,7 +9,7 @@ from typing import AsyncIterator, Optional, Dict
 import grpc.aio
 from marshmallow import ValidationError
 
-from sqa.gateway_controller import Gateways
+from sqa.gateway_allocations.gateway_allocations import GatewayAllocations
 from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
 from sqa.worker.p2p import messages_pb2 as msg_pb
 from sqa.worker.p2p.p2p_transport_pb2 import Bytes, Empty, Message, Subscription, SignedData
@@ -28,6 +28,7 @@ LOG = logging.getLogger(__name__)
 # This is the maximum *decompressed* size of the message
 MAX_MESSAGE_LENGTH = 100 * 1024 * 1024  # 100 MiB
 LOGS_SEND_INTERVAL_SEC = int(os.environ.get('LOGS_SEND_INTERVAL_SEC', '600'))
+GATEWAY_DATA_DIR = os.environ.get('GATEWAY_DATA_DIR')
 PING_TOPIC = "worker_ping"
 LOGS_TOPIC = "worker_query_logs"
 WORKER_VERSION = "0.1.5"
@@ -233,11 +234,12 @@ class P2PTransport:
         self._logs_storage.query_error(query, query_info, bad_request, server_error)
 
 
-async def execute_query(transport: P2PTransport, worker: Worker, query_task: msg_pb.Query):
+async def execute_query(transport: P2PTransport, worker: Worker, gateways: GatewayAllocations, query_task: msg_pb.Query):
     try:
         query = json.loads(query_task.query)
         dataset = dataset_decode(query_task.dataset)
-        result = await worker.execute_query(query, dataset, query_task.client_id, query_task.profiling)
+        result = await worker.execute_query(query, dataset, query_task.profiling)
+        await gateways.on_query_executed(query_task.client_id)
         LOG.info(f"Query {query_task.query_id} success")
         await transport.send_query_result(query_task, result)
     except Exception as e:
@@ -245,10 +247,10 @@ async def execute_query(transport: P2PTransport, worker: Worker, query_task: msg
         await transport.send_query_error(query_task, e)
 
 
-async def run_queries(transport: P2PTransport, worker: Worker):
+async def run_queries(transport: P2PTransport, worker: Worker, gateways: GatewayAllocations):
     async for query_task in transport.query_tasks():
         # FIXME: backpressure
-        asyncio.create_task(execute_query(transport, worker, query_task))
+        asyncio.create_task(execute_query(transport, worker, gateways, query_task))
 
 
 async def _main():
@@ -300,14 +302,14 @@ async def _main():
     async with channel as chan:
         transport = P2PTransport(chan, args.scheduler_id, args.logs_collector_id)
         peer_id = await transport.initialize(args.logs_db or os.path.join(os.getcwd(), 'logs.db'))
-
-        worker = Worker(sm, transport, Gateways(peer_id, data_dir), args.procs)
-
+        gateway_allocations = GatewayAllocations(peer_id, GATEWAY_DATA_DIR or data_dir)
+        worker = Worker(sm, transport, args.procs)
         await monitor_service_tasks([
             asyncio.create_task(transport.run(), name='p2p_transport'),
             asyncio.create_task(sm.run(), name='state_manager'),
             asyncio.create_task(worker.run(), name='worker'),
-            asyncio.create_task(run_queries(transport, worker), name='run_queries')
+            asyncio.create_task(gateway_allocations.run(), name="gateway_allocations"),
+            asyncio.create_task(run_queries(transport, worker, gateway_allocations), name='run_queries')
         ], log=LOG)
 
 

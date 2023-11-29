@@ -1,3 +1,7 @@
+from dataclasses import dataclass
+
+
+@dataclass
 class Allocation:
     def __init__(self, gateway: str, computation_units: int, block_number: int):
         self.gateway = gateway
