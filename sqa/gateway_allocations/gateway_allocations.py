@@ -42,7 +42,17 @@ class GatewayAllocations:
         if not ALLOCATIONS_ENABLED:
             return
         await self._initialize_if_not()
-        self._storage.increase_gateway_usage(SINGLE_EXECUTION_COST, base58.b58decode(base58_gateway_id).hex())
+        self._storage.increase_gateway_usage(SINGLE_EXECUTION_COST, self._b58_id_to_hex(base58_gateway_id))
+
+    async def can_execute(self, base58_gateway_id: str) -> bool:
+        if not ALLOCATIONS_ENABLED:
+            return True
+        await self._initialize_if_not()
+        allocations = self._storage.get_allocations_for([self._b58_id_to_hex(base58_gateway_id)])
+        if not allocations:
+            return False
+        (_, allocated, used) = allocations[0]
+        return allocated >= used + SINGLE_EXECUTION_COST
 
     async def _update(self):
         allocations = self._filter_out_old_allocations(
@@ -78,3 +88,7 @@ class GatewayAllocations:
             alloc for alloc in allocations if
             alloc.gateway not in blocks_updates or alloc.block_number > blocks_updates[alloc.gateway]
         ]
+
+    @staticmethod
+    def _b58_id_to_hex(peer_id: str) -> str:
+        return base58.b58decode(peer_id).hex()

@@ -57,12 +57,12 @@ class P2PTransport:
 
         return self._local_peer_id
 
-    async def run(self):
-        receive_task = create_child_task('p2p_receive', self._receive_loop())
+    async def run(self, gateway_allocations: GatewayAllocations):
+        receive_task = create_child_task('p2p_receive', self._receive_loop(gateway_allocations))
         send_logs_task = create_child_task('p2p_send_logs', self._send_logs_loop())
         await monitor_service_tasks([receive_task, send_logs_task], log=LOG)
 
-    async def _receive_loop(self) -> None:
+    async def _receive_loop(self, gateway_allocations: GatewayAllocations) -> None:
         async for msg in self._transport.GetMessages(Empty()):
             assert isinstance(msg, Message)
             envelope = msg_pb.Envelope.FromString(msg.content)
@@ -72,7 +72,7 @@ class P2PTransport:
                 await self._handle_pong(msg.peer_id, envelope.pong)
 
             elif msg_type == 'query':
-                await self._handle_query(msg.peer_id, envelope.query)
+                await self._handle_query(msg.peer_id, envelope.query, gateway_allocations)
 
             elif msg_type == 'logs_collected':
                 if msg.peer_id != self._logs_collector_id:
@@ -124,7 +124,7 @@ class P2PTransport:
             # If the status is 'active', it contains assigned chunks
             await self._state_updates.put(msg.active)
 
-    async def _handle_query(self, peer_id: str, query: msg_pb.Query) -> None:
+    async def _handle_query(self, peer_id: str, query: msg_pb.Query, gateway_allocations: GatewayAllocations) -> None:
         if not self._logs_storage.is_initialized:
             LOG.warning("Logs storage not initialized. Cannot execute queries yet.")
             return
@@ -140,6 +140,9 @@ class P2PTransport:
         verification_result = await self._transport.VerifySignature(signed_data)
         if not verification_result.signature_ok:
             LOG.warning(f"Query with invalid signature received from {peer_id}")
+            return
+        if not gateway_allocations.can_execute(peer_id):
+            LOG.warning(f"Not enough allocated for {peer_id}")
             return
         query.signature = signature
         query.client_id = peer_id
@@ -305,7 +308,7 @@ async def _main():
         gateway_allocations = GatewayAllocations(peer_id, GATEWAY_DATA_DIR or data_dir)
         worker = Worker(sm, transport, args.procs)
         await monitor_service_tasks([
-            asyncio.create_task(transport.run(), name='p2p_transport'),
+            asyncio.create_task(transport.run(gateway_allocations), name='p2p_transport'),
             asyncio.create_task(sm.run(), name='state_manager'),
             asyncio.create_task(worker.run(), name='worker'),
             asyncio.create_task(gateway_allocations.run(), name="gateway_allocations"),
