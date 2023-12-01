@@ -90,7 +90,7 @@ class Pong(_message.Message):
     def __init__(self, ping_hash: _Optional[bytes] = ..., not_registered: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., unsupported_version: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., jailed: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., active: _Optional[_Union[WorkerState, _Mapping]] = ...) -> None: ...
 
 class Query(_message.Message):
-    __slots__ = ["client_state_json", "dataset", "profiling", "query", "query_id", "signature", "client_id"]
+    __slots__ = ["client_state_json", "dataset", "profiling", "query", "query_id", "signature"]
     CLIENT_STATE_JSON_FIELD_NUMBER: _ClassVar[int]
     DATASET_FIELD_NUMBER: _ClassVar[int]
     PROFILING_FIELD_NUMBER: _ClassVar[int]
@@ -102,7 +102,6 @@ class Query(_message.Message):
     profiling: bool
     query: str
     query_id: str
-    client_id: str
     signature: bytes
     def __init__(self, query_id: _Optional[str] = ..., dataset: _Optional[str] = ..., query: _Optional[str] = ..., profiling: bool = ..., client_state_json: _Optional[str] = ..., signature: _Optional[bytes] = ...) -> None: ...
 

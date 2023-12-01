@@ -124,10 +124,12 @@ class P2PTransport:
             # If the status is 'active', it contains assigned chunks
             await self._state_updates.put(msg.active)
 
-    async def _handle_query(self, peer_id: str, query: msg_pb.Query, gateway_allocations: GatewayAllocations) -> None:
+    async def _handle_query(self, client_peer_id: str, query: msg_pb.Query, gateway_allocations: GatewayAllocations) -> None:
         if not self._logs_storage.is_initialized:
             LOG.warning("Logs storage not initialized. Cannot execute queries yet.")
             return
+
+        await gateway_allocations.on_new_query(client_peer_id)
 
         # Verify query signature
         signature = query.signature
@@ -135,19 +137,18 @@ class P2PTransport:
         signed_data = SignedData(
             data=query.SerializeToString(),
             signature=signature,
-            peer_id=peer_id
+            peer_id=client_peer_id
         )
         verification_result = await self._transport.VerifySignature(signed_data)
         if not verification_result.signature_ok:
-            LOG.warning(f"Query with invalid signature received from {peer_id}")
+            LOG.warning(f"Query with invalid signature received from {client_peer_id}")
             return
-        if not gateway_allocations.can_execute(peer_id):
-            LOG.warning(f"Not enough allocated for {peer_id}")
+        if not gateway_allocations.can_execute(client_peer_id):
+            LOG.warning(f"Not enough allocated for {client_peer_id}")
             return
         query.signature = signature
-        query.client_id = peer_id
 
-        self._query_info[query.query_id] = QueryInfo(peer_id)
+        self._query_info[query.query_id] = QueryInfo(client_peer_id)
         await self._query_tasks.put(query)
 
     async def _send(
@@ -237,12 +238,11 @@ class P2PTransport:
         self._logs_storage.query_error(query, query_info, bad_request, server_error)
 
 
-async def execute_query(transport: P2PTransport, worker: Worker, gateways: GatewayAllocations, query_task: msg_pb.Query):
+async def execute_query(transport: P2PTransport, worker: Worker, query_task: msg_pb.Query):
     try:
         query = json.loads(query_task.query)
         dataset = dataset_decode(query_task.dataset)
         result = await worker.execute_query(query, dataset, query_task.profiling)
-        await gateways.on_query_executed(query_task.client_id)
         LOG.info(f"Query {query_task.query_id} success")
         await transport.send_query_result(query_task, result)
     except Exception as e:
@@ -250,10 +250,10 @@ async def execute_query(transport: P2PTransport, worker: Worker, gateways: Gatew
         await transport.send_query_error(query_task, e)
 
 
-async def run_queries(transport: P2PTransport, worker: Worker, gateways: GatewayAllocations):
+async def run_queries(transport: P2PTransport, worker: Worker):
     async for query_task in transport.query_tasks():
         # FIXME: backpressure
-        asyncio.create_task(execute_query(transport, worker, gateways, query_task))
+        asyncio.create_task(execute_query(transport, worker, query_task))
 
 
 async def _main():
@@ -304,15 +304,15 @@ async def _main():
     )
     async with channel as chan:
         transport = P2PTransport(chan, args.scheduler_id, args.logs_collector_id)
-        peer_id = await transport.initialize(args.logs_db or os.path.join(os.getcwd(), 'logs.db'))
-        gateway_allocations = GatewayAllocations(peer_id, GATEWAY_DATA_DIR or data_dir)
+        worker_peer_id = await transport.initialize(args.logs_db or os.path.join(os.getcwd(), 'logs.db'))
+        gateway_allocations = GatewayAllocations(worker_peer_id, GATEWAY_DATA_DIR or data_dir)
         worker = Worker(sm, transport, args.procs)
         await monitor_service_tasks([
             asyncio.create_task(transport.run(gateway_allocations), name='p2p_transport'),
             asyncio.create_task(sm.run(), name='state_manager'),
             asyncio.create_task(worker.run(), name='worker'),
             asyncio.create_task(gateway_allocations.run(), name="gateway_allocations"),
-            asyncio.create_task(run_queries(transport, worker, gateway_allocations), name='run_queries')
+            asyncio.create_task(run_queries(transport, worker), name='run_queries')
         ], log=LOG)
 
 

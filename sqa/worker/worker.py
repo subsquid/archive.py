@@ -50,11 +50,6 @@ class Worker:
             # FIXME: for some reason httpx fails to work after SIGINT/SIGTERM
             # await self._pause_ping()
 
-    # async def _monitor_gateways(self):
-    #     while not self._shutdown:
-    #         await self._gateways.update()
-    #         await asyncio.sleep(PING_INTERVAL_SEC)
-    #
     async def _pause_ping(self):
         state = self._sm.get_state()
         stored_bytes = await self._sm.get_stored_bytes()
