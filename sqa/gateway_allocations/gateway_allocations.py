@@ -38,17 +38,18 @@ class GatewayAllocations:
             await self._update()
             await asyncio.sleep(EVENT_POLLING_INTERVAL)
 
-    async def on_new_query(self, gateway_peer_id: str):
-        if not ALLOCATIONS_ENABLED:
-            return
-        await self._initialize_if_not()
-        self._storage.increase_gateway_usage(SINGLE_EXECUTION_COST, self._b58_id_to_hex(gateway_peer_id))
-
-    async def can_execute(self, gateway_peer_id: str) -> bool:
+    async def try_to_execute(self, gateway_peer_id: str) -> bool:
         if not ALLOCATIONS_ENABLED:
             return True
         await self._initialize_if_not()
-        allocations = self._storage.get_allocations_for([self._b58_id_to_hex(gateway_peer_id)])
+        gateway_id = self._b58_id_to_hex(gateway_peer_id)
+        if not self._can_execute(gateway_id):
+            return False
+        self._storage.increase_gateway_usage(SINGLE_EXECUTION_COST, gateway_id)
+        return True
+
+    async def _can_execute(self, gateway_id: str) -> bool:
+        allocations = self._storage.get_allocations_for([gateway_id])
         if not allocations:
             return False
         (_, allocated, used) = allocations[0]

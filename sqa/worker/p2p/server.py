@@ -129,8 +129,6 @@ class P2PTransport:
             LOG.warning("Logs storage not initialized. Cannot execute queries yet.")
             return
 
-        await gateway_allocations.on_new_query(client_peer_id)
-
         # Verify query signature
         signature = query.signature
         query.signature = b""
@@ -143,7 +141,7 @@ class P2PTransport:
         if not verification_result.signature_ok:
             LOG.warning(f"Query with invalid signature received from {client_peer_id}")
             return
-        if not gateway_allocations.can_execute(client_peer_id):
+        if not await gateway_allocations.try_to_execute(client_peer_id):
             LOG.warning(f"Not enough allocated for {client_peer_id}")
             return
         query.signature = signature
