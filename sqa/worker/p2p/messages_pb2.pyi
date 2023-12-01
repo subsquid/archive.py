@@ -7,26 +7,30 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Map
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Envelope(_message.Message):
-    __slots__ = ["dataset_state", "logs_collected", "ping", "pong", "query", "query_finished", "query_logs", "query_result", "query_submitted"]
+    __slots__ = ["dataset_state", "logs_collected", "ping", "pong", "query", "query_executed", "query_finished", "query_logs", "query_result", "query_submitted", "state_update"]
     DATASET_STATE_FIELD_NUMBER: _ClassVar[int]
     LOGS_COLLECTED_FIELD_NUMBER: _ClassVar[int]
     PING_FIELD_NUMBER: _ClassVar[int]
     PONG_FIELD_NUMBER: _ClassVar[int]
+    QUERY_EXECUTED_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
     QUERY_FINISHED_FIELD_NUMBER: _ClassVar[int]
     QUERY_LOGS_FIELD_NUMBER: _ClassVar[int]
     QUERY_RESULT_FIELD_NUMBER: _ClassVar[int]
     QUERY_SUBMITTED_FIELD_NUMBER: _ClassVar[int]
+    STATE_UPDATE_FIELD_NUMBER: _ClassVar[int]
     dataset_state: RangeSet
     logs_collected: LogsCollected
     ping: Ping
     pong: Pong
     query: Query
+    query_executed: QueryExecuted
     query_finished: QueryFinished
     query_logs: QueryLogs
     query_result: QueryResult
     query_submitted: QuerySubmitted
-    def __init__(self, ping: _Optional[_Union[Ping, _Mapping]] = ..., pong: _Optional[_Union[Pong, _Mapping]] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_result: _Optional[_Union[QueryResult, _Mapping]] = ..., dataset_state: _Optional[_Union[RangeSet, _Mapping]] = ..., query_submitted: _Optional[_Union[QuerySubmitted, _Mapping]] = ..., query_finished: _Optional[_Union[QueryFinished, _Mapping]] = ..., query_logs: _Optional[_Union[QueryLogs, _Mapping]] = ..., logs_collected: _Optional[_Union[LogsCollected, _Mapping]] = ...) -> None: ...
+    state_update: WorkerState
+    def __init__(self, ping: _Optional[_Union[Ping, _Mapping]] = ..., state_update: _Optional[_Union[WorkerState, _Mapping]] = ..., pong: _Optional[_Union[Pong, _Mapping]] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_result: _Optional[_Union[QueryResult, _Mapping]] = ..., dataset_state: _Optional[_Union[RangeSet, _Mapping]] = ..., query_submitted: _Optional[_Union[QuerySubmitted, _Mapping]] = ..., query_finished: _Optional[_Union[QueryFinished, _Mapping]] = ..., query_executed: _Optional[_Union[QueryExecuted, _Mapping]] = ..., query_logs: _Optional[_Union[QueryLogs, _Mapping]] = ..., logs_collected: _Optional[_Union[LogsCollected, _Mapping]] = ...) -> None: ...
 
 class InputAndOutput(_message.Message):
     __slots__ = ["num_read_chunks", "output"]

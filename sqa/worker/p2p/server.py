@@ -71,6 +71,10 @@ class P2PTransport:
             if msg_type == 'pong':
                 await self._handle_pong(msg.peer_id, envelope.pong)
 
+            # Deprecated message, handled for backwards compatibility with Mirovia scheduler
+            elif msg_type == 'state_update':
+                await self._handle_state_update(msg.peer_id, envelope.state_update)
+
             elif msg_type == 'query':
                 await self._handle_query(msg.peer_id, envelope.query, gateway_allocations)
 
@@ -104,6 +108,13 @@ class P2PTransport:
             LOG.debug("Sending out query logs")
             await self._send(envelope, topic=LOGS_TOPIC)
 
+    async def _handle_state_update(self, peer_id: str, msg: msg_pb.WorkerState) -> None:
+        if peer_id != self._scheduler_id:
+            LOG.warning(f"Wrong state update message origin: {peer_id}")
+            return
+        self._expected_pong = None
+        await self._state_updates.put(msg)
+
     async def _handle_pong(self, peer_id: str, msg: msg_pb.Pong) -> None:
         if peer_id != self._scheduler_id:
             LOG.warning(f"Wrong pong message origin: {peer_id}")
@@ -119,12 +130,17 @@ class P2PTransport:
         elif status == 'unsupported_version':
             LOG.error("Worker version not supported by the scheduler")
         elif status == 'jailed':
-            LOG.info("Worker jailed until the end of epoch")
+            LOG.warning("Worker jailed until the end of epoch")
         elif status == 'active':
             # If the status is 'active', it contains assigned chunks
             await self._state_updates.put(msg.active)
 
-    async def _handle_query(self, client_peer_id: str, query: msg_pb.Query, gateway_allocations: GatewayAllocations) -> None:
+    async def _handle_query(
+            self,
+            client_peer_id: str,
+            query: msg_pb.Query,
+            gateway_allocations: GatewayAllocations
+    ) -> None:
         if not self._logs_storage.is_initialized:
             LOG.warning("Logs storage not initialized. Cannot execute queries yet.")
             return
