@@ -9,6 +9,7 @@ from typing import AsyncIterator, Optional, Dict
 import grpc.aio
 from marshmallow import ValidationError
 
+from sqa.gateway_allocations.gateway_allocations import GatewayAllocations
 from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
 from sqa.worker.p2p import messages_pb2 as msg_pb
 from sqa.worker.p2p.p2p_transport_pb2 import Bytes, Empty, Message, Subscription, SignedData
@@ -27,6 +28,7 @@ LOG = logging.getLogger(__name__)
 # This is the maximum *decompressed* size of the message
 MAX_MESSAGE_LENGTH = 100 * 1024 * 1024  # 100 MiB
 LOGS_SEND_INTERVAL_SEC = int(os.environ.get('LOGS_SEND_INTERVAL_SEC', '600'))
+GATEWAY_DATA_DIR = os.environ.get('GATEWAY_DATA_DIR')
 PING_TOPIC = "worker_ping"
 LOGS_TOPIC = "worker_query_logs"
 WORKER_VERSION = "0.1.5"
@@ -44,7 +46,7 @@ class P2PTransport:
         self._local_peer_id: 'Optional[str]' = None
         self._expected_pong: 'Optional[bytes]' = None  # Hash of the last sent ping
 
-    async def initialize(self, logs_db_path: str) -> None:
+    async def initialize(self, logs_db_path: str) -> str:
         self._local_peer_id = (await self._transport.LocalPeerId(Empty())).peer_id
         LOG.info(f"Local peer ID: {self._local_peer_id}")
         self._logs_storage = LogsStorage(self._local_peer_id, logs_db_path)
@@ -53,12 +55,14 @@ class P2PTransport:
         await self._subscribe(topic=PING_TOPIC)
         await self._subscribe(topic=LOGS_TOPIC)
 
-    async def run(self):
-        receive_task = create_child_task('p2p_receive', self._receive_loop())
+        return self._local_peer_id
+
+    async def run(self, gateway_allocations: GatewayAllocations):
+        receive_task = create_child_task('p2p_receive', self._receive_loop(gateway_allocations))
         send_logs_task = create_child_task('p2p_send_logs', self._send_logs_loop())
         await monitor_service_tasks([receive_task, send_logs_task], log=LOG)
 
-    async def _receive_loop(self) -> None:
+    async def _receive_loop(self, gateway_allocations: GatewayAllocations) -> None:
         async for msg in self._transport.GetMessages(Empty()):
             assert isinstance(msg, Message)
             envelope = msg_pb.Envelope.FromString(msg.content)
@@ -68,7 +72,7 @@ class P2PTransport:
                 await self._handle_pong(msg.peer_id, envelope.pong)
 
             elif msg_type == 'query':
-                await self._handle_query(msg.peer_id, envelope.query)
+                await self._handle_query(msg.peer_id, envelope.query, gateway_allocations)
 
             elif msg_type == 'logs_collected':
                 if msg.peer_id != self._logs_collector_id:
@@ -120,7 +124,7 @@ class P2PTransport:
             # If the status is 'active', it contains assigned chunks
             await self._state_updates.put(msg.active)
 
-    async def _handle_query(self, peer_id: str, query: msg_pb.Query) -> None:
+    async def _handle_query(self, client_peer_id: str, query: msg_pb.Query, gateway_allocations: GatewayAllocations) -> None:
         if not self._logs_storage.is_initialized:
             LOG.warning("Logs storage not initialized. Cannot execute queries yet.")
             return
@@ -131,15 +135,18 @@ class P2PTransport:
         signed_data = SignedData(
             data=query.SerializeToString(),
             signature=signature,
-            peer_id=peer_id
+            peer_id=client_peer_id
         )
         verification_result = await self._transport.VerifySignature(signed_data)
         if not verification_result.signature_ok:
-            LOG.warning(f"Query with invalid signature received from {peer_id}")
+            LOG.warning(f"Query with invalid signature received from {client_peer_id}")
+            return
+        if not await gateway_allocations.try_to_execute(client_peer_id):
+            LOG.warning(f"Not enough allocated for {client_peer_id}")
             return
         query.signature = signature
 
-        self._query_info[query.query_id] = QueryInfo(peer_id)
+        self._query_info[query.query_id] = QueryInfo(client_peer_id)
         await self._query_tasks.put(query)
 
     async def _send(
@@ -287,7 +294,8 @@ async def _main():
     )
     args = program.parse_args()
 
-    sm = StateManager(data_dir=args.data_dir or os.getcwd())
+    data_dir = args.data_dir or os.getcwd()
+    sm = StateManager(data_dir=data_dir)
     channel = grpc.aio.insecure_channel(
         args.proxy,
         options=(
@@ -297,14 +305,14 @@ async def _main():
     )
     async with channel as chan:
         transport = P2PTransport(chan, args.scheduler_id, args.logs_collector_id)
-        await transport.initialize(args.logs_db or os.path.join(os.getcwd(), 'logs.db'))
-
+        worker_peer_id = await transport.initialize(args.logs_db or os.path.join(os.getcwd(), 'logs.db'))
+        gateway_allocations = GatewayAllocations(worker_peer_id, GATEWAY_DATA_DIR or data_dir)
         worker = Worker(sm, transport, args.procs)
-
         await monitor_service_tasks([
-            asyncio.create_task(transport.run(), name='p2p_transport'),
+            asyncio.create_task(transport.run(gateway_allocations), name='p2p_transport'),
             asyncio.create_task(sm.run(), name='state_manager'),
             asyncio.create_task(worker.run(), name='worker'),
+            asyncio.create_task(gateway_allocations.run(), name="gateway_allocations"),
             asyncio.create_task(run_queries(transport, worker), name='run_queries')
         ], log=LOG)
 

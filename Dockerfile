@@ -2,6 +2,8 @@ FROM python:3.11-slim-bullseye AS base
 
 
 FROM base AS builder
+RUN apt update
+RUN apt install -y gcc
 RUN pip install pdm
 WORKDIR /project
 RUN pdm venv create --with venv

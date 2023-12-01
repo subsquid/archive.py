@@ -11,7 +11,6 @@ from .query import QueryResult, validate_query, execute_query
 from .state.manager import StateManager
 from .transport import Transport
 
-
 LOG = logging.getLogger(__name__)
 PING_INTERVAL_SEC = int(os.environ.get('PING_INTERVAL_SEC', '10'))
 
