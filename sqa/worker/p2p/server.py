@@ -194,7 +194,9 @@ class P2PTransport:
 
         # We expect pong to be delivered before the next ping is sent
         if self._expected_pong is not None:
-            LOG.error("Pong message not received in time. The scheduler is not responding. Contact tech support.")
+            pass
+            # Temporarily disabled because Mirovia scheduler doesn't send pongs when there are no chunks assigned.
+            # LOG.error("Pong message not received in time. The scheduler is not responding. Contact tech support.")
         self._expected_pong = sha3_256(ping.SerializeToString())
 
         await self._send(envelope, topic=PING_TOPIC)
