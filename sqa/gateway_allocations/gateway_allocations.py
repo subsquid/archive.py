@@ -35,8 +35,10 @@ class GatewayAllocations:
     async def run(self):
         await self._initialize_if_not()
         while True:
-            await self._update()
-            await asyncio.sleep(EVENT_POLLING_INTERVAL)
+            try:
+                await self._update()
+            finally:
+                await asyncio.sleep(EVENT_POLLING_INTERVAL)
 
     async def try_to_execute(self, gateway_peer_id: str) -> bool:
         if not ALLOCATIONS_ENABLED:
