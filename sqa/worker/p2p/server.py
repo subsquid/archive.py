@@ -10,6 +10,7 @@ import grpc.aio
 from marshmallow import ValidationError
 
 from sqa.gateway_allocations.gateway_allocations import GatewayAllocations
+from sqa.query import MissingData
 from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
 from sqa.worker.p2p import messages_pb2 as msg_pb
 from sqa.worker.p2p.p2p_transport_pb2 import Bytes, Empty, Message, Subscription, SignedData
@@ -261,7 +262,7 @@ async def execute_query(transport: P2PTransport, worker: Worker, query_task: msg
         result = await worker.execute_query(query, dataset, query_task.profiling)
         LOG.info(f"Query {query_task.query_id} success")
         await transport.send_query_result(query_task, result)
-    except (JSONDecodeError, ValidationError, InvalidQuery) as e:
+    except (JSONDecodeError, ValidationError, InvalidQuery, MissingData) as e:
         LOG.warning(f"Query {query_task.query_id} execution failed")
         await transport.send_query_error(query_task, bad_request=str(e))
     except Exception as e:
