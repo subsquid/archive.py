@@ -6,10 +6,10 @@ import os
 import sys
 import time
 from typing import Iterable
-from sqa.substrate.writer.metrics import Metrics
+from sqa.tron.writer.metrics import Metrics
 
 from sqa.writer import ArchiveWriteOptions, ArchiveWriter
-from .model import BlockData
+from .model import Block
 from .parquet import ParquetSink
 
 
@@ -74,14 +74,14 @@ def parse_cli_arguments():
 
 
 class WriteOptions(ArchiveWriteOptions):
-    def get_block_height(self, block: BlockData) -> int:
-        return block['height']
+    def get_block_height(self, block: Block) -> int:
+        return block['header']['height']
 
-    def get_block_hash(self, block: BlockData) -> str:
-        return block['hash']
+    def get_block_hash(self, block: Block) -> str:
+        return block['header']['hash']
 
-    def get_block_parent_hash(self, block: BlockData) -> str:
-        return '0x' + block['block']['block_header']['raw_data']['parentHash'][16:]
+    def get_block_parent_hash(self, block: Block) -> str:
+        return '0x' + block['header']['parentHash'][16:]
 
     def chunk_check(self, filelist: list[str]) -> bool:
         return 'blocks.parquet' in filelist
@@ -120,7 +120,7 @@ def main(args):
         sys.exit(1)
 
 
-def batch(blocks: Iterable[BlockData]) -> Iterable[list[BlockData]]:
+def batch(blocks: Iterable[Block]) -> Iterable[list[Block]]:
     pack = []
     for b in blocks:
         pack.append(b)
@@ -131,10 +131,10 @@ def batch(blocks: Iterable[BlockData]) -> Iterable[list[BlockData]]:
         yield pack
 
 
-def read_from_stdin(options: WriteOptions, next_block: int) -> Iterable[BlockData]:
+def read_from_stdin(options: WriteOptions, next_block: int) -> Iterable[Block]:
     for line in sys.stdin:
         if line:
-            block: BlockData = json.loads(line)
+            block: Block = json.loads(line)
             height = options.get_block_height(block)
             if height > options.last_block:
                 break
@@ -142,7 +142,7 @@ def read_from_stdin(options: WriteOptions, next_block: int) -> Iterable[BlockDat
                 yield block
 
 
-def read_from_url(url: str, options: WriteOptions, next_block: int) -> Iterable[BlockData]:
+def read_from_url(url: str, options: WriteOptions, next_block: int) -> Iterable[Block]:
     import httpx
 
     data_range = {
@@ -155,7 +155,7 @@ def read_from_url(url: str, options: WriteOptions, next_block: int) -> Iterable[
         try:
             with httpx.stream('POST', url, json=data_range, timeout=httpx.Timeout(None)) as res:
                 for line in res.iter_lines():
-                    block: BlockData = json.loads(line)
+                    block: Block = json.loads(line)
                     height = options.get_block_height(block)
                     data_range['from'] = height + 1
                     yield block

@@ -1,41 +1,54 @@
 from typing import TypedDict, Any, NotRequired
 
 
+class BlockHeader(TypedDict):
+    height: int
+    hash: str
+    parentHash: str
+    txTrieRoot: str
+    version: int
+    timestamp: int
+    witnessAddress: str
+    witnessSignature: str
+
+
 class Log(TypedDict):
+    logIndex: int
+    transactionHash: str
     address: str
-    data: NotRequired[str]
+    data: str
     topics: list[str]
 
 
-class ContractParameter(TypedDict):
-    value: Any
-    type_url: str
-
-
-class Contract(TypedDict):
-    parameter: ContractParameter
+class Transaction(TypedDict):
+    hash: str
+    ret: str
+    signature: list[str]
     type: str
-    Permission_id: NotRequired[int]
-
-
-class TransactionRawData(TypedDict):
-    contract: list[Contract]
-    ref_block_bytes: str
-    ref_block_hash: str
+    parameter: Any
+    permissionId: NotRequired[int]
+    refBlockBytes: str
+    refBlockHash: str
+    feeLimit: NotRequired[int]
     expiration: int
-    fee_limit: NotRequired[int]
     timestamp: NotRequired[int]
-
-
-class TransactionReceipt(TypedDict):
+    rawDataHex: str
+    fee: NotRequired[int]
+    contractResult: NotRequired[str]
+    contractAddress: NotRequired[str]
+    resMessage: NotRequired[str]
+    withdrawAmount: NotRequired[int]
+    unfreezeAmount: NotRequired[int]
+    withdrawExpireAmount: NotRequired[int]
+    cancelUnfreezeV2Amount: NotRequired[dict[str, int]]
     result: NotRequired[str]
-    energy_fee: NotRequired[int]
-    energy_usage: NotRequired[int]
-    energy_usage_total: NotRequired[int]
-    net_usage: NotRequired[int]
-    net_fee: NotRequired[int]
-    origin_energy_usage: NotRequired[int]
-    energy_penalty_total: NotRequired[int]
+    energyFee: NotRequired[int]
+    energyUsage: NotRequired[int]
+    energyUsageTotal: NotRequired[int]
+    netUsage: NotRequired[int]
+    netFee: NotRequired[int]
+    originEnergyUsage: NotRequired[int]
+    energyPenaltyTotal: NotRequired[int]
 
 
 class CallValueInfo(TypedDict):
@@ -44,67 +57,18 @@ class CallValueInfo(TypedDict):
 
 
 class InternalTransaction(TypedDict):
+    transactionHash: str
     hash: str
-    caller_address: str
-    transferTo_address: str
+    callerAddress: str
+    transferToAddress: str
     callValueInfo: list[CallValueInfo]
     note: str
     rejected: NotRequired[bool]
     extra: NotRequired[str]
 
 
-class TransactionInfo(TypedDict):
-    id: str
-    fee: NotRequired[int]
-    blockNumber: int
-    blockTimeStamp: int
-    contractResult: list[str]
-    contract_address: NotRequired[str]
-    receipt: TransactionReceipt
-    log: NotRequired[list[Log]]
-    result: NotRequired[str]
-    resMessage: NotRequired[str]
-    withdraw_amount: NotRequired[int]
-    unfreeze_amount: NotRequired[int]
-    internal_transactions: NotRequired[list[InternalTransaction]]
-    withdraw_expire_amount: NotRequired[int]
-    cancel_unfreezeV2_amount: NotRequired[dict[str, int]]
-
-
-class TransactionResult(TypedDict):
-    contractRet: str
-
-
-class Transaction(TypedDict):
-    ret: list[TransactionResult]
-    signature: list[str]
-    txID: str
-    raw_data: TransactionRawData
-    raw_data_hex: str
-    info: NotRequired[TransactionInfo]
-
-
-class BlockRawData(TypedDict):
-    number: NotRequired[int]
-    txTrieRoot: str
-    witness_address: str
-    parentHash: str
-    version: int
-    timestamp: int
-
-
-class BlockHeader(TypedDict):
-    raw_data: BlockRawData
-    witness_signature: str
-
-
 class Block(TypedDict):
-    blockID: str
-    block_header: BlockHeader
-    transactions: NotRequired[list[Transaction]]
-
-
-class BlockData(TypedDict):
-    height: int
-    hash: str
-    block: Block
+    header: BlockHeader
+    logs: list[Log]
+    transactions: list[Transaction]
+    internalTransactions: list[InternalTransaction]

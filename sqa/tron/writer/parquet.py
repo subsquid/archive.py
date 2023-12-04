@@ -5,7 +5,7 @@ import pyarrow
 
 from sqa.fs import Fs
 from sqa.writer.parquet import TableBuilder, Column, BaseParquetSink, add_size_column, add_index_column
-from .model import Block, Transaction, Log, InternalTransaction, BlockData
+from .model import Block, BlockHeader, Transaction, Log, InternalTransaction
 
 
 def JSON():
@@ -35,15 +35,15 @@ class BlockTable(TableBuilder):
         self.witness_address = Column(pyarrow.string())
         self.witness_signature = Column(pyarrow.string())
 
-    def append(self, block: Block) -> None:
-        self.number.append(block['block_header']['raw_data'].get('number', 0))
-        self.hash.append(block['blockID'])
-        self.parent_hash.append(block['block_header']['raw_data']['parentHash'])
-        self.tx_trie_root.append(block['block_header']['raw_data']['txTrieRoot'])
-        self.version.append(block['block_header']['raw_data']['version'])
-        self.timestamp.append(block['block_header']['raw_data']['timestamp'])
-        self.witness_address.append(block['block_header']['raw_data']['witness_address'])
-        self.witness_signature.append(block['block_header']['witness_signature'])
+    def append(self, header: BlockHeader) -> None:
+        self.number.append(header.get('number', 0))
+        self.hash.append(header['hash'])
+        self.parent_hash.append(header['parentHash'])
+        self.tx_trie_root.append(header['txTrieRoot'])
+        self.version.append(header['version'])
+        self.timestamp.append(header['timestamp'])
+        self.witness_address.append(header['witnessAddress'])
+        self.witness_signature.append(header['witnessSignature'])
 
 
 class TransactionTable(TableBuilder):
@@ -98,80 +98,58 @@ class TransactionTable(TableBuilder):
 
     def append(self, block_number: int, tx: Transaction) -> None:
         self.block_number.append(block_number)
-        self.hash.append(tx['txID'])
+        self.hash.append(tx['hash'])
         assert len(tx['ret']) == 1
-        self.ret.append(tx['ret'][0]['contractRet'])
+        self.ret.append(tx['ret'])
         self.signature.append(tx['signature'])
-        assert len(tx['raw_data']['contract']) == 1
-        contract = tx['raw_data']['contract'][0]
-        self.type.append(contract['type'])
-        self.parameter.append(_to_json(contract['parameter']))
-        self.permission_id.append(contract.get('Permission_id'))
-        self.ref_block_bytes.append(tx['raw_data']['ref_block_bytes'])
-        self.ref_block_hash.append(tx['raw_data']['ref_block_hash'])
-        self.fee_limit.append(tx['raw_data'].get('fee_limit'))
-        self.expiration.append(tx['raw_data']['expiration'])
-        self.timestamp.append(tx['raw_data'].get('timestamp'))
-        self.raw_data_hex.append(tx['raw_data_hex'])
+        self.type.append(tx['type'])
+        self.parameter.append(_to_json(tx['parameter']))
+        self.permission_id.append(tx.get('permissionId'))
+        self.ref_block_bytes.append(tx['refBlockBytes'])
+        self.ref_block_hash.append(tx['refBlockHash'])
+        self.fee_limit.append(tx.get('feeLimit'))
+        self.expiration.append(tx['expiration'])
+        self.timestamp.append(tx.get('timestamp'))
+        self.raw_data_hex.append(tx['rawDataHex'])
 
-        if info := tx.get('info'):
-            self.fee.append(info.get('fee'))
-            assert len(info['contractResult']) == 1
-            self.contract_result.append(info['contractResult'][0])
-            self.contract_address.append(info.get('contract_address'))
-            self.res_message.append(info.get('resMessage'))
-            self.withdraw_amount.append(info.get('withdraw_amount'))
-            self.unfreeze_amount.append(info.get('unfreeze_amount'))
-            self.withdraw_expire_amount.append(info.get('withdraw_expire_amount'))
-            self.cancel_unfreezeV2_amount.append(_to_json(info.get('cancel_unfreezeV2_amount')))
+        self.fee.append(tx.get('fee'))
+        self.contract_result.append(tx.get('contractResult'))
+        self.contract_address.append(tx.get('contractAddress'))
+        self.res_message.append(tx.get('resMessage'))
+        self.withdraw_amount.append(tx.get('withdrawAmount'))
+        self.unfreeze_amount.append(tx.get('unfreezeAmount'))
+        self.withdraw_expire_amount.append(tx.get('withdrawExpireAmount'))
+        self.cancel_unfreezeV2_amount.append(_to_json(tx.get('cancelUnfreezeV2Amount')))
 
-            self.result.append(info['receipt'].get('result'))
-            self.energy_fee.append(info['receipt'].get('energy_fee'))
-            self.energy_usage.append(info['receipt'].get('energy_usage'))
-            self.energy_usage_total.append(info['receipt'].get('energy_usage_total'))
-            self.net_usage.append(info['receipt'].get('net_usage'))
-            self.net_fee.append(info['receipt'].get('net_fee'))
-            self.origin_energy_usage.append(info['receipt'].get('origin_energy_usage'))
-            self.energy_penalty_total.append(info['receipt'].get('energy_penalty_total'))
-        else:
-            self.fee.append(None)
-            self.contract_result.append(None)
-            self.contract_address.append(None)
-            self.res_message.append(None)
-            self.withdraw_amount.append(None)
-            self.unfreeze_amount.append(None)
-            self.withdraw_expire_amount.append(None)
-            self.cancel_unfreezeV2_amount.append(None)
+        self.result.append(tx.get('result'))
+        self.energy_fee.append(tx.get('energyFee'))
+        self.energy_usage.append(tx.get('energyUsage'))
+        self.energy_usage_total.append(tx.get('energyUsageTotal'))
+        self.net_usage.append(tx.get('netUsage'))
+        self.net_fee.append(tx.get('netFee'))
+        self.origin_energy_usage.append(tx.get('originEnergyUsage'))
+        self.energy_penalty_total.append(tx.get('energyPenaltyTotal'))
 
-            self.result.append(None)
-            self.energy_fee.append(None)
-            self.energy_usage.append(None)
-            self.energy_usage_total.append(None)
-            self.net_usage.append(None)
-            self.net_fee.append(None)
-            self.origin_energy_usage.append(None)
-            self.energy_penalty_total.append(None)
-
-        if contract['type'] == 'TransferContract':
-            self._transfer_contract_owner.append(contract['parameter']['value']['owner_address'])
-            self._transfer_contract_to.append(contract['parameter']['value']['to_address'])
+        if tx['type'] == 'TransferContract':
+            self._transfer_contract_owner.append(tx['parameter']['value']['owner_address'])
+            self._transfer_contract_to.append(tx['parameter']['value']['to_address'])
         else:
             self._transfer_contract_owner.append(None)
             self._transfer_contract_to.append(None)
 
-        if contract['type'] == 'TransferAssetContract':
-            self._transfer_asset_contract_owner.append(contract['parameter']['value']['owner_address'])
-            self._transfer_asset_contract_to.append(contract['parameter']['value']['to_address'])
-            self._transfer_asset_contract_asset.append(contract['parameter']['value']['asset_name'])
+        if tx['type'] == 'TransferAssetContract':
+            self._transfer_asset_contract_owner.append(tx['parameter']['value']['owner_address'])
+            self._transfer_asset_contract_to.append(tx['parameter']['value']['to_address'])
+            self._transfer_asset_contract_asset.append(tx['parameter']['value']['asset_name'])
         else:
             self._transfer_asset_contract_owner.append(None)
             self._transfer_asset_contract_to.append(None)
             self._transfer_asset_contract_asset.append(None)
 
-        if contract['type'] == 'TriggerSmartContract':
-            self._trigger_smart_contract_owner.append(contract['parameter']['value']['owner_address'])
-            self._trigger_smart_contract_contract.append(contract['parameter']['value']['contract_address'])
-            self._trigger_smart_contract_sighash.append(_to_sighash(contract['parameter']['value']['data']))
+        if tx['type'] == 'TriggerSmartContract':
+            self._trigger_smart_contract_owner.append(tx['parameter']['value']['owner_address'])
+            self._trigger_smart_contract_contract.append(tx['parameter']['value']['contract_address'])
+            self._trigger_smart_contract_sighash.append(_to_sighash(tx['parameter']['value']['data']))
         else:
             self._trigger_smart_contract_owner.append(None)
             self._trigger_smart_contract_contract.append(None)
@@ -190,10 +168,10 @@ class LogTable(TableBuilder):
         self.topic2 = Column(pyarrow.string())
         self.topic3 = Column(pyarrow.string())
 
-    def append(self, block_number: int, index: int, tx_hash: str, log: Log):
+    def append(self, block_number: int, log: Log):
         self.block_number.append(block_number)
-        self.log_index.append(index)
-        self.transaction_hash.append(tx_hash)
+        self.log_index.append(log['logIndex'])
+        self.transaction_hash.append(log['transactionHash'])
         self.address.append(log['address'])
         self.data.append(log.get('data'))
         topics = iter(log['topics'])
@@ -215,12 +193,12 @@ class InternalTransactionTable(TableBuilder):
         self.rejected = Column(pyarrow.bool_())
         self.extra = Column(JSON())
 
-    def append(self, block_number: int, tx_hash: str, internal_tx: InternalTransaction):
+    def append(self, block_number: int, internal_tx: InternalTransaction):
         self.block_number.append(block_number)
-        self.transaction_hash.append(tx_hash)
+        self.transaction_hash.append(internal_tx['transactionHash'])
         self.hash.append(internal_tx['hash'])
-        self.caller_address.append(internal_tx['caller_address'])
-        self.transer_to_address.append(internal_tx['transferTo_address'])
+        self.caller_address.append(internal_tx['callerAddress'])
+        self.transer_to_address.append(internal_tx['transferToAddress'])
         self.call_value_info.append(_to_json(internal_tx['callValueInfo']))
         self.note.append(internal_tx['note'])
         self.rejected.append(internal_tx.get('rejected'))
@@ -234,17 +212,14 @@ class ParquetSink(BaseParquetSink):
         self.logs = LogTable()
         self.internal_transactions = InternalTransactionTable()
 
-    def push(self, data: BlockData) -> None:
-        self.blocks.append(data['block'])
-        log_index = 0
-        for tx in data['block'].get('transactions', []):
-            self.transactions.append(data['height'], tx)
-            if info := tx.get('info'):
-                for log in info.get('log', []):
-                    self.logs.append(data['height'], log_index, tx['txID'], log)
-                    log_index += 1
-                for internal_tx in info.get('internal_transactions', []):
-                    self.internal_transactions.append(data['height'], tx['txID'], internal_tx)
+    def push(self, block: Block) -> None:
+        self.blocks.append(block['header'])
+        for log in block['logs']:
+            self.logs.append(block['header']['height'], log)
+        for tx in block['transactions']:
+            self.transactions.append(block['header']['height'], tx)
+        for internal_tx in block['internalTransactions']:
+            self.internal_transactions.append(block['header']['height'], internal_tx)
 
     def _write(self, fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         write_parquet(fs, tables)
