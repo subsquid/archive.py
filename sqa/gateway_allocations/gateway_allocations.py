@@ -37,8 +37,9 @@ class GatewayAllocations:
         while True:
             try:
                 await self._update()
-            finally:
-                await asyncio.sleep(EVENT_POLLING_INTERVAL)
+            except:
+                LOG.exception('Error in RPC')
+            await asyncio.sleep(EVENT_POLLING_INTERVAL)
 
     async def try_to_execute(self, gateway_peer_id: str) -> bool:
         if not ALLOCATIONS_ENABLED:
