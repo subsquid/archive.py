@@ -53,14 +53,14 @@ FROM base as p2p-worker
 COPY --from=p2p-worker-builder /project/.venv /app/env/
 COPY --from=p2p-worker-builder /project/sqa /app/sqa/
 VOLUME /app/data
-ENV DATA_DIR=/app/data/worker
-ENV LOGS_DB=/app/data/logs.db
+ENV DATA_DIR=/app/data
 ENV PING_INTERVAL_SEC=20
 ENV LOGS_SEND_INTERVAL_SEC=600
+ENV PROMETHEUS_PORT=9090
 RUN echo "#!/bin/bash \n exec /app/env/bin/python -m sqa.worker.p2p  \
     --data-dir \${DATA_DIR}  \
-    --logs-db \${LOGS_DB}  \
     --proxy \${PROXY_ADDR}  \
+    --prometheus-port \${PROMETHEUS_PORT} \
     --scheduler-id \${SCHEDULER_ID}  \
     --logs-collector-id \${LOGS_COLLECTOR_ID}" > ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh

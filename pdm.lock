@@ -5,7 +5,7 @@
 groups = ["default", "dev", "http-worker", "p2p-worker", "writer"]
 strategy = ["cross_platform"]
 lock_version = "4.4"
-content_hash = "sha256:996ed4061f2cfcd1840d6bc07e5408d4fa011d8808490c6031bbab119914d0b5"
+content_hash = "sha256:8f4b0aff5950a86cc645d3098d4cc7f4a289a5090fd6e4b99092843373796fd5"
 
 [[package]]
 name = "aiobotocore"

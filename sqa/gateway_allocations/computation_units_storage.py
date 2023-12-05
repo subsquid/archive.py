@@ -3,9 +3,9 @@ from .allocation import Allocation
 
 
 class ComputationUnitsStorage:
-    def __init__(self, data_path: str):
+    def __init__(self, db_path: str):
         self._own_id = None
-        self._db_conn = sqlite3.connect(f'{data_path}/gateway.db')
+        self._db_conn = sqlite3.connect(db_path)
 
     def initialize(self, own_id: int):
         self._own_id = own_id

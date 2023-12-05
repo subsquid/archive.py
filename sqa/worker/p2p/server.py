@@ -10,6 +10,8 @@ import grpc.aio
 from marshmallow import ValidationError
 
 from sqa.gateway_allocations.gateway_allocations import GatewayAllocations
+from sqa.metrics import WORKER_INFO, WORKER_STATUS, STORED_BYTES, EXEC_TIME, RESULT_SIZE, READ_CHUNKS, QUERY_OK, \
+    BAD_REQUEST, SERVER_ERROR, MetricsServer
 from sqa.query import MissingData
 from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
 from sqa.worker.p2p import messages_pb2 as msg_pb
@@ -23,13 +25,11 @@ from sqa.worker.state.dataset import dataset_decode
 from sqa.worker.state.manager import StateManager
 from sqa.worker.worker import Worker
 
-
 LOG = logging.getLogger(__name__)
 
 # This is the maximum *decompressed* size of the message
 MAX_MESSAGE_LENGTH = 100 * 1024 * 1024  # 100 MiB
 LOGS_SEND_INTERVAL_SEC = int(os.environ.get('LOGS_SEND_INTERVAL_SEC', '600'))
-GATEWAY_DATA_DIR = os.environ.get('GATEWAY_DATA_DIR')
 PING_TOPIC = "worker_ping"
 LOGS_TOPIC = "worker_query_logs"
 WORKER_VERSION = "0.1.5"
@@ -50,6 +50,11 @@ class P2PTransport:
     async def initialize(self, logs_db_path: str) -> str:
         self._local_peer_id = (await self._transport.LocalPeerId(Empty())).peer_id
         LOG.info(f"Local peer ID: {self._local_peer_id}")
+        WORKER_INFO.info({
+            'peer_id': self._local_peer_id,
+            'version': WORKER_VERSION,
+        })
+        WORKER_STATUS.state('starting')
         self._logs_storage = LogsStorage(self._local_peer_id, logs_db_path)
 
         # Subscribe to the ping & logs topics so that our node also participates in broadcasting messages
@@ -114,6 +119,7 @@ class P2PTransport:
             LOG.warning(f"Wrong state update message origin: {peer_id}")
             return
         self._expected_pong = None
+        WORKER_STATUS.state('active')
         await self._state_updates.put(msg)
 
     async def _handle_pong(self, peer_id: str, msg: msg_pb.Pong) -> None:
@@ -126,6 +132,7 @@ class P2PTransport:
         self._expected_pong = None
 
         status = msg.WhichOneof('status')
+        WORKER_STATUS.state(status)
         if status == 'not_registered':
             LOG.error("Worker not registered on chain")
         elif status == 'unsupported_version':
@@ -183,6 +190,7 @@ class P2PTransport:
         await self._transport.ToggleSubscription(Subscription(topic=topic, subscribed=True))
 
     async def send_ping(self, state: State, stored_bytes: int, pause=False) -> None:
+        STORED_BYTES.set(stored_bytes)
         ping = msg_pb.Ping(
             worker_id=self._local_peer_id,
             state=state_to_proto(state),
@@ -218,6 +226,10 @@ class P2PTransport:
             LOG.error(f"Unknown query: {query.query_id}")
             return
         query_info.finished()
+
+        EXEC_TIME.observe(query_info.exec_time_ms)
+        RESULT_SIZE.observe(len(result.gzipped_bytes))
+        READ_CHUNKS.observe(result.num_read_chunks)
 
         envelope = msg_pb.Envelope(
             query_result=msg_pb.QueryResult(
@@ -261,12 +273,15 @@ async def execute_query(transport: P2PTransport, worker: Worker, query_task: msg
         dataset = dataset_decode(query_task.dataset)
         result = await worker.execute_query(query, dataset, query_task.profiling)
         LOG.info(f"Query {query_task.query_id} success")
+        QUERY_OK.inc()
         await transport.send_query_result(query_task, result)
     except (JSONDecodeError, ValidationError, InvalidQuery, MissingData) as e:
         LOG.warning(f"Query {query_task.query_id} execution failed")
+        BAD_REQUEST.inc()
         await transport.send_query_error(query_task, bad_request=str(e))
     except Exception as e:
         LOG.exception(f"Query {query_task.query_id} execution failed")
+        SERVER_ERROR.inc()
         await transport.send_query_error(query_task, server_error=str(e))
 
 
@@ -302,19 +317,26 @@ async def _main():
         help='directory to keep in the data and state of this worker (defaults to cwd)'
     )
     program.add_argument(
-        '--logs-db',
-        metavar='PATH',
-        help='path to the logs DB file (defaults to ./logs.db)'
-    )
-    program.add_argument(
         '--procs',
         type=int,
         help='number of processes to use to execute data queries'
     )
+    program.add_argument(
+        '--prometheus-port',
+        type=int,
+        default=9090,
+        help='port to expose Prometheus metrics'
+    )
     args = program.parse_args()
-
     data_dir = args.data_dir or os.getcwd()
-    sm = StateManager(data_dir=data_dir)
+    chunks_dir = os.path.join(data_dir, 'worker')
+    logs_db_path = os.path.join(data_dir, 'logs.db')
+    allocations_db_path = os.path.join(data_dir, 'allocations.db')
+
+    LOG.info(f"Exposing Prometheus metrics on port {args.prometheus_port}")
+    MetricsServer.start(args.prometheus_port)
+
+    sm = StateManager(data_dir=chunks_dir)
     channel = grpc.aio.insecure_channel(
         args.proxy,
         options=(
@@ -324,8 +346,8 @@ async def _main():
     )
     async with channel as chan:
         transport = P2PTransport(chan, args.scheduler_id, args.logs_collector_id)
-        worker_peer_id = await transport.initialize(args.logs_db or os.path.join(os.getcwd(), 'logs.db'))
-        gateway_allocations = GatewayAllocations(worker_peer_id, GATEWAY_DATA_DIR or data_dir)
+        worker_peer_id = await transport.initialize(logs_db_path)
+        gateway_allocations = GatewayAllocations(worker_peer_id, allocations_db_path)
         worker = Worker(sm, transport, args.procs)
         await monitor_service_tasks([
             asyncio.create_task(transport.run(gateway_allocations), name='p2p_transport'),

@@ -18,10 +18,10 @@ ALLOCATIONS_ENABLED = bool(os.environ.get('ENABLE_ALLOCATIONS', False))
 
 
 class GatewayAllocations:
-    def __init__(self, peer_id: str, data_path: str):
+    def __init__(self, peer_id: str, db_path: str):
         w3 = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(RPC_URL))
         self._provider = AllocationsProvider(w3)
-        self._storage = ComputationUnitsStorage(data_path)
+        self._storage = ComputationUnitsStorage(db_path)
         self._peer_id = peer_id
         self._own_id = None
         self._initialized = False

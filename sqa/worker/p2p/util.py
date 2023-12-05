@@ -1,5 +1,6 @@
 import hashlib
 from datetime import datetime
+from functools import cached_property
 from typing import Optional
 
 from sqa.worker.p2p import messages_pb2 as msg_pb
@@ -16,7 +17,7 @@ class QueryInfo:
     def finished(self) -> None:
         self.end_time = datetime.now()
 
-    @property
+    @cached_property
     def exec_time_ms(self) -> int:
         return int((self.end_time - self.start_time).total_seconds() * 1000)
 
