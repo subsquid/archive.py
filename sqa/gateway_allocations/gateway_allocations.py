@@ -60,14 +60,15 @@ class GatewayAllocations:
 
     async def _update(self):
         block_number = self._storage.latest_update_block()
-        (logs, _, last_scanned_block) = await self._provider.get_all_allocations(block_number)
+        (logs, last_scanned_block) = await self._provider.get_all_allocations(block_number)
         allocations = self._filter_out_old_allocations(
             self._filter_own_allocations(logs)
         )
-        self._storage.update_latest_block_scanned(last_scanned_block)
         if len(allocations) == 0:
+            self._storage.update_latest_block_scanned(last_scanned_block)
             return
         self._storage.increase_allocations(allocations)
+        self._storage.update_latest_block_scanned(last_scanned_block)
         gateways_updated = list(set([i.gateway for i in allocations]))
         updated_gateway_allocations = self._storage.get_allocations_for(gateways_updated)
         summary = '; '.join([f'Client {gateway}, Total: {allocated}, Used: {used}' for (gateway, allocated, used) in
