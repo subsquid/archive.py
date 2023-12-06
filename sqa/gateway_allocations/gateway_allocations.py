@@ -59,9 +59,12 @@ class GatewayAllocations:
         return allocated >= used + SINGLE_EXECUTION_COST
 
     async def _update(self):
+        block_number = self._storage.latest_update_block()
+        (logs, _, last_scanned_block) = await self._provider.get_all_allocations(block_number)
         allocations = self._filter_out_old_allocations(
-            self._filter_own_allocations(await self._provider.get_all_allocations())
+            self._filter_own_allocations(logs)
         )
+        self._storage.update_latest_block_scanned(last_scanned_block)
         if len(allocations) == 0:
             return
         self._storage.increase_allocations(allocations)

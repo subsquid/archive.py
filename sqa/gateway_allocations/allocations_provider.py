@@ -21,8 +21,13 @@ class AllocationsProvider:
         with open(f'{os.path.dirname(__file__)}/abi/WorkerRegistration.json', 'r') as abi:
             self._worker_registration = self._w3.eth.contract(address=WORKER_REGISTRATION_ADDRESS, abi=abi.read())
 
-    async def get_all_allocations(self, from_block=GATEWAY_CONTRACT_CREATION_BLOCK) -> Tuple[AttributeDict]:
-        return await self._gateway.events.AllocatedCUs.get_logs(fromBlock=from_block)
+    async def get_all_allocations(self, from_block=None) -> (Tuple[AttributeDict], int, int):
+        MAX_BLOCKS = 49_000
+        first_block = from_block if from_block is not None else GATEWAY_CONTRACT_CREATION_BLOCK
+        current_block = await self._w3.eth.get_block_number()
+        last_block = min(first_block + MAX_BLOCKS, current_block)
+        logs = await self._gateway.events.AllocatedCUs.get_logs(fromBlock=first_block, toBlock=last_block)
+        return logs, first_block, last_block
 
     async def get_worker_id(self, peer_id: str) -> int:
         return await self._worker_registration.functions.workerIds(base58.b58decode(peer_id)).call()

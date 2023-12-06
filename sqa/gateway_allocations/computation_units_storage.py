@@ -12,6 +12,8 @@ class ComputationUnitsStorage:
         with self._db_conn:
             self._db_conn.execute(
                 'CREATE TABLE IF NOT EXISTS gateways(gatewayId varchar(255) not null primary key, workerId int, allocated int, used int, latest_block_updated int)')
+            self._db_conn.execute(
+                'CREATE TABLE IF NOT EXISTS blockScanned(workerId varchar(255) not null primary key, latestBlockScanned int)')
 
     def __del__(self):
         self._db_conn.close()
@@ -34,7 +36,8 @@ class ComputationUnitsStorage:
         self._assert_initialized()
 
         with self._db_conn:
-            res = self._db_conn.execute(f'SELECT gatewayId, latest_block_updated FROM gateways WHERE workerId=?', [self._own_id]).fetchall()
+            res = self._db_conn.execute(f'SELECT gatewayId, latest_block_updated FROM gateways WHERE workerId=?',
+                                        [self._own_id]).fetchall()
             if res is None:
                 return {}
             return dict(res)
@@ -57,3 +60,21 @@ class ComputationUnitsStorage:
                 f'SELECT gatewayId, allocated, used FROM gateways WHERE gatewayId IN ({gateways_list}) AND workerId=?',
                 [self._own_id]
             ).fetchall()
+
+    def latest_update_block(self) -> int | None:
+        self._assert_initialized()
+
+        with self._db_conn:
+            block_number = self._db_conn.execute(
+                'SELECT latestBlockScanned FROM blockScanned WHERE workerId=?', [self._own_id]
+            ).fetchone()
+            return int(block_number[0]) if block_number is not None else None
+
+    def update_latest_block_scanned(self, block_number: int):
+        self._assert_initialized()
+
+        with self._db_conn:
+            self._db_conn.execute(
+                'INSERT INTO blockScanned VALUES(?,?) ON CONFLICT(workerId) DO UPDATE SET latestBlockScanned=? WHERE workerId=?',
+                [self._own_id, block_number, block_number, self._own_id]
+            )
