@@ -1,3 +1,4 @@
+import asyncio
 import os
 from typing import Tuple
 import base58
@@ -11,6 +12,7 @@ GATEWAY_ADDRESS = AsyncWeb3.to_checksum_address(
 WORKER_REGISTRATION_ADDRESS = AsyncWeb3.to_checksum_address(
     os.environ.get('WORKER_REGISTRATION_ADDRESS', '0x6867E96A0259E68A571a368C0b8d733Aa56E3915')
 )
+MAX_BLOCKS = int(os.environ.get('MAX_GET_LOG_BLOCKS', 1_000_000))
 
 
 class AllocationsProvider:
@@ -21,8 +23,17 @@ class AllocationsProvider:
         with open(f'{os.path.dirname(__file__)}/abi/WorkerRegistration.json', 'r') as abi:
             self._worker_registration = self._w3.eth.contract(address=WORKER_REGISTRATION_ADDRESS, abi=abi.read())
 
-    async def get_all_allocations(self, from_block=GATEWAY_CONTRACT_CREATION_BLOCK) -> Tuple[AttributeDict]:
-        return await self._gateway.events.AllocatedCUs.get_logs(fromBlock=from_block)
+    async def get_all_allocations(self, from_block: int = None) -> (Tuple[AttributeDict], int):
+        first_block = from_block if from_block is not None else GATEWAY_CONTRACT_CREATION_BLOCK
+        current_block = await self._w3.eth.get_block_number()
+        last_block = min(first_block + MAX_BLOCKS, current_block)
+        logs = []
+        while first_block < current_block:
+            last_block = min(first_block + MAX_BLOCKS, current_block)
+            logs += await self._gateway.events.AllocatedCUs.get_logs(fromBlock=first_block, toBlock=last_block)
+            first_block = last_block + 1
+            await asyncio.sleep(0.1) # So we don't get rate limited
+        return logs, last_block
 
     async def get_worker_id(self, peer_id: str) -> int:
         return await self._worker_registration.functions.workerIds(base58.b58decode(peer_id)).call()
