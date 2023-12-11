@@ -32,7 +32,7 @@ MAX_MESSAGE_LENGTH = 100 * 1024 * 1024  # 100 MiB
 LOGS_SEND_INTERVAL_SEC = int(os.environ.get('LOGS_SEND_INTERVAL_SEC', '600'))
 PING_TOPIC = "worker_ping"
 LOGS_TOPIC = "worker_query_logs"
-WORKER_VERSION = "0.1.5"
+WORKER_VERSION = "0.1.6"
 
 
 class P2PTransport:
@@ -91,11 +91,8 @@ class P2PTransport:
                 last_collected_seq_no = envelope.logs_collected.sequence_numbers.get(self._local_peer_id)
                 self._logs_storage.logs_collected(last_collected_seq_no)
 
-            elif msg_type in ('ping', 'query_logs'):
-                continue  # Just ignore pings and logs from other workers
-
             else:
-                LOG.warning(f"Unexpected message type received: {msg_type}")
+                continue  # Just ignore pings and logs from other workers
 
     async def _send_logs_loop(self) -> None:
         while True:
@@ -191,15 +188,15 @@ class P2PTransport:
 
     async def send_ping(self, state: State, stored_bytes: int, pause=False) -> None:
         STORED_BYTES.set(stored_bytes)
-        ping = msg_pb.Ping(
+        ping = msg_pb.PingV2(
             worker_id=self._local_peer_id,
-            state=state_to_proto(state),
+            stored_ranges=state_to_proto(state),
             stored_bytes=stored_bytes,
             version=WORKER_VERSION,
         )
         signature: Bytes = await self._transport.Sign(Bytes(bytes=ping.SerializeToString()))
         ping.signature = signature.bytes
-        envelope = msg_pb.Envelope(ping=ping)
+        envelope = msg_pb.Envelope(ping_v2=ping)
 
         # We expect pong to be delivered before the next ping is sent
         if self._expected_pong is not None:

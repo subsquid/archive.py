@@ -22,14 +22,14 @@ class QueryInfo:
         return int((self.end_time - self.start_time).total_seconds() * 1000)
 
 
-def state_to_proto(state: State) -> msg_pb.WorkerState:
-    return msg_pb.WorkerState(datasets={
-        ds: msg_pb.RangeSet(ranges=[
+def state_to_proto(state: State) -> list[msg_pb.DatasetRanges]:
+    return [msg_pb.DatasetRanges(
+        url=url,
+        ranges=[
             msg_pb.Range(begin=begin, end=end)
             for begin, end in range_set
-        ])
-        for ds, range_set in state.items()
-    })
+        ]
+    ) for url, range_set in state.items()]
 
 
 def state_from_proto(state: msg_pb.WorkerState) -> State:

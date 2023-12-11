@@ -6,11 +6,20 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Map
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
+class DatasetRanges(_message.Message):
+    __slots__ = ["ranges", "url"]
+    RANGES_FIELD_NUMBER: _ClassVar[int]
+    URL_FIELD_NUMBER: _ClassVar[int]
+    ranges: _containers.RepeatedCompositeFieldContainer[Range]
+    url: str
+    def __init__(self, url: _Optional[str] = ..., ranges: _Optional[_Iterable[_Union[Range, _Mapping]]] = ...) -> None: ...
+
 class Envelope(_message.Message):
-    __slots__ = ["dataset_state", "logs_collected", "ping", "pong", "query", "query_executed", "query_finished", "query_logs", "query_result", "query_submitted", "state_update"]
+    __slots__ = ["dataset_state", "logs_collected", "ping_v1", "ping_v2", "pong", "query", "query_executed", "query_finished", "query_logs", "query_result", "query_submitted", "state_update"]
     DATASET_STATE_FIELD_NUMBER: _ClassVar[int]
     LOGS_COLLECTED_FIELD_NUMBER: _ClassVar[int]
-    PING_FIELD_NUMBER: _ClassVar[int]
+    PING_V1_FIELD_NUMBER: _ClassVar[int]
+    PING_V2_FIELD_NUMBER: _ClassVar[int]
     PONG_FIELD_NUMBER: _ClassVar[int]
     QUERY_EXECUTED_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
@@ -21,7 +30,8 @@ class Envelope(_message.Message):
     STATE_UPDATE_FIELD_NUMBER: _ClassVar[int]
     dataset_state: RangeSet
     logs_collected: LogsCollected
-    ping: Ping
+    ping_v1: PingV1
+    ping_v2: PingV2
     pong: Pong
     query: Query
     query_executed: QueryExecuted
@@ -30,7 +40,7 @@ class Envelope(_message.Message):
     query_result: QueryResult
     query_submitted: QuerySubmitted
     state_update: WorkerState
-    def __init__(self, ping: _Optional[_Union[Ping, _Mapping]] = ..., state_update: _Optional[_Union[WorkerState, _Mapping]] = ..., pong: _Optional[_Union[Pong, _Mapping]] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_result: _Optional[_Union[QueryResult, _Mapping]] = ..., dataset_state: _Optional[_Union[RangeSet, _Mapping]] = ..., query_submitted: _Optional[_Union[QuerySubmitted, _Mapping]] = ..., query_finished: _Optional[_Union[QueryFinished, _Mapping]] = ..., query_executed: _Optional[_Union[QueryExecuted, _Mapping]] = ..., query_logs: _Optional[_Union[QueryLogs, _Mapping]] = ..., logs_collected: _Optional[_Union[LogsCollected, _Mapping]] = ...) -> None: ...
+    def __init__(self, ping_v1: _Optional[_Union[PingV1, _Mapping]] = ..., state_update: _Optional[_Union[WorkerState, _Mapping]] = ..., pong: _Optional[_Union[Pong, _Mapping]] = ..., ping_v2: _Optional[_Union[PingV2, _Mapping]] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_result: _Optional[_Union[QueryResult, _Mapping]] = ..., dataset_state: _Optional[_Union[RangeSet, _Mapping]] = ..., query_submitted: _Optional[_Union[QuerySubmitted, _Mapping]] = ..., query_finished: _Optional[_Union[QueryFinished, _Mapping]] = ..., query_executed: _Optional[_Union[QueryExecuted, _Mapping]] = ..., query_logs: _Optional[_Union[QueryLogs, _Mapping]] = ..., logs_collected: _Optional[_Union[LogsCollected, _Mapping]] = ...) -> None: ...
 
 class InputAndOutput(_message.Message):
     __slots__ = ["num_read_chunks", "output"]
@@ -61,7 +71,7 @@ class OkResult(_message.Message):
     exec_plan: bytes
     def __init__(self, data: _Optional[bytes] = ..., exec_plan: _Optional[bytes] = ...) -> None: ...
 
-class Ping(_message.Message):
+class PingV1(_message.Message):
     __slots__ = ["pause", "signature", "state", "stored_bytes", "version", "worker_id", "worker_url"]
     PAUSE_FIELD_NUMBER: _ClassVar[int]
     SIGNATURE_FIELD_NUMBER: _ClassVar[int]
@@ -78,6 +88,20 @@ class Ping(_message.Message):
     worker_id: str
     worker_url: str
     def __init__(self, worker_id: _Optional[str] = ..., worker_url: _Optional[str] = ..., state: _Optional[_Union[WorkerState, _Mapping]] = ..., pause: bool = ..., stored_bytes: _Optional[int] = ..., version: _Optional[str] = ..., signature: _Optional[bytes] = ...) -> None: ...
+
+class PingV2(_message.Message):
+    __slots__ = ["signature", "stored_bytes", "stored_ranges", "version", "worker_id"]
+    SIGNATURE_FIELD_NUMBER: _ClassVar[int]
+    STORED_BYTES_FIELD_NUMBER: _ClassVar[int]
+    STORED_RANGES_FIELD_NUMBER: _ClassVar[int]
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    WORKER_ID_FIELD_NUMBER: _ClassVar[int]
+    signature: bytes
+    stored_bytes: int
+    stored_ranges: _containers.RepeatedCompositeFieldContainer[DatasetRanges]
+    version: str
+    worker_id: str
+    def __init__(self, worker_id: _Optional[str] = ..., version: _Optional[str] = ..., stored_bytes: _Optional[int] = ..., stored_ranges: _Optional[_Iterable[_Union[DatasetRanges, _Mapping]]] = ..., signature: _Optional[bytes] = ...) -> None: ...
 
 class Pong(_message.Message):
     __slots__ = ["active", "jailed", "not_registered", "ping_hash", "unsupported_version"]
