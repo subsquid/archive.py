@@ -327,6 +327,13 @@ async def _main():
         default=9090,
         help='port to expose Prometheus metrics'
     )
+    program.add_argument(
+        '--rpc-url',
+        type=str,
+        metavar='URL',
+        required=True,
+        help='URL address of an EVM RPC node'
+    )
     args = program.parse_args()
     data_dir = args.data_dir or os.getcwd()
     chunks_dir = os.path.join(data_dir, 'worker')
@@ -347,7 +354,7 @@ async def _main():
     async with channel as chan:
         transport = P2PTransport(chan, args.scheduler_id, args.logs_collector_id)
         worker_peer_id = await transport.initialize(logs_db_path)
-        gateway_allocations = GatewayAllocations(worker_peer_id, allocations_db_path)
+        gateway_allocations = GatewayAllocations(args.rpc_url, worker_peer_id, allocations_db_path)
         worker = Worker(sm, transport, args.procs)
         await monitor_service_tasks([
             asyncio.create_task(transport.run(gateway_allocations), name='p2p_transport'),

@@ -62,6 +62,7 @@ RUN echo "#!/bin/bash \n exec /app/env/bin/python -m sqa.worker.p2p  \
     --proxy \${PROXY_ADDR}  \
     --prometheus-port \${PROMETHEUS_PORT} \
     --scheduler-id \${SCHEDULER_ID}  \
+    --rpc-url \${RPC_URL} \
     --logs-collector-id \${LOGS_COLLECTOR_ID}" > ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 ENTRYPOINT ["./entrypoint.sh"]
