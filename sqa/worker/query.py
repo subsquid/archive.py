@@ -72,6 +72,7 @@ def _get_model(q: dict) -> Model:
 class QueryResult(NamedTuple):
     result: str
     num_read_chunks: int
+    last_block: Optional[int] = None
     exec_time: Optional[dict] = None
 
 
@@ -103,9 +104,11 @@ def execute_query(
     )
 
     num_read_chunks = 0
+    last_visited_block = -1
 
     def json_lines() -> Iterable[str]:
         nonlocal num_read_chunks
+        nonlocal last_visited_block
         size = 0
 
         for chunk in get_chunks(fs, first_block=first_block, last_block=last_block):
@@ -125,13 +128,16 @@ def execute_query(
                 yield line
                 size += len(line)
 
+            if line:
+                last_visited_block = json.loads(line)['header']['number']
+
             if size > 20 * 1024 * 1024:
                 return
 
             if time.time() - beg > 2:
                 return
 
-            if line and json.loads(line)['header']['number'] < chunk.last_block:
+            if last_visited_block and last_visited_block < chunk.last_block:
                 return
 
     result = f'[{",".join(json_lines())}]'
@@ -156,5 +162,6 @@ def execute_query(
     return QueryResult(
         result=result,
         num_read_chunks=num_read_chunks,
+        last_block=last_visited_block,
         exec_time=exec_time
     )

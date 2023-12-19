@@ -6,7 +6,7 @@ groups = ["default", "dev", "http-worker", "p2p-worker", "writer"]
 cross_platform = true
 static_urls = false
 lock_version = "4.3"
-content_hash = "sha256:1f37ff391fe5e66bf0ed1081b0ea00e4d92e8a9aad199e813dccddc83c0bc676"
+content_hash = "sha256:e7030a9335308c4f9c93fb6706e6ecbe5b3e90c321585e825495a5ce54a6ba93"
 
 [[package]]
 name = "aiobotocore"
@@ -112,6 +112,16 @@ summary = "Classes Without Boilerplate"
 files = [
     {file = "attrs-23.1.0-py3-none-any.whl", hash = "sha256:1f28b4522cdc2fb4256ac1a020c78acf9cba2c6b461ccd2c126f3aa8e8335d04"},
     {file = "attrs-23.1.0.tar.gz", hash = "sha256:6279836d581513a26f1bf235f9acd333bc9115683f14f7e8fae46c98fc50e015"},
+]
+
+[[package]]
+name = "base58"
+version = "2.1.1"
+requires_python = ">=3.5"
+summary = "Base58 and Base58Check implementation."
+files = [
+    {file = "base58-2.1.1-py3-none-any.whl", hash = "sha256:11a36f4d3ce51dfc1043f3218591ac4eb1ceb172919cebe05b52a5bcc8d245c2"},
+    {file = "base58-2.1.1.tar.gz", hash = "sha256:c5d0cb3f5b6e81e8e35da5754388ddcc6d0d14b6c6a132cb93d69ed580a7278c"},
 ]
 
 [[package]]
