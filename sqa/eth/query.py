@@ -116,6 +116,7 @@ class LogRequest(TypedDict, total=False):
     topic3: list[str]
     transaction: bool
     transactionTraces: bool
+    transactionLogs: bool
 
 
 TxRequest = TypedDict('TxRequest', {
@@ -172,6 +173,7 @@ class _LogRequestSchema(mm.Schema):
     topic3 = mm.fields.List(mm.fields.Str())
     transaction = mm.fields.Boolean()
     transactionTraces = mm.fields.Boolean()
+    transactionLogs = mm.fields.Boolean()
 
 
 _TxRequestSchema = mm.Schema.from_dict({
@@ -587,7 +589,15 @@ def _build_model():
             query='SELECT * FROM logs i, s WHERE '
                   'i.block_number = s.block_number AND '
                   'i.transaction_index = s.transaction_index'
-        )
+        ),
+        JoinRel(
+            scan=log_scan,
+            include_flag_name='transactionLogs',
+            scan_columns=['transaction_index'],
+            query='SELECT * FROM logs i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        ),
     ])
 
     tx_item.sources.extend([
