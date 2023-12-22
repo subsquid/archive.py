@@ -435,7 +435,7 @@ def _build_model() -> Model:
                 table=r_ev,
                 include_flag_name='stack',
                 join_condition='s.extrinsic_index = r.extrinsic_index AND '
-                               'r.call_address is not null AND'
+                               'r.call_address is not null AND '
                                'len(s.address) <= len(r.call_address) AND '
                                's.address = r.call_address[1:len(s.address)]'
             )
