@@ -2,11 +2,13 @@ import itertools
 from typing import TypedDict, Iterable
 
 import marshmallow as mm
+import marshmallow.validate
 from pyarrow.dataset import Expression
 
 from sqa.query.model import JoinRel, RefRel, Table, Item, FieldSelection, Scan, SubRel
 from sqa.query.schema import BaseQuerySchema
-from sqa.query.util import to_snake_case, json_project, get_selected_fields, field_in, remove_camel_prefix
+from sqa.query.util import to_snake_case, json_project, get_selected_fields, remove_camel_prefix, \
+    field_in, field_gte, field_lte
 
 
 class BlockFieldSelection(TypedDict, total=False):
@@ -122,6 +124,8 @@ TxRequest = TypedDict('TxRequest', {
     'from': list[str],
     'to': list[str],
     'sighash': list[str],
+    'start_nonce': int,
+    'stop_nonce': int,
     'logs': bool,
     'traces': bool,
     'stateDiffs': bool
@@ -180,6 +184,14 @@ _TxRequestSchema = mm.Schema.from_dict({
     'from': mm.fields.List(mm.fields.Str()),
     'to': mm.fields.List(mm.fields.Str()),
     'sighash': mm.fields.List(mm.fields.Str()),
+    'start_nonce': mm.fields.Integer(
+        strict=True,
+        validate=mm.validate.Range(min=0, min_inclusive=True)
+    ),
+    'stop_nonce': mm.fields.Integer(
+        strict=True,
+        validate=mm.validate.Range(min=0, min_inclusive=True)
+    ),
     'logs': mm.fields.Boolean(),
     'traces': mm.fields.Boolean(),
     'stateDiffs': mm.fields.Boolean()
@@ -305,6 +317,8 @@ class _TxScan(Scan):
         yield field_in('to', req.get('to'))
         yield field_in('from', req.get('from'))
         yield field_in('sighash', req.get('sighash'))
+        yield field_gte('nonce', req.get('start_nonce'))
+        yield field_lte('nonce', req.get('stop_nonce'))
 
 
 class _TxItem(Item):
