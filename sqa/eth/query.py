@@ -53,7 +53,6 @@ TxFieldSelection = TypedDict('TxFieldSelection', {
     'gasUsed': bool,
     'cumulativeGasUsed': bool,
     'effectiveGasPrice': bool,
-    'callAddress': bool,
     'type': bool,
     'status': bool
 }, total=False)
