@@ -137,6 +137,7 @@ class TraceRequest(TypedDict, total=False):
     suicideRefundAddress: list[str]
     rewardAuthor: list[str]
     transaction: bool
+    transactionLogs: bool
     subtraces: bool
     parents: bool
 
@@ -194,6 +195,7 @@ class _TraceRequestSchema(mm.Schema):
     suicideRefundAddress = mm.fields.List(mm.fields.Str())
     rewardAuthor = mm.fields.List(mm.fields.Str())
     transaction = mm.fields.Boolean()
+    transactionLogs = mm.fields.Boolean()
     subtraces = mm.fields.Boolean()
     parents = mm.fields.Boolean()
 
@@ -591,6 +593,14 @@ def _build_model():
         ),
         JoinRel(
             scan=log_scan,
+            include_flag_name='transactionLogs',
+            scan_columns=['transaction_index'],
+            query='SELECT * FROM logs i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        ),
+        JoinRel(
+            scan=trace_scan,
             include_flag_name='transactionLogs',
             scan_columns=['transaction_index'],
             query='SELECT * FROM logs i, s WHERE '
