@@ -5,8 +5,8 @@
     "transactions": [
         {
             "from": ["0x1f9090aae28b8a3dceadf281b0f12828e676c326"],
-            "start_nonce": 200505,
-            "stop_nonce": 200510
+            "firstNonce": 200505,
+            "lastNonce": 200510
         }
     ],
     "fields": {
