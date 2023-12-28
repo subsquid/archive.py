@@ -140,6 +140,80 @@ def transactions_root(transactions: list[Transaction]) -> str:
                 qty2int(tx['r']),
                 qty2int(tx['s'])
             ])
+        elif tx['type'] == '0x64':
+            # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L338
+            trie[path] = b'\x64' + rlp.encode([
+                qty2int(tx['chainId']),
+                decode_hex(tx['requestId']),
+                decode_hex(tx['from']),
+                decode_hex(tx['to']),
+                qty2int(tx['value'])
+            ])
+        elif tx['type'] == '0x65':
+            # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L43
+            pass
+            # trie[path] = b'\x65' + rlp.encode([
+            #     qty2int(tx['chainId']),
+            #     decode_hex(tx['from']),
+            #     qty2int(tx['nonce']),
+            #     qty2int(tx['gasPrice']),
+            #     qty2int(tx['gas']),
+            #     decode_hex(tx['to']) if tx['to'] else b'',
+            #     qty2int(tx['value']),
+            #     decode_hex(tx['input'])
+            # ])
+        elif tx['type'] == '0x66':
+            # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L104
+            pass
+            # trie[path] = b'\x66' + rlp.encode([
+            #     qty2int(tx['chainId']),
+            #     decode_hex(tx['requestId']),
+            #     decode_hex(tx['from']),
+            #     qty2int(tx['gasPrice']),
+            #     qty2int(tx['gas']),
+            #     decode_hex(tx['to']) if tx['to'] else b'',
+            #     qty2int(tx['value']),
+            #     decode_hex(tx['input'])
+            # ])
+        elif tx['type'] == '0x68':
+            # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L161
+            trie[path] = b'\x68' + rlp.encode([
+                qty2int(tx['chainId']),
+                qty2int(tx['nonce']),
+                decode_hex(tx['from']),
+                qty2int(tx['gasPrice']),
+                qty2int(tx['gas']),
+                decode_hex(tx['to']) if tx['to'] else b'',
+                qty2int(tx['value']),
+                decode_hex(tx['input']),
+                decode_hex(tx['ticketId']),
+                decode_hex(tx['refundTo']),
+                qty2int(tx['maxRefund']),
+                qty2int(tx['submissionFeeRefund']),
+            ])
+        elif tx['type'] == '0x69':
+            # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L232
+            trie[path] = b'\x69' + rlp.encode([
+                qty2int(tx['chainId']),
+                decode_hex(tx['requestId']),
+                decode_hex(tx['from']),
+                qty2int(tx['l1BaseFee']),
+                qty2int(tx['depositValue']),
+                qty2int(tx['gasPrice']),
+                qty2int(tx['gas']),
+                decode_hex(tx['retryTo']) if tx['retryTo'] else b'',
+                qty2int(tx['retryValue']),
+                decode_hex(tx['beneficiary']),
+                qty2int(tx['maxSubmissionFee']),
+                decode_hex(tx['refundTo']),
+                decode_hex(tx['retryData']),
+            ])
+        elif tx['type'] == '0x6a':
+            # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L387
+            trie[path] = b'\x6a' + rlp.encode([
+                qty2int(tx['chainId']),
+                decode_hex(tx['input']),
+            ])
         elif tx['type'] == '0x7e':
             # https://github.com/ethereum-optimism/optimism/blob/9ff3ebb3983be52c3ca189423ae7b4aec94e0fde/specs/deposits.md#the-deposited-transaction-type
             trie[path] = b'\x7e' + rlp.encode([
