@@ -201,7 +201,7 @@ def transactions_root(transactions: list[Transaction]) -> str:
                 qty2int(tx['depositValue']),
                 qty2int(tx['gasPrice']),
                 qty2int(tx['gas']),
-                decode_hex(tx['retryTo']) if tx['retryTo'] else b'',
+                decode_hex(tx['retryTo']) if 'retryTo' in tx else b'',
                 qty2int(tx['retryValue']),
                 decode_hex(tx['beneficiary']),
                 qty2int(tx['maxSubmissionFee']),
