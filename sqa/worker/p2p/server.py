@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from json import JSONDecodeError
-from typing import AsyncIterator, Optional, Dict
+from typing import AsyncIterator, Optional, Dict, Iterator
 
 import grpc.aio
 from marshmallow import ValidationError
@@ -29,10 +29,25 @@ LOG = logging.getLogger(__name__)
 
 # This is the maximum *decompressed* size of the message
 MAX_MESSAGE_LENGTH = 100 * 1024 * 1024  # 100 MiB
+LOGS_MESSAGE_MAX_BYTES = 64000
 LOGS_SEND_INTERVAL_SEC = int(os.environ.get('LOGS_SEND_INTERVAL_SEC', '600'))
 PING_TOPIC = "worker_ping"
 LOGS_TOPIC = "worker_query_logs"
 WORKER_VERSION = "0.1.6"
+
+
+def bundle_logs(logs: list[msg_pb.QueryExecuted]) -> Iterator[msg_pb.Envelope]:
+    while logs:
+        bundle = []
+        bundle_size = 0
+        while logs and (log := logs.pop(0)).ByteSize() + bundle_size < LOGS_MESSAGE_MAX_BYTES:
+            bundle.append(log)
+            bundle_size += log.ByteSize()
+        if bundle:
+            yield msg_pb.Envelope(query_logs=msg_pb.QueryLogs(queries_executed=bundle))
+        else:
+            LOG.error("Query log too big to be sent")
+            logs.pop(0)
 
 
 class P2PTransport:
@@ -77,10 +92,6 @@ class P2PTransport:
             if msg_type == 'pong':
                 await self._handle_pong(msg.peer_id, envelope.pong)
 
-            # Deprecated message, handled for backwards compatibility with Mirovia scheduler
-            elif msg_type == 'state_update':
-                await self._handle_state_update(msg.peer_id, envelope.state_update)
-
             elif msg_type == 'query':
                 await self._handle_query(msg.peer_id, envelope.query, gateway_allocations)
 
@@ -107,17 +118,9 @@ class P2PTransport:
                 log.signature = signature.bytes
 
             # Send out
-            envelope = msg_pb.Envelope(query_logs=msg_pb.QueryLogs(queries_executed=query_logs))
             LOG.debug("Sending out query logs")
-            await self._send(envelope, topic=LOGS_TOPIC)
-
-    async def _handle_state_update(self, peer_id: str, msg: msg_pb.WorkerState) -> None:
-        if peer_id != self._scheduler_id:
-            LOG.warning(f"Wrong state update message origin: {peer_id}")
-            return
-        self._expected_pong = None
-        WORKER_STATUS.state('active')
-        await self._state_updates.put(msg)
+            for envelope in bundle_logs(query_logs):
+                await self._send(envelope, topic=LOGS_TOPIC)
 
     async def _handle_pong(self, peer_id: str, msg: msg_pb.Pong) -> None:
         if peer_id != self._scheduler_id:

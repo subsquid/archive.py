@@ -91,7 +91,7 @@ class LogsStorage:
                 self._db_conn.execute("INSERT INTO next_seq_no VALUES(?)", (next_seq_no,))
                 self.is_initialized = True
 
-    def get_logs(self) -> [QueryExecuted]:
+    def get_logs(self) -> list[QueryExecuted]:
         """ Get all stored query logs. """
         def log_from_db(seq_no, log_msg):
             log = QueryExecuted.FromString(log_msg)
