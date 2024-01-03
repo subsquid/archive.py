@@ -15,9 +15,8 @@ from sqa.metrics import WORKER_INFO, WORKER_STATUS, STORED_BYTES, EXEC_TIME, RES
 from sqa.query import MissingData
 from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
 from sqa.worker.p2p import messages_pb2 as msg_pb
-from sqa.worker.p2p.p2p_transport_pb2 import Bytes, Empty, Message, Subscription, SignedData
-from sqa.worker.p2p.p2p_transport_pb2_grpc import P2PTransportStub
 from sqa.worker.p2p.query_logs import LogsStorage
+from sqa.worker.p2p.rpc import RPCWrapper
 from sqa.worker.p2p.util import state_to_proto, sha3_256, state_from_proto, QueryInfo
 from sqa.worker.query import QueryResult, InvalidQuery
 from sqa.worker.state.controller import State
@@ -52,7 +51,7 @@ def bundle_logs(logs: list[msg_pb.QueryExecuted]) -> Iterator[msg_pb.Envelope]:
 
 class P2PTransport:
     def __init__(self, channel: grpc.aio.Channel, scheduler_id: str, logs_collector_id: str):
-        self._transport = P2PTransportStub(channel)
+        self._rpc = RPCWrapper(channel)
         self._scheduler_id = scheduler_id
         self._logs_collector_id = logs_collector_id
         self._state_updates = asyncio.Queue(maxsize=100)
@@ -63,7 +62,7 @@ class P2PTransport:
         self._expected_pong: 'Optional[bytes]' = None  # Hash of the last sent ping
 
     async def initialize(self, logs_db_path: str) -> str:
-        self._local_peer_id = (await self._transport.LocalPeerId(Empty())).peer_id
+        self._local_peer_id = await self._rpc.local_peer_id()
         LOG.info(f"Local peer ID: {self._local_peer_id}")
         WORKER_INFO.info({
             'peer_id': self._local_peer_id,
@@ -73,8 +72,8 @@ class P2PTransport:
         self._logs_storage = LogsStorage(self._local_peer_id, logs_db_path)
 
         # Subscribe to the ping & logs topics so that our node also participates in broadcasting messages
-        await self._subscribe(topic=PING_TOPIC)
-        await self._subscribe(topic=LOGS_TOPIC)
+        await self._rpc.subscribe(PING_TOPIC)
+        await self._rpc.subscribe(LOGS_TOPIC)
 
         return self._local_peer_id
 
@@ -84,20 +83,18 @@ class P2PTransport:
         await monitor_service_tasks([receive_task, send_logs_task], log=LOG)
 
     async def _receive_loop(self, gateway_allocations: GatewayAllocations) -> None:
-        async for msg in self._transport.GetMessages(Empty()):
-            assert isinstance(msg, Message)
-            envelope = msg_pb.Envelope.FromString(msg.content)
+        async for peer_id, envelope in self._rpc.get_messages():
             msg_type = envelope.WhichOneof('msg')
 
             if msg_type == 'pong':
-                await self._handle_pong(msg.peer_id, envelope.pong)
+                await self._handle_pong(peer_id, envelope.pong)
 
             elif msg_type == 'query':
-                await self._handle_query(msg.peer_id, envelope.query, gateway_allocations)
+                await self._handle_query(peer_id, envelope.query, gateway_allocations)
 
             elif msg_type == 'logs_collected':
-                if msg.peer_id != self._logs_collector_id:
-                    LOG.warning(f"Wrong next_seq_no message origin: {msg.peer_id}")
+                if peer_id != self._logs_collector_id:
+                    LOG.warning(f"Wrong next_seq_no message origin: {peer_id}")
                     continue
                 last_collected_seq_no = envelope.logs_collected.sequence_numbers.get(self._local_peer_id)
                 self._logs_storage.logs_collected(last_collected_seq_no)
@@ -114,13 +111,12 @@ class P2PTransport:
             # Sign all the logs
             query_logs = self._logs_storage.get_logs()
             for log in query_logs:
-                signature: Bytes = await self._transport.Sign(Bytes(bytes=log.SerializeToString()))
-                log.signature = signature.bytes
+                await self._rpc.sign_msg(log)
 
             # Send out
             LOG.debug("Sending out query logs")
             for envelope in bundle_logs(query_logs):
-                await self._send(envelope, topic=LOGS_TOPIC)
+                await self._rpc.send_msg(envelope, topic=LOGS_TOPIC)
 
     async def _handle_pong(self, peer_id: str, msg: msg_pb.Pong) -> None:
         if peer_id != self._scheduler_id:
@@ -156,13 +152,9 @@ class P2PTransport:
         # Verify query signature
         signature = query.signature
         query.signature = b""
-        signed_data = SignedData(
-            data=query.SerializeToString(),
-            signature=signature,
-            peer_id=client_peer_id
-        )
-        verification_result = await self._transport.VerifySignature(signed_data)
-        if not verification_result.signature_ok:
+        signed_data = query.SerializeToString()
+
+        if not await self._rpc.verify_signature(signed_data, signature, client_peer_id):
             LOG.warning(f"Query with invalid signature received from {client_peer_id}")
             return
         if not await gateway_allocations.try_to_execute(client_peer_id):
@@ -173,22 +165,6 @@ class P2PTransport:
         self._query_info[query.query_id] = QueryInfo(client_peer_id)
         await self._query_tasks.put(query)
 
-    async def _send(
-            self,
-            envelope: msg_pb.Envelope,
-            peer_id: Optional[str] = None,
-            topic: Optional[str] = None,
-    ) -> None:
-        msg = Message(
-            peer_id=peer_id,
-            topic=topic,
-            content=envelope.SerializeToString()
-        )
-        await self._transport.SendMessage(msg)
-
-    async def _subscribe(self, topic: str) -> None:
-        await self._transport.ToggleSubscription(Subscription(topic=topic, subscribed=True))
-
     async def send_ping(self, state: State, stored_bytes: int, pause=False) -> None:
         STORED_BYTES.set(stored_bytes)
         ping = msg_pb.PingV2(
@@ -197,8 +173,7 @@ class P2PTransport:
             stored_bytes=stored_bytes,
             version=WORKER_VERSION,
         )
-        signature: Bytes = await self._transport.Sign(Bytes(bytes=ping.SerializeToString()))
-        ping.signature = signature.bytes
+        await self._rpc.sign_msg(ping)
         envelope = msg_pb.Envelope(ping_v2=ping)
 
         # We expect pong to be delivered before the next ping is sent
@@ -208,7 +183,7 @@ class P2PTransport:
             # LOG.error("Pong message not received in time. The scheduler is not responding. Contact tech support.")
         self._expected_pong = sha3_256(ping.SerializeToString())
 
-        await self._send(envelope, topic=PING_TOPIC)
+        await self._rpc.send_msg(envelope, topic=PING_TOPIC)
 
     async def state_updates(self) -> AsyncIterator[State]:
         while True:
@@ -240,7 +215,7 @@ class P2PTransport:
                 )
             )
         )
-        await self._send(envelope, peer_id=query_info.client_id)
+        await self._rpc.send_msg(envelope, peer_id=query_info.client_id)
         self._logs_storage.query_executed(query, query_info, result)
 
     async def send_query_error(
@@ -263,7 +238,7 @@ class P2PTransport:
                 server_error=server_error,
             )
         )
-        await self._send(envelope, peer_id=query_info.client_id)
+        await self._rpc.send_msg(envelope, peer_id=query_info.client_id)
         self._logs_storage.query_error(query, query_info, bad_request, server_error)
 
 
