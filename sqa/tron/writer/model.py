@@ -22,7 +22,7 @@ class Log(TypedDict):
 
 class Transaction(TypedDict):
     hash: str
-    ret: str
+    ret: NotRequired[str]
     signature: list[str]
     type: str
     parameter: Any

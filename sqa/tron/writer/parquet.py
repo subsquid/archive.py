@@ -99,8 +99,7 @@ class TransactionTable(TableBuilder):
     def append(self, block_number: int, tx: Transaction) -> None:
         self.block_number.append(block_number)
         self.hash.append(tx['hash'])
-        assert len(tx['ret']) == 1
-        self.ret.append(tx['ret'])
+        self.ret.append(tx.get('ret'))
         self.signature.append(tx['signature'])
         self.type.append(tx['type'])
         self.parameter.append(_to_json(tx['parameter']))
