@@ -1,8 +1,11 @@
+import struct
+
 import base58
 import pyarrow
 
-from sqa.writer.parquet import TableBuilder, Column
-from .model import BlockHeader, Transaction, Instruction
+from sqa.fs import Fs
+from sqa.writer.parquet import TableBuilder, Column, BaseParquetWriter, add_index_column, add_size_column
+from .model import BlockHeader, Transaction, Instruction, Block
 
 
 def base58_bytes():
@@ -77,8 +80,8 @@ class TransactionTable(TableBuilder):
         self.num_required_signatures.append(tx['numRequiredSignatures'])
         self.recent_block_hash.append(tx['recentBlockhash'])
         self.signatures.append(tx['signatures'])
-        self.err.append(tx['err'] or None)
-        self.compute_units_consumed.append(tx['computeUnitsConsumed'])
+        self.err.append(tx.get('err'))
+        self.compute_units_consumed.append(tx.get('computeUnitsConsumed'))
         self.fee.append(tx['fee'])
         self.log_messages.append(tx['logMessages'])
         self.loaded_addresses.append(tx['loadedAddresses'])
@@ -108,3 +111,82 @@ class InstructionTable(TableBuilder):
         self.data.append(i['data'])
 
         data = base58.b58decode(i['data'])
+        self.d8.append(data[0])
+        self.d16.append(struct.unpack_from('<H', data) if len(data) >= 2 else 0)
+        self.d32.append(struct.unpack_from('<I', data) if len(data) >= 4 else 0)
+        self.d64.append(struct.unpack_from('<Q', data) if len(data) >= 8 else 0)
+
+
+class ParquetWriter(BaseParquetWriter):
+    def __init__(self):
+        self.blocks = BlockTable()
+        self.transactions = TransactionTable()
+        self.instructions = InstructionTable()
+
+    def push(self, block: Block) -> None:
+        block_number = block['header']['height']
+
+        self.blocks.append(block['header'])
+
+        for tx in block['transactions']:
+            self.transactions.append(block_number, tx)
+
+        for i in block['instructions']:
+            self.instructions.append(block_number, i)
+
+    def _write(self, fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
+        write_parquet(fs, tables)
+
+    def get_block_height(self, block: Block) -> int:
+        return block['header']['height']
+
+    def get_block_hash(self, block: Block) -> str:
+        return block['header']['hash']
+
+    def get_block_parent_hash(self, block: Block) -> str:
+        return block['header']['parentHash']
+
+
+def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
+    kwargs = {
+        'data_page_size': 128 * 1024,
+        'dictionary_pagesize_limit': 128 * 1024,
+        'compression': 'zstd',
+        'write_page_index': True,
+        'write_batch_size': 100
+    }
+
+    transactions = tables['transactions']
+    transactions = add_index_column(transactions)
+
+    fs.write_parquet(
+        'transactions.parquet',
+        transactions,
+        **kwargs
+    )
+
+    instructions = tables['instructions']
+    instructions = instructions.sort_by([
+        ('program_id', 'ascending'),
+        ('block_number', 'ascending'),
+        ('transaction_index', 'ascending'),
+        ('instruction_address', 'ascending')
+    ])
+    instructions = add_size_column(instructions, 'data')
+    instructions = add_index_column(instructions)
+
+    fs.write_parquet(
+        'instructions.parquet',
+        instructions,
+        use_dictionary=['program_id'],
+        row_group_size=100_000_000,
+        **kwargs
+    )
+
+    blocks = tables['blocks']
+
+    fs.write_parquet(
+        'blocks.parquet',
+        blocks,
+        **kwargs
+    )
