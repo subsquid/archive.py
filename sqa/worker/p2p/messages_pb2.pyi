@@ -15,32 +15,24 @@ class DatasetRanges(_message.Message):
     def __init__(self, url: _Optional[str] = ..., ranges: _Optional[_Iterable[_Union[Range, _Mapping]]] = ...) -> None: ...
 
 class Envelope(_message.Message):
-    __slots__ = ["dataset_state", "logs_collected", "ping_v1", "ping_v2", "pong", "query", "query_executed", "query_finished", "query_logs", "query_result", "query_submitted", "state_update"]
-    DATASET_STATE_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ["logs_collected", "ping_v2", "pong", "query", "query_finished", "query_logs", "query_result", "query_submitted"]
     LOGS_COLLECTED_FIELD_NUMBER: _ClassVar[int]
-    PING_V1_FIELD_NUMBER: _ClassVar[int]
     PING_V2_FIELD_NUMBER: _ClassVar[int]
     PONG_FIELD_NUMBER: _ClassVar[int]
-    QUERY_EXECUTED_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
     QUERY_FINISHED_FIELD_NUMBER: _ClassVar[int]
     QUERY_LOGS_FIELD_NUMBER: _ClassVar[int]
     QUERY_RESULT_FIELD_NUMBER: _ClassVar[int]
     QUERY_SUBMITTED_FIELD_NUMBER: _ClassVar[int]
-    STATE_UPDATE_FIELD_NUMBER: _ClassVar[int]
-    dataset_state: RangeSet
     logs_collected: LogsCollected
-    ping_v1: PingV1
     ping_v2: PingV2
     pong: Pong
     query: Query
-    query_executed: QueryExecuted
     query_finished: QueryFinished
     query_logs: QueryLogs
     query_result: QueryResult
     query_submitted: QuerySubmitted
-    state_update: WorkerState
-    def __init__(self, ping_v1: _Optional[_Union[PingV1, _Mapping]] = ..., state_update: _Optional[_Union[WorkerState, _Mapping]] = ..., pong: _Optional[_Union[Pong, _Mapping]] = ..., ping_v2: _Optional[_Union[PingV2, _Mapping]] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_result: _Optional[_Union[QueryResult, _Mapping]] = ..., dataset_state: _Optional[_Union[RangeSet, _Mapping]] = ..., query_submitted: _Optional[_Union[QuerySubmitted, _Mapping]] = ..., query_finished: _Optional[_Union[QueryFinished, _Mapping]] = ..., query_executed: _Optional[_Union[QueryExecuted, _Mapping]] = ..., query_logs: _Optional[_Union[QueryLogs, _Mapping]] = ..., logs_collected: _Optional[_Union[LogsCollected, _Mapping]] = ...) -> None: ...
+    def __init__(self, pong: _Optional[_Union[Pong, _Mapping]] = ..., ping_v2: _Optional[_Union[PingV2, _Mapping]] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_result: _Optional[_Union[QueryResult, _Mapping]] = ..., query_submitted: _Optional[_Union[QuerySubmitted, _Mapping]] = ..., query_finished: _Optional[_Union[QueryFinished, _Mapping]] = ..., query_logs: _Optional[_Union[QueryLogs, _Mapping]] = ..., logs_collected: _Optional[_Union[LogsCollected, _Mapping]] = ...) -> None: ...
 
 class InputAndOutput(_message.Message):
     __slots__ = ["num_read_chunks", "output"]
@@ -70,24 +62,6 @@ class OkResult(_message.Message):
     data: bytes
     exec_plan: bytes
     def __init__(self, data: _Optional[bytes] = ..., exec_plan: _Optional[bytes] = ...) -> None: ...
-
-class PingV1(_message.Message):
-    __slots__ = ["pause", "signature", "state", "stored_bytes", "version", "worker_id", "worker_url"]
-    PAUSE_FIELD_NUMBER: _ClassVar[int]
-    SIGNATURE_FIELD_NUMBER: _ClassVar[int]
-    STATE_FIELD_NUMBER: _ClassVar[int]
-    STORED_BYTES_FIELD_NUMBER: _ClassVar[int]
-    VERSION_FIELD_NUMBER: _ClassVar[int]
-    WORKER_ID_FIELD_NUMBER: _ClassVar[int]
-    WORKER_URL_FIELD_NUMBER: _ClassVar[int]
-    pause: bool
-    signature: bytes
-    state: WorkerState
-    stored_bytes: int
-    version: str
-    worker_id: str
-    worker_url: str
-    def __init__(self, worker_id: _Optional[str] = ..., worker_url: _Optional[str] = ..., state: _Optional[_Union[WorkerState, _Mapping]] = ..., pause: bool = ..., stored_bytes: _Optional[int] = ..., version: _Optional[str] = ..., signature: _Optional[bytes] = ...) -> None: ...
 
 class PingV2(_message.Message):
     __slots__ = ["signature", "stored_bytes", "stored_ranges", "version", "worker_id"]
