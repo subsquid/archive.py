@@ -32,7 +32,7 @@ LOGS_MESSAGE_MAX_BYTES = 64000
 LOGS_SEND_INTERVAL_SEC = int(os.environ.get('LOGS_SEND_INTERVAL_SEC', '600'))
 PING_TOPIC = "worker_ping"
 LOGS_TOPIC = "worker_query_logs"
-WORKER_VERSION = "0.1.6"
+WORKER_VERSION = "0.2.0"
 
 
 def bundle_logs(logs: list[msg_pb.QueryExecuted]) -> Iterator[msg_pb.Envelope]:
