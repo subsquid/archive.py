@@ -1,3 +1,4 @@
+import json
 import struct
 
 import base58
@@ -80,7 +81,8 @@ class TransactionTable(TableBuilder):
         self.num_required_signatures.append(tx['numRequiredSignatures'])
         self.recent_block_hash.append(tx['recentBlockhash'])
         self.signatures.append(tx['signatures'])
-        self.err.append(tx.get('err'))
+        err = tx.get('err')
+        self.err.append(None if err is None else json.dumps(err))
         self.compute_units_consumed.append(tx.get('computeUnitsConsumed'))
         self.fee.append(tx['fee'])
         self.log_messages.append(tx['logMessages'])
@@ -111,10 +113,10 @@ class InstructionTable(TableBuilder):
         self.data.append(i['data'])
 
         data = base58.b58decode(i['data'])
-        self.d8.append(data[0])
-        self.d16.append(struct.unpack_from('<H', data) if len(data) >= 2 else 0)
-        self.d32.append(struct.unpack_from('<I', data) if len(data) >= 4 else 0)
-        self.d64.append(struct.unpack_from('<Q', data) if len(data) >= 8 else 0)
+        self.d8.append(data[0] if data else None)
+        self.d16.append(struct.unpack_from('<H', data)[0] if len(data) >= 2 else None)
+        self.d32.append(struct.unpack_from('<I', data)[0] if len(data) >= 4 else None)
+        self.d64.append(struct.unpack_from('<Q', data)[0] if len(data) >= 8 else None)
 
 
 class ParquetWriter(BaseParquetWriter):
@@ -150,10 +152,10 @@ class ParquetWriter(BaseParquetWriter):
 def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     kwargs = {
         'data_page_size': 128 * 1024,
-        'dictionary_pagesize_limit': 128 * 1024,
+        'dictionary_pagesize_limit': 2 * 1024 * 1024,
         'compression': 'zstd',
         'write_page_index': True,
-        'write_batch_size': 100
+        'write_batch_size': 200
     }
 
     transactions = tables['transactions']
@@ -162,6 +164,19 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     fs.write_parquet(
         'transactions.parquet',
         transactions,
+        use_dictionary=[
+            'account_keys.list.element',
+            'address_table_lookups.list.element.account_key',
+            'loaded_addresses.readonly.list.element',
+            'loaded_addresses.writable.list.element',
+            'fee_payer'
+        ],
+        write_statistics=[
+            'block_number',
+            'index',
+            'fee_payer'
+        ],
+        row_group_size=100_000,
         **kwargs
     )
 
@@ -170,7 +185,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         ('program_id', 'ascending'),
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
-        ('instruction_address', 'ascending')
+        # ('instruction_address', 'ascending')
     ])
     instructions = add_size_column(instructions, 'data')
     instructions = add_index_column(instructions)
@@ -178,8 +193,17 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     fs.write_parquet(
         'instructions.parquet',
         instructions,
-        use_dictionary=['program_id'],
-        row_group_size=100_000_000,
+        use_dictionary=['program_id', 'accounts.list.element'],
+        write_statistics=[
+            'block_number',
+            'transaction_index',
+            'program_id',
+            'd8',
+            'd16',
+            'd32',
+            'd64'
+        ],
+        row_group_size=100_000,
         **kwargs
     )
 

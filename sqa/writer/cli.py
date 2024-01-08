@@ -14,6 +14,9 @@ class CLI:
     def create_writer(self) -> Writer:
         raise NotImplementedError()
 
+    def get_default_chunk_size(self) -> int:
+        return 1024
+
     @cache
     def _arguments(self):
         program = argparse.ArgumentParser(
@@ -53,7 +56,7 @@ class CLI:
             '--chunk-size',
             metavar='MB',
             type=int,
-            default=1024,
+            default=self.get_default_chunk_size(),
             help='data chunk size in roughly estimated megabytes'
         )
 

@@ -15,9 +15,12 @@ def ingest_from_service(
         service_url: str,
         get_block_height: Callable[[Block], int],
         next_block: int,
-        last_block=math.inf
+        last_block=None
 ) -> Iterable[Block]:
     import httpx
+
+    if last_block is None:
+        last_block = math.inf
 
     data_range = {
         'from': next_block
