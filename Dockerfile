@@ -54,6 +54,7 @@ COPY --from=p2p-worker-builder /project/.venv /app/env/
 COPY --from=p2p-worker-builder /project/sqa /app/sqa/
 VOLUME /app/data
 ENV DATA_DIR=/app/data
+ENV ENABLE_ALLOCATIONS=1
 ENV PING_INTERVAL_SEC=20
 ENV LOGS_SEND_INTERVAL_SEC=600
 ENV PROMETHEUS_PORT=9090
