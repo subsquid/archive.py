@@ -153,14 +153,22 @@ class P2PTransport:
         signature = query.signature
         query.signature = b""
         signed_data = query.SerializeToString()
-
         if not await self._rpc.verify_signature(signed_data, signature, client_peer_id):
             LOG.warning(f"Query with invalid signature received from {client_peer_id}")
             return
+        query.signature = signature
+
+        # Check if client has sufficient compute units allocated
         if not await gateway_allocations.try_to_execute(client_peer_id):
             LOG.warning(f"Not enough allocated for {client_peer_id}")
+            envelope = msg_pb.Envelope(
+                query_result=msg_pb.QueryResult(
+                    query_id=query.query_id,
+                    bad_request="Not enough compute units allocated",
+                )
+            )
+            await self._rpc.send_msg(envelope, peer_id=client_peer_id)
             return
-        query.signature = signature
 
         self._query_info[query.query_id] = QueryInfo(client_peer_id)
         await self._query_tasks.put(query)

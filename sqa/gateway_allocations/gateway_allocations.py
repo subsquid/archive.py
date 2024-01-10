@@ -50,7 +50,7 @@ class GatewayAllocations:
         self._storage.increase_gateway_usage(SINGLE_EXECUTION_COST, gateway_id)
         return True
 
-    async def _can_execute(self, gateway_id: str) -> bool:
+    def _can_execute(self, gateway_id: str) -> bool:
         allocations = self._storage.get_allocations_for([gateway_id])
         if not allocations:
             return False

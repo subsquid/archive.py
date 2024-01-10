@@ -47,7 +47,7 @@ class ComputationUnitsStorage:
 
         with self._db_conn:
             self._db_conn.execute(
-                'UPDATE SET used = used+? WHERE gatewayId=? AND workerId=?',
+                'UPDATE gateways SET used = used+? WHERE gatewayId=? AND workerId=?',
                 (used_units, gateway, self._own_id)
             )
 
