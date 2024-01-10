@@ -139,6 +139,7 @@ class TraceRequest(TypedDict, total=False):
     callTo: list[str]
     callSighash: list[str]
     suicideRefundAddress: list[str]
+    createResultAddress: list[str]
     rewardAuthor: list[str]
     transaction: bool
     transactionLogs: bool
@@ -205,6 +206,7 @@ class _TraceRequestSchema(mm.Schema):
     callTo = mm.fields.List(mm.fields.Str())
     callSighash = mm.fields.List(mm.fields.Str())
     suicideRefundAddress = mm.fields.List(mm.fields.Str())
+    createResultAddress = mm.fields.List(mm.fields.Str())
     rewardAuthor = mm.fields.List(mm.fields.Str())
     transaction = mm.fields.Boolean()
     transactionLogs = mm.fields.Boolean()
@@ -407,6 +409,7 @@ class _TraceScan(Scan):
         yield field_in('call_to', req.get('callTo'))
         yield field_in('call_sighash', req.get('callSighash'))
         yield field_in('suicide_refund_address', req.get('suicideRefundAddress'))
+        yield field_in('create_result_address', req.get('createResultAddress'))
         yield field_in('reward_author', req.get('rewardAuthor'))
 
 
