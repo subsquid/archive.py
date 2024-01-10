@@ -19,9 +19,11 @@ def _to_json(val: Any) -> str | None:
         return json.dumps(val)
 
 
-def _to_sighash(data: str) -> str | None:
-    assert len(data) >= 8
-    return data[:8]
+def _to_sighash(data: str | None) -> str | None:
+    if data is None:
+        return None
+    else:
+        return data[:8] if len(data) >= 8 else None
 
 
 class BlockTable(TableBuilder):
@@ -40,17 +42,17 @@ class BlockTable(TableBuilder):
         self.hash.append(header['hash'])
         self.parent_hash.append(header['parentHash'])
         self.tx_trie_root.append(header['txTrieRoot'])
-        self.version.append(header['version'])
+        self.version.append(header.get('version'))
         self.timestamp.append(header['timestamp'])
         self.witness_address.append(header['witnessAddress'])
-        self.witness_signature.append(header['witnessSignature'])
+        self.witness_signature.append(header.get('witnessSignature'))
 
 
 class TransactionTable(TableBuilder):
     def __init__(self):
         self.block_number = Column(pyarrow.int32())
         self.hash = Column(pyarrow.string())
-        self.ret = Column(pyarrow.string())
+        self.ret = Column(pyarrow.list_(JSON()))
         self.signature = Column(pyarrow.list_(pyarrow.string()))
         self.type = Column(pyarrow.string())
         self.parameter = Column(JSON())
@@ -99,15 +101,15 @@ class TransactionTable(TableBuilder):
     def append(self, block_number: int, tx: Transaction) -> None:
         self.block_number.append(block_number)
         self.hash.append(tx['hash'])
-        self.ret.append(tx.get('ret'))
-        self.signature.append(tx['signature'])
+        self.ret.append(_to_json(tx.get('ret')))
+        self.signature.append(tx.get('signature'))
         self.type.append(tx['type'])
         self.parameter.append(_to_json(tx['parameter']))
         self.permission_id.append(tx.get('permissionId'))
-        self.ref_block_bytes.append(tx['refBlockBytes'])
-        self.ref_block_hash.append(tx['refBlockHash'])
+        self.ref_block_bytes.append(tx.get('refBlockBytes'))
+        self.ref_block_hash.append(tx.get('refBlockHash'))
         self.fee_limit.append(tx.get('feeLimit'))
-        self.expiration.append(tx['expiration'])
+        self.expiration.append(tx.get('expiration'))
         self.timestamp.append(tx.get('timestamp'))
         self.raw_data_hex.append(tx['rawDataHex'])
 
@@ -148,7 +150,7 @@ class TransactionTable(TableBuilder):
         if tx['type'] == 'TriggerSmartContract':
             self._trigger_smart_contract_owner.append(tx['parameter']['value']['owner_address'])
             self._trigger_smart_contract_contract.append(tx['parameter']['value']['contract_address'])
-            self._trigger_smart_contract_sighash.append(_to_sighash(tx['parameter']['value']['data']))
+            self._trigger_smart_contract_sighash.append(_to_sighash(tx['parameter']['value'].get('data')))
         else:
             self._trigger_smart_contract_owner.append(None)
             self._trigger_smart_contract_contract.append(None)

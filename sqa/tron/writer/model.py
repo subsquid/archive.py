@@ -6,10 +6,10 @@ class BlockHeader(TypedDict):
     hash: str
     parentHash: str
     txTrieRoot: str
-    version: int
+    version: NotRequired[int]
     timestamp: int
     witnessAddress: str
-    witnessSignature: str
+    witnessSignature: NotRequired[str]
 
 
 class Log(TypedDict):
@@ -23,14 +23,14 @@ class Log(TypedDict):
 class Transaction(TypedDict):
     hash: str
     ret: NotRequired[str]
-    signature: list[str]
+    signature: NotRequired[list[str]]
     type: str
     parameter: Any
     permissionId: NotRequired[int]
-    refBlockBytes: str
-    refBlockHash: str
+    refBlockBytes: NotRequired[str]
+    refBlockHash: NotRequired[str]
     feeLimit: NotRequired[int]
-    expiration: int
+    expiration: NotRequired[int]
     timestamp: NotRequired[int]
     rawDataHex: str
     fee: NotRequired[int]

@@ -78,7 +78,7 @@ class WriteOptions(ArchiveWriteOptions):
         return block['header']['height']
 
     def get_block_hash(self, block: Block) -> str:
-        return block['header']['hash']
+        return '0x' + block['header']['hash'][16:]
 
     def get_block_parent_hash(self, block: Block) -> str:
         return '0x' + block['header']['parentHash'][16:]

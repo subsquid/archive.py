@@ -57,8 +57,8 @@ ingest-kusama:
 ingest-tron:
 	@python3 -m sqa.tron.writer data/tron \
 		--src http://localhost:7373 \
-		--first-block 11322942 \
-		--last-block 11323358
+		--first-block 11671049 \
+		--chunk-size 256
 
 
 router:
