@@ -21,7 +21,11 @@ class Worker:
         self._sm = sm
         self._transport = transport
         self._procs = procs or (os.cpu_count() or 1) * 3 // 2
-        self._pool = multiprocessing.Pool(processes=self._procs, initializer=init_child_process)
+        self._pool = multiprocessing.Pool(
+            processes=self._procs,
+            initializer=init_child_process,
+            maxtasksperchild=10
+        )
         self._shutdown = False
 
     def get_processes_count(self) -> int:
