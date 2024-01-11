@@ -12,6 +12,7 @@ Qty = str
 
 class Block(TypedDict):
     number: Qty
+    l1BlockNumber: NotRequired[Qty]
     hash: Hash32
     parentHash: Hash32
     timestamp: Qty

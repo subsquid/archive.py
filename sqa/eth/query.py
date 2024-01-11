@@ -13,6 +13,7 @@ from sqa.query.util import to_snake_case, json_project, get_selected_fields, rem
 
 class BlockFieldSelection(TypedDict, total=False):
     number: bool
+    l1Number: bool
     hash: bool
     parentHash: bool
     timestamp: bool

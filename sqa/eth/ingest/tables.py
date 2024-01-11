@@ -16,6 +16,7 @@ def qty():
 class BlockTableBuilder(TableBuilder):
     def __init__(self):
         self.number = Column(pyarrow.int32())
+        self.l1_number = Column(pyarrow.int32())
         self.hash = Column(pyarrow.string())
         self.parent_hash = Column(pyarrow.string())
         self.nonce = Column(pyarrow.string())
@@ -37,6 +38,7 @@ class BlockTableBuilder(TableBuilder):
 
     def append(self, block: Block) -> None:
         self.number.append(qty2int(block['number']))
+        self.l1_number.append(block.get('l1BlockNumber') and qty2int(block['l1BlockNumber']))
         self.hash.append(block['hash'])
         self.parent_hash.append(block['parentHash'])
         self.nonce.append(block.get('nonce'))
