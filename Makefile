@@ -23,14 +23,18 @@ ingest-eth:
 
 
 ingest-arb:
-	@python3 -m sqa.eth.ingest --dest data/arbitrum-sepolia \
-		-e https://arbitrum-sepolia.blastapi.io/9fc175b1-7929-4273-b3c5-47ad15ddd023 \
+	@python3 -m sqa.eth.ingest --dest data/arb-one \
+		-e ${ARB_NODE} \
+		-c 20 \
+		-r 400 \
 		--batch-limit 100 \
 		--with-receipts \
 		--with-traces \
 		--with-statediffs \
 		--use-debug-api-for-statediffs \
-		--write-chunk-size 10
+		--write-chunk-size 10 \
+		--first-block 900 \
+		--arbitrum
 
 
 ingest-poly:
