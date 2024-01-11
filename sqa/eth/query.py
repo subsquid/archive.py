@@ -31,6 +31,7 @@ class BlockFieldSelection(TypedDict, total=False):
     difficulty: bool
     totalDifficulty: bool
     baseFeePerGas: bool
+    l1BlockNumber: bool
 
 
 TxFieldSelection = TypedDict('TxFieldSelection', {
