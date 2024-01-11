@@ -584,7 +584,7 @@ def _build_model():
         JoinRel(
             scan=trace_scan,
             include_flag_name='parents',
-            query='SELECT * FROM traces s, ('
+            query='SELECT * FROM traces i, ('
                   'WITH RECURSIVE selected_traces(block_number, transaction_index, trace_address) AS ('
                   'SELECT block_number, transaction_index, array_pop_back(trace_address) AS trace_address '
                   'FROM s WHERE length(s.trace_address) > 0 '
