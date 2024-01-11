@@ -12,7 +12,6 @@ Qty = str
 
 class Block(TypedDict):
     number: Qty
-    l1BlockNumber: NotRequired[Qty]
     hash: Hash32
     parentHash: Hash32
     timestamp: Qty
@@ -33,6 +32,7 @@ class Block(TypedDict):
     baseFeePerGas: NotRequired[Qty]
     uncles: list[Hash32]
     transactions: list['Transaction']
+    l1BlockNumber: NotRequired[Qty]
     logs_: NotRequired[list['Log']]
     unknownTraceReplays_: NotRequired[list]
 

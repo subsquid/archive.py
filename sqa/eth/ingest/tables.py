@@ -16,7 +16,6 @@ def qty():
 class BlockTableBuilder(TableBuilder):
     def __init__(self):
         self.number = Column(pyarrow.int32())
-        self.l1_number = Column(pyarrow.int32())
         self.hash = Column(pyarrow.string())
         self.parent_hash = Column(pyarrow.string())
         self.nonce = Column(pyarrow.string())
@@ -35,10 +34,10 @@ class BlockTableBuilder(TableBuilder):
         self.gas_used = Column(qty())
         self.timestamp = Column(pyarrow.timestamp('s'))
         self.base_fee_per_gas = Column(qty())
+        self.l1_number = Column(pyarrow.int32())
 
     def append(self, block: Block) -> None:
         self.number.append(qty2int(block['number']))
-        self.l1_number.append(block.get('l1BlockNumber') and qty2int(block['l1BlockNumber']))
         self.hash.append(block['hash'])
         self.parent_hash.append(block['parentHash'])
         self.nonce.append(block.get('nonce'))
@@ -57,6 +56,7 @@ class BlockTableBuilder(TableBuilder):
         self.gas_limit.append(block['gasLimit'])
         self.timestamp.append(qty2int(block['timestamp']))
         self.base_fee_per_gas.append(block.get('baseFeePerGas'))
+        self.l1_number.append(block.get('l1BlockNumber') and qty2int(block['l1BlockNumber']))
 
 
 class TxTableBuilder(TableBuilder):
