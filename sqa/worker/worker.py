@@ -23,7 +23,7 @@ class Worker:
         self._pool = multiprocessing.Pool(
             processes=self._procs,
             initializer=init_child_process,
-            maxtasksperchild=10
+            # maxtasksperchild=10
         )
         self._shutdown = False
 
