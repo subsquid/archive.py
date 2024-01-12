@@ -115,7 +115,8 @@ def parse_cli_args():
 
 
 async def serve(args):
-    sm = StateManager(data_dir=args.data_dir or os.getcwd())
+    data_dir = args.data_dir or os.getcwd()
+    sm = StateManager(data_dir=data_dir)
 
     transport = HttpTransport(
         worker_id=args.worker_id,

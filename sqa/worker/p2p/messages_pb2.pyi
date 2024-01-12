@@ -6,25 +6,33 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Map
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
+class DatasetRanges(_message.Message):
+    __slots__ = ["ranges", "url"]
+    RANGES_FIELD_NUMBER: _ClassVar[int]
+    URL_FIELD_NUMBER: _ClassVar[int]
+    ranges: _containers.RepeatedCompositeFieldContainer[Range]
+    url: str
+    def __init__(self, url: _Optional[str] = ..., ranges: _Optional[_Iterable[_Union[Range, _Mapping]]] = ...) -> None: ...
+
 class Envelope(_message.Message):
-    __slots__ = ["dataset_state", "ping", "query", "query_executed", "query_finished", "query_result", "query_submitted", "state_update"]
-    DATASET_STATE_FIELD_NUMBER: _ClassVar[int]
-    PING_FIELD_NUMBER: _ClassVar[int]
-    QUERY_EXECUTED_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ["logs_collected", "ping_v2", "pong", "query", "query_finished", "query_logs", "query_result", "query_submitted"]
+    LOGS_COLLECTED_FIELD_NUMBER: _ClassVar[int]
+    PING_V2_FIELD_NUMBER: _ClassVar[int]
+    PONG_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
     QUERY_FINISHED_FIELD_NUMBER: _ClassVar[int]
+    QUERY_LOGS_FIELD_NUMBER: _ClassVar[int]
     QUERY_RESULT_FIELD_NUMBER: _ClassVar[int]
     QUERY_SUBMITTED_FIELD_NUMBER: _ClassVar[int]
-    STATE_UPDATE_FIELD_NUMBER: _ClassVar[int]
-    dataset_state: RangeSet
-    ping: Ping
+    logs_collected: LogsCollected
+    ping_v2: PingV2
+    pong: Pong
     query: Query
-    query_executed: QueryExecuted
     query_finished: QueryFinished
+    query_logs: QueryLogs
     query_result: QueryResult
     query_submitted: QuerySubmitted
-    state_update: WorkerState
-    def __init__(self, ping: _Optional[_Union[Ping, _Mapping]] = ..., state_update: _Optional[_Union[WorkerState, _Mapping]] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_result: _Optional[_Union[QueryResult, _Mapping]] = ..., dataset_state: _Optional[_Union[RangeSet, _Mapping]] = ..., query_submitted: _Optional[_Union[QuerySubmitted, _Mapping]] = ..., query_finished: _Optional[_Union[QueryFinished, _Mapping]] = ..., query_executed: _Optional[_Union[QueryExecuted, _Mapping]] = ...) -> None: ...
+    def __init__(self, pong: _Optional[_Union[Pong, _Mapping]] = ..., ping_v2: _Optional[_Union[PingV2, _Mapping]] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_result: _Optional[_Union[QueryResult, _Mapping]] = ..., query_submitted: _Optional[_Union[QuerySubmitted, _Mapping]] = ..., query_finished: _Optional[_Union[QueryFinished, _Mapping]] = ..., query_logs: _Optional[_Union[QueryLogs, _Mapping]] = ..., logs_collected: _Optional[_Union[LogsCollected, _Mapping]] = ...) -> None: ...
 
 class InputAndOutput(_message.Message):
     __slots__ = ["num_read_chunks", "output"]
@@ -34,6 +42,19 @@ class InputAndOutput(_message.Message):
     output: SizeAndHash
     def __init__(self, num_read_chunks: _Optional[int] = ..., output: _Optional[_Union[SizeAndHash, _Mapping]] = ...) -> None: ...
 
+class LogsCollected(_message.Message):
+    __slots__ = ["sequence_numbers"]
+    class SequenceNumbersEntry(_message.Message):
+        __slots__ = ["key", "value"]
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: int
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[int] = ...) -> None: ...
+    SEQUENCE_NUMBERS_FIELD_NUMBER: _ClassVar[int]
+    sequence_numbers: _containers.ScalarMap[str, int]
+    def __init__(self, sequence_numbers: _Optional[_Mapping[str, int]] = ...) -> None: ...
+
 class OkResult(_message.Message):
     __slots__ = ["data", "exec_plan"]
     DATA_FIELD_NUMBER: _ClassVar[int]
@@ -42,55 +63,75 @@ class OkResult(_message.Message):
     exec_plan: bytes
     def __init__(self, data: _Optional[bytes] = ..., exec_plan: _Optional[bytes] = ...) -> None: ...
 
-class Ping(_message.Message):
-    __slots__ = ["pause", "state", "stored_bytes", "version", "worker_id", "worker_url"]
-    PAUSE_FIELD_NUMBER: _ClassVar[int]
-    STATE_FIELD_NUMBER: _ClassVar[int]
+class PingV2(_message.Message):
+    __slots__ = ["signature", "stored_bytes", "stored_ranges", "version", "worker_id"]
+    SIGNATURE_FIELD_NUMBER: _ClassVar[int]
     STORED_BYTES_FIELD_NUMBER: _ClassVar[int]
+    STORED_RANGES_FIELD_NUMBER: _ClassVar[int]
     VERSION_FIELD_NUMBER: _ClassVar[int]
     WORKER_ID_FIELD_NUMBER: _ClassVar[int]
-    WORKER_URL_FIELD_NUMBER: _ClassVar[int]
-    pause: bool
-    state: WorkerState
+    signature: bytes
     stored_bytes: int
+    stored_ranges: _containers.RepeatedCompositeFieldContainer[DatasetRanges]
     version: str
     worker_id: str
-    worker_url: str
-    def __init__(self, worker_id: _Optional[str] = ..., worker_url: _Optional[str] = ..., state: _Optional[_Union[WorkerState, _Mapping]] = ..., pause: bool = ..., stored_bytes: _Optional[int] = ..., version: _Optional[str] = ...) -> None: ...
+    def __init__(self, worker_id: _Optional[str] = ..., version: _Optional[str] = ..., stored_bytes: _Optional[int] = ..., stored_ranges: _Optional[_Iterable[_Union[DatasetRanges, _Mapping]]] = ..., signature: _Optional[bytes] = ...) -> None: ...
+
+class Pong(_message.Message):
+    __slots__ = ["active", "jailed", "not_registered", "ping_hash", "unsupported_version"]
+    ACTIVE_FIELD_NUMBER: _ClassVar[int]
+    JAILED_FIELD_NUMBER: _ClassVar[int]
+    NOT_REGISTERED_FIELD_NUMBER: _ClassVar[int]
+    PING_HASH_FIELD_NUMBER: _ClassVar[int]
+    UNSUPPORTED_VERSION_FIELD_NUMBER: _ClassVar[int]
+    active: WorkerState
+    jailed: _empty_pb2.Empty
+    not_registered: _empty_pb2.Empty
+    ping_hash: bytes
+    unsupported_version: _empty_pb2.Empty
+    def __init__(self, ping_hash: _Optional[bytes] = ..., not_registered: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., unsupported_version: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., jailed: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ..., active: _Optional[_Union[WorkerState, _Mapping]] = ...) -> None: ...
 
 class Query(_message.Message):
-    __slots__ = ["dataset", "profiling", "query", "query_id"]
+    __slots__ = ["client_state_json", "dataset", "profiling", "query", "query_id", "signature"]
+    CLIENT_STATE_JSON_FIELD_NUMBER: _ClassVar[int]
     DATASET_FIELD_NUMBER: _ClassVar[int]
     PROFILING_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
     QUERY_ID_FIELD_NUMBER: _ClassVar[int]
+    SIGNATURE_FIELD_NUMBER: _ClassVar[int]
+    client_state_json: str
     dataset: str
     profiling: bool
     query: str
     query_id: str
-    def __init__(self, query_id: _Optional[str] = ..., dataset: _Optional[str] = ..., query: _Optional[str] = ..., profiling: bool = ...) -> None: ...
+    signature: bytes
+    def __init__(self, query_id: _Optional[str] = ..., dataset: _Optional[str] = ..., query: _Optional[str] = ..., profiling: bool = ..., client_state_json: _Optional[str] = ..., signature: _Optional[bytes] = ...) -> None: ...
 
 class QueryExecuted(_message.Message):
-    __slots__ = ["bad_request", "client_id", "dataset", "exec_time_ms", "ok", "query_hash", "query_id", "server_error", "worker_id"]
+    __slots__ = ["bad_request", "client_id", "exec_time_ms", "ok", "query", "query_hash", "seq_no", "server_error", "signature", "timestamp_ms", "worker_id"]
     BAD_REQUEST_FIELD_NUMBER: _ClassVar[int]
     CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
-    DATASET_FIELD_NUMBER: _ClassVar[int]
     EXEC_TIME_MS_FIELD_NUMBER: _ClassVar[int]
     OK_FIELD_NUMBER: _ClassVar[int]
+    QUERY_FIELD_NUMBER: _ClassVar[int]
     QUERY_HASH_FIELD_NUMBER: _ClassVar[int]
-    QUERY_ID_FIELD_NUMBER: _ClassVar[int]
+    SEQ_NO_FIELD_NUMBER: _ClassVar[int]
     SERVER_ERROR_FIELD_NUMBER: _ClassVar[int]
+    SIGNATURE_FIELD_NUMBER: _ClassVar[int]
+    TIMESTAMP_MS_FIELD_NUMBER: _ClassVar[int]
     WORKER_ID_FIELD_NUMBER: _ClassVar[int]
     bad_request: str
     client_id: str
-    dataset: str
     exec_time_ms: int
     ok: InputAndOutput
+    query: Query
     query_hash: bytes
-    query_id: str
+    seq_no: int
     server_error: str
+    signature: bytes
+    timestamp_ms: int
     worker_id: str
-    def __init__(self, client_id: _Optional[str] = ..., worker_id: _Optional[str] = ..., query_id: _Optional[str] = ..., dataset: _Optional[str] = ..., query_hash: _Optional[bytes] = ..., exec_time_ms: _Optional[int] = ..., ok: _Optional[_Union[InputAndOutput, _Mapping]] = ..., bad_request: _Optional[str] = ..., server_error: _Optional[str] = ...) -> None: ...
+    def __init__(self, client_id: _Optional[str] = ..., worker_id: _Optional[str] = ..., query: _Optional[_Union[Query, _Mapping]] = ..., query_hash: _Optional[bytes] = ..., exec_time_ms: _Optional[int] = ..., ok: _Optional[_Union[InputAndOutput, _Mapping]] = ..., bad_request: _Optional[str] = ..., server_error: _Optional[str] = ..., seq_no: _Optional[int] = ..., timestamp_ms: _Optional[int] = ..., signature: _Optional[bytes] = ...) -> None: ...
 
 class QueryFinished(_message.Message):
     __slots__ = ["bad_request", "client_id", "exec_time_ms", "ok", "query_id", "server_error", "timeout", "worker_id"]
@@ -111,6 +152,12 @@ class QueryFinished(_message.Message):
     timeout: _empty_pb2.Empty
     worker_id: str
     def __init__(self, client_id: _Optional[str] = ..., worker_id: _Optional[str] = ..., query_id: _Optional[str] = ..., exec_time_ms: _Optional[int] = ..., ok: _Optional[_Union[SizeAndHash, _Mapping]] = ..., bad_request: _Optional[str] = ..., server_error: _Optional[str] = ..., timeout: _Optional[_Union[_empty_pb2.Empty, _Mapping]] = ...) -> None: ...
+
+class QueryLogs(_message.Message):
+    __slots__ = ["queries_executed"]
+    QUERIES_EXECUTED_FIELD_NUMBER: _ClassVar[int]
+    queries_executed: _containers.RepeatedCompositeFieldContainer[QueryExecuted]
+    def __init__(self, queries_executed: _Optional[_Iterable[_Union[QueryExecuted, _Mapping]]] = ...) -> None: ...
 
 class QueryResult(_message.Message):
     __slots__ = ["bad_request", "ok", "query_id", "server_error"]
