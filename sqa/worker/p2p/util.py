@@ -1,4 +1,3 @@
-import hashlib
 from datetime import datetime
 from functools import cached_property
 from typing import Optional
@@ -37,16 +36,3 @@ def state_from_proto(state: msg_pb.WorkerState) -> State:
         ds: to_range_set((r.begin, r.end) for r in range_set.ranges)
         for ds, range_set in state.datasets.items()
     }
-
-
-def sha3_256(data: bytes) -> bytes:
-    hasher = hashlib.sha3_256()
-    hasher.update(data)
-    return hasher.digest()
-
-
-def size_and_hash(data: bytes) -> msg_pb.SizeAndHash:
-    return msg_pb.SizeAndHash(
-        size=len(data),
-        sha3_256=sha3_256(data),
-    )

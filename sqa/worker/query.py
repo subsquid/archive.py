@@ -16,6 +16,7 @@ from sqa.query.model import Model
 from sqa.query.plan import QueryPlan
 from sqa.query.schema import ArchiveQuery
 from .state.intervals import Range
+from .util import sha3_256
 
 
 class InvalidQuery(Exception):
@@ -73,7 +74,9 @@ def _get_model(q: dict) -> Model:
 
 @dataclass(frozen=True)
 class QueryResult:
-    result: bytes
+    compressed_data: bytes
+    data_size: int
+    data_sha3_256: Optional[str]
     num_read_chunks: int
     exec_time: Optional[dict] = None
 
@@ -85,7 +88,8 @@ def execute_query(
         dataset_dir: str,
         data_range: Range,
         q: ArchiveQuery,
-        profiling: bool = False
+        compute_data_hash: bool,
+        profiling: bool
 ) -> QueryResult:
     first_block = max(data_range[0], q['fromBlock'])
     last_block = min(data_range[1], q.get('toBlock', math.inf))
@@ -137,7 +141,7 @@ def execute_query(
             if line and json.loads(line)['header']['number'] < chunk.last_block:
                 return
 
-    json_result = f'[{",".join(json_lines())}]'
+    result = f'[{",".join(json_lines())}]'
 
     duration = time.time() - beg
 
@@ -156,10 +160,17 @@ def execute_query(
 
     exec_time['elapsed'] = duration
 
-    result = gzip.compress(json_result.encode(), mtime=0)
+    data = result.encode()
+    compressed_data = gzip.compress(data, mtime=0)
+
+    data_hash = None
+    if compute_data_hash:
+        data_hash = sha3_256(data)
 
     return QueryResult(
-        result=result,
+        compressed_data=compressed_data,
+        data_size=len(data),
+        data_sha3_256=data_hash,
         num_read_chunks=num_read_chunks,
         exec_time=exec_time
     )

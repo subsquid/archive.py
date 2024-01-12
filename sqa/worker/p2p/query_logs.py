@@ -3,9 +3,11 @@ import sqlite3
 import time
 from typing import Optional
 
-from sqa.worker.p2p.messages_pb2 import Query, QueryExecuted, InputAndOutput
-from sqa.worker.p2p.util import sha3_256, size_and_hash, QueryInfo
+from sqa.worker.p2p.messages_pb2 import Query, QueryExecuted, InputAndOutput, SizeAndHash
+from sqa.worker.p2p.util import QueryInfo
 from sqa.worker.query import QueryResult
+from sqa.worker.util import sha3_256
+
 
 LOG = logging.getLogger(__name__)
 
@@ -35,7 +37,10 @@ class LogsStorage:
         """ Store information about successfully executed query. """
         result = InputAndOutput(
             num_read_chunks=result.num_read_chunks,
-            output=size_and_hash(result.result),
+            output=SizeAndHash(
+                size=result.data_size,
+                sha3_256=result.data_sha3_256,
+            )
         )
         query_log = self._generate_log(query, info, ok=result)
         self._store_log(query_log)

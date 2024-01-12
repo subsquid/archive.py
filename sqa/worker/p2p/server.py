@@ -17,12 +17,14 @@ from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async
 from sqa.worker.p2p import messages_pb2 as msg_pb
 from sqa.worker.p2p.query_logs import LogsStorage
 from sqa.worker.p2p.rpc import RPCWrapper
-from sqa.worker.p2p.util import state_to_proto, sha3_256, state_from_proto, QueryInfo
+from sqa.worker.p2p.util import state_to_proto, state_from_proto, QueryInfo
 from sqa.worker.query import QueryResult, InvalidQuery
 from sqa.worker.state.controller import State
 from sqa.worker.state.dataset import dataset_decode
 from sqa.worker.state.manager import StateManager
+from sqa.worker.util import sha3_256
 from sqa.worker.worker import Worker
+
 
 LOG = logging.getLogger(__name__)
 
@@ -211,14 +213,14 @@ class P2PTransport:
         query_info.finished()
 
         EXEC_TIME.observe(query_info.exec_time_ms)
-        RESULT_SIZE.observe(len(result.result))
+        RESULT_SIZE.observe(len(result.compressed_data))
         READ_CHUNKS.observe(result.num_read_chunks)
 
         envelope = msg_pb.Envelope(
             query_result=msg_pb.QueryResult(
                 query_id=query.query_id,
                 ok=msg_pb.OkResult(
-                    data=result.result,
+                    data=result.compressed_data,
                     exec_plan=None,
                 )
             )
@@ -254,7 +256,12 @@ async def execute_query(transport: P2PTransport, worker: Worker, query_task: msg
     try:
         query = json.loads(query_task.query)
         dataset = dataset_decode(query_task.dataset)
-        result = await worker.execute_query(query, dataset, query_task.profiling)
+        result = await worker.execute_query(
+            query,
+            dataset,
+            compute_data_hash=True,
+            profiling=query_task.profiling
+        )
         LOG.info(f"Query {query_task.query_id} success")
         QUERY_OK.inc()
         await transport.send_query_result(query_task, result)

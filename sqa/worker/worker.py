@@ -63,7 +63,13 @@ class Worker:
         except:
             LOG.exception('failed to send a pause ping')
 
-    async def execute_query(self, query: ArchiveQuery, dataset: str, profiling: bool = False) -> QueryResult:
+    async def execute_query(
+            self,
+            query: ArchiveQuery,
+            dataset: str,
+            compute_data_hash: bool = False,
+            profiling: bool = False
+    ) -> QueryResult:
         query = validate_query(query)
 
         first_block = query['fromBlock']
@@ -72,7 +78,7 @@ class Worker:
             raise MissingData(f'data for block {first_block} is not available')
 
         with data_range_lock as data_range:
-            args = self._sm.get_dataset_dir(dataset), data_range, query, profiling
+            args = self._sm.get_dataset_dir(dataset), data_range, query, compute_data_hash, profiling
             loop = asyncio.get_event_loop()
             future = loop.create_future()
 

@@ -38,7 +38,9 @@ def execute_fixture_query(fixture: Fixture) -> QueryResult:
     return execute_query(
         fixture.data_dir,
         (0, sys.maxsize),
-        fixture.query
+        fixture.query,
+        False,
+        False
     )
 
 
@@ -47,7 +49,7 @@ def run_test_suite(suite_dir: str) -> None:
     for fixture in get_fixtures(suite_dir):
         print(f'test {suite_name}/{fixture.name}: ', end='')
         result = execute_fixture_query(fixture)
-        result_data = json.loads(gzip.decompress(result.result))
+        result_data = json.loads(gzip.decompress(result.compressed_data))
         if result_data == fixture.result:
             print('ok')
         else:
