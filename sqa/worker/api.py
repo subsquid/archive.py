@@ -98,8 +98,9 @@ class QueryResource:
         self._pending_requests += 1
         try:
             query_result = await self._worker.execute_query(query, dataset, profiling=profiling)
-            res.text = query_result.result
+            res.data = query_result.result
             res.content_type = 'application/json'
+            res.set_header('content-encoding', 'gzip')
         except InvalidQuery as e:
             LOG.warning(f'invalid query: {e}', extra=log_extra)
             raise falcon.HTTPBadRequest(description=str(e))

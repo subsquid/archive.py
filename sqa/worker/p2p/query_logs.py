@@ -35,7 +35,7 @@ class LogsStorage:
         """ Store information about successfully executed query. """
         result = InputAndOutput(
             num_read_chunks=result.num_read_chunks,
-            output=size_and_hash(result.gzipped_bytes),
+            output=size_and_hash(result.result),
         )
         query_log = self._generate_log(query, info, ok=result)
         self._store_log(query_log)

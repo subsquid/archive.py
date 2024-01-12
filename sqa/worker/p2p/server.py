@@ -211,14 +211,14 @@ class P2PTransport:
         query_info.finished()
 
         EXEC_TIME.observe(query_info.exec_time_ms)
-        RESULT_SIZE.observe(len(result.gzipped_bytes))
+        RESULT_SIZE.observe(len(result.result))
         READ_CHUNKS.observe(result.num_read_chunks)
 
         envelope = msg_pb.Envelope(
             query_result=msg_pb.QueryResult(
                 query_id=query.query_id,
                 ok=msg_pb.OkResult(
-                    data=result.gzipped_bytes,
+                    data=result.result,
                     exec_plan=None,
                 )
             )

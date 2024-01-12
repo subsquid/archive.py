@@ -3,7 +3,6 @@ import json
 import math
 import time
 from dataclasses import dataclass
-from functools import cached_property
 from typing import Iterable, Optional
 
 import marshmallow as mm
@@ -74,13 +73,9 @@ def _get_model(q: dict) -> Model:
 
 @dataclass(frozen=True)
 class QueryResult:
-    result: str
+    result: bytes
     num_read_chunks: int
     exec_time: Optional[dict] = None
-
-    @cached_property
-    def gzipped_bytes(self) -> bytes:
-        return gzip.compress(self.result.encode())
 
 
 _PS = psutil.Process()
@@ -142,7 +137,7 @@ def execute_query(
             if line and json.loads(line)['header']['number'] < chunk.last_block:
                 return
 
-    result = f'[{",".join(json_lines())}]'
+    json_result = f'[{",".join(json_lines())}]'
 
     duration = time.time() - beg
 
@@ -160,6 +155,8 @@ def execute_query(
         exec_time = {}
 
     exec_time['elapsed'] = duration
+
+    result = gzip.compress(json_result.encode(), mtime=0)
 
     return QueryResult(
         result=result,
