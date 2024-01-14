@@ -1,3 +1,4 @@
+import gzip
 import json
 import sys
 
@@ -13,8 +14,9 @@ def main():
         q: ArchiveQuery = json.load(f)
 
     result = execute_query(dataset_dir, (0, sys.maxsize), q)
+    data = gzip.decompress(result.compressed_data)
 
-    json.dump(json.loads(result.result), sys.stdout, indent=2)
+    json.dump(json.loads(data), sys.stdout, indent=2)
 
 
 if __name__ == '__main__':

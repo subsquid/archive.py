@@ -9,15 +9,16 @@ requires-python = ">=3.11"
 dependencies = [
     "duckdb == 0.9.1",
     "httpx == 0.*",
+    "prometheus-client==0.17.*",
     "pyarrow == 13.*",
-    "s3fs == 2023.10.0",
+    "s3fs >= 2023.12.0",
     "sentry-sdk == 1.28.*",
+    "uvloop>=0.19.0",
 ]
 
 [project.optional-dependencies]
 writer = [
     "pycryptodome>=3.18.0",
-    "prometheus-client==0.17.*",
     "trie==2.1.1",
     "rlp>=3.0.0",
     "setuptools>=68.2.2",
@@ -32,10 +33,13 @@ http-worker = [
 ]
 
 p2p-worker = [
+    "base58>=2.1.1",
     "grpcio == 1.*",
     "marshmallow == 3.*",
     "protobuf == 4.*",
     "psutil>=5.9.5",
+    "setuptools>=68.2.2",
+    "web3>=6.11.3",
 ]
 
 [build-system]

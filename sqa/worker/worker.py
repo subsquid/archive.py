@@ -11,7 +11,6 @@ from .query import QueryResult, validate_query, execute_query
 from .state.manager import StateManager
 from .transport import Transport
 
-
 LOG = logging.getLogger(__name__)
 PING_INTERVAL_SEC = int(os.environ.get('PING_INTERVAL_SEC', '10'))
 
@@ -21,7 +20,11 @@ class Worker:
         self._sm = sm
         self._transport = transport
         self._procs = procs or (os.cpu_count() or 1) * 3 // 2
-        self._pool = multiprocessing.Pool(processes=self._procs, initializer=init_child_process)
+        self._pool = multiprocessing.Pool(
+            processes=self._procs,
+            initializer=init_child_process,
+            # maxtasksperchild=10
+        )
         self._shutdown = False
 
     def get_processes_count(self) -> int:
@@ -60,7 +63,13 @@ class Worker:
         except:
             LOG.exception('failed to send a pause ping')
 
-    async def execute_query(self, query: ArchiveQuery, dataset: str, profiling: bool = False) -> QueryResult:
+    async def execute_query(
+            self,
+            query: ArchiveQuery,
+            dataset: str,
+            compute_data_hash: bool = False,
+            profiling: bool = False
+    ) -> QueryResult:
         query = validate_query(query)
 
         first_block = query['fromBlock']
@@ -69,7 +78,7 @@ class Worker:
             raise MissingData(f'data for block {first_block} is not available')
 
         with data_range_lock as data_range:
-            args = self._sm.get_dataset_dir(dataset), data_range, query, profiling
+            args = self._sm.get_dataset_dir(dataset), data_range, query, compute_data_hash, profiling
             loop = asyncio.get_event_loop()
             future = loop.create_future()
 

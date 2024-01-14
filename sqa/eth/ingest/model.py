@@ -32,6 +32,7 @@ class Block(TypedDict):
     baseFeePerGas: NotRequired[Qty]
     uncles: list[Hash32]
     transactions: list['Transaction']
+    l1BlockNumber: NotRequired[Qty]
     logs_: NotRequired[list['Log']]
     unknownTraceReplays_: NotRequired[list]
 

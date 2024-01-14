@@ -9,6 +9,7 @@ import pyarrow.fs
 import pyarrow.parquet
 import s3fs
 
+from sqa.metrics import MetricsServer
 from sqa.util import add_temp_prefix
 
 
@@ -163,9 +164,12 @@ class S3Fs(Fs):
             try:
                 stat = os.stat(dest)
             except IOError as reason:
+                MetricsServer.on_download(False, 0)
                 raise S3DownloadException(f'failed to stat downloaded file') from reason
             if stat.st_size != src_file['size']:
+                MetricsServer.on_download(False, stat.st_size)
                 raise S3DownloadException(f's3://{src_file["path"]} download to {dest} was incomplete')
+            MetricsServer.on_download(True, stat.st_size)
 
     def _list_files(self, path: str) -> list[_S3File]:
         result: list[_S3File] = []
