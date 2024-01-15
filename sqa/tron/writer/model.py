@@ -17,7 +17,7 @@ class Log(TypedDict):
     transactionHash: str
     address: str
     data: str
-    topics: list[str]
+    topics: NotRequired[list[str]]
 
 
 class Transaction(TypedDict):

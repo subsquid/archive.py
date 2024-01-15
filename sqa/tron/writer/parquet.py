@@ -175,7 +175,7 @@ class LogTable(TableBuilder):
         self.transaction_hash.append(log['transactionHash'])
         self.address.append(log['address'])
         self.data.append(log.get('data'))
-        topics = iter(log['topics'])
+        topics = iter(log.get('topics', []))
         self.topic0.append(next(topics, None))
         self.topic1.append(next(topics, None))
         self.topic2.append(next(topics, None))
