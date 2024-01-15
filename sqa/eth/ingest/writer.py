@@ -1,5 +1,9 @@
 import logging
 from typing import TypedDict, NotRequired
+import csv
+import gzip
+import tempfile
+import os
 
 import pyarrow
 
@@ -7,7 +11,7 @@ from sqa.eth.ingest.model import Block
 from sqa.eth.ingest.tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder, TraceTableBuilder, \
     StateDiffTableBuilder
 from sqa.eth.ingest.util import short_hash
-from sqa.fs import Fs
+from sqa.fs import Fs, LocalFs
 from sqa.layout import ChunkWriter
 from sqa.writer.parquet import add_size_column, add_index_column
 
@@ -98,7 +102,7 @@ class ParquetWriter:
         self.with_traces = with_traces
         self.with_statediffs = with_statediffs
 
-    def write(self, batch: ArrowDataBatch) -> None:
+    def write(self, batch: ArrowDataBatch, new_contracts: dict) -> None:
         blocks = batch['blocks']
         block_numbers: pyarrow.ChunkedArray = blocks.column('number')
         first_block = block_numbers[0].as_py()
@@ -109,7 +113,29 @@ class ParquetWriter:
         LOG.debug('saving data chunk %s', chunk.path())
 
         with self.fs.transact(chunk.path()) as loc:
+            write_new_contracts(loc, new_contracts)
             write_parquet(loc, batch)
+
+
+def write_new_contracts(loc: Fs, new_contracts: dict) -> None:
+    if new_contracts:
+        tmp = tempfile.NamedTemporaryFile(delete=False)
+        try:
+            f = gzip.open(tmp, "w")
+            csv_w = csv.writer(f)
+            for new_address, parent_address in new_contracts.items():
+                csv_w.writerow((new_address, parent_address))
+            f.close()
+            if isinstance(loc, LocalFs):
+                os.makedirs(os.path.dirname(loc.abs()), exist_ok=True)
+                os.rename(tmp.name, loc.abs('new_contracts.csv.gz'))
+            else:
+                loc.upload(tmp.name, loc.abs('new_contracts.csv.gz'))
+        finally:
+            os.remove(tmp.name)
+        LOG.debug('wrote %s', loc.abs('new_contracts.csv.gz'))
+    else:
+        LOG.debug('no new contracts to write')
 
 
 def write_parquet(loc: Fs, batch: ArrowDataBatch) -> None:
