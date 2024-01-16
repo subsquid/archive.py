@@ -60,7 +60,7 @@ class InternalTransaction(TypedDict):
     transactionHash: str
     hash: str
     callerAddress: str
-    transferToAddress: str
+    transferToAddress: NotRequired[str]
     callValueInfo: list[CallValueInfo]
     note: str
     rejected: NotRequired[bool]

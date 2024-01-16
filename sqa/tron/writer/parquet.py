@@ -199,7 +199,7 @@ class InternalTransactionTable(TableBuilder):
         self.transaction_hash.append(internal_tx['transactionHash'])
         self.hash.append(internal_tx['hash'])
         self.caller_address.append(internal_tx['callerAddress'])
-        self.transer_to_address.append(internal_tx['transferToAddress'])
+        self.transer_to_address.append(internal_tx.get('transferToAddress'))
         self.call_value_info.append(_to_json(internal_tx['callValueInfo']))
         self.note.append(internal_tx['note'])
         self.rejected.append(internal_tx.get('rejected'))
