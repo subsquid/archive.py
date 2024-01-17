@@ -8,7 +8,7 @@ import httpx
 import uvicorn
 
 from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
-from sqa.worker.api import StatusResource, QueryResource
+from sqa.worker.api import StatusResource, QueryResource, Limit
 from sqa.worker.state.controller import State
 from sqa.worker.state.intervals import to_range_set
 from sqa.worker.state.manager import StateManager
@@ -125,6 +125,7 @@ async def serve(args):
     )
 
     worker = Worker(sm, transport, args.procs)
+    limit = Limit(worker.get_processes_count() * 2)
 
     app = fa.App()
 
@@ -132,10 +133,11 @@ async def serve(args):
         sm=sm,
         router_url=args.router,
         worker_id=args.worker_id,
-        worker_url=args.worker_url
+        worker_url=args.worker_url,
+        limit=limit
     ))
 
-    app.add_route('/query/{dataset}', QueryResource(worker))
+    app.add_route('/query/{dataset}', QueryResource(worker, limit))
 
     server_conf = uvicorn.Config(
         app,
