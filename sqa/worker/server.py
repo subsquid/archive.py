@@ -125,7 +125,7 @@ async def serve(args):
     )
 
     worker = Worker(sm, transport, args.procs)
-    limit = Limit(worker.get_processes_count() * 2)
+    limit = Limit(worker.get_processes_count() * 3)
 
     app = fa.App()
 
