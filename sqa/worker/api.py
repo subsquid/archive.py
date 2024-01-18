@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import random
 import time
 
@@ -139,7 +140,7 @@ class QueryResource:
                 'query_exec_time': query_result.exec_time,
                 **log_extra
             })
-        elif random.random() < 0.05:
+        elif os.environ.get('SQA_SAMPLE_ALL_QUERIES') == 'true' or random.random() < 0.05:
             LOG.info('query sample', extra={
                 'query_time': duration,
                 **log_extra
