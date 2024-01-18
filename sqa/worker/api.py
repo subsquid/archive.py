@@ -107,6 +107,9 @@ class QueryResource:
             'squid': get_squid_id(req)
         }
 
+        if self._is_sampling():
+            LOG.info('query sample', extra=log_extra)
+
         profiling = req.params.get('profile') == 'true'
 
         self._limit.assert_not_busy()
@@ -140,8 +143,11 @@ class QueryResource:
                 'query_exec_time': query_result.exec_time,
                 **log_extra
             })
-        elif os.environ.get('SQA_SAMPLE_ALL_QUERIES') == 'true' or random.random() < 0.05:
+        elif not self._is_sampling() and random.random() < 0.05:
             LOG.info('query sample', extra={
                 'query_time': duration,
                 **log_extra
             })
+
+    def _is_sampling(self) -> bool:
+        return os.environ.get('SQA_SAMPLE_ALL_QUERIES') == 'true'
