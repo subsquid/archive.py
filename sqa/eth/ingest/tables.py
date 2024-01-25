@@ -85,6 +85,12 @@ class TxTableBuilder(TableBuilder):
         self.contract_address = Column(pyarrow.string())
         self.type = Column(pyarrow.uint8())
         self.status = Column(pyarrow.int8())
+        self._parent_address = Column(pyarrow.string())
+        self._grand_parent_address = Column(pyarrow.string())
+        self._grand_grand_parent_address = Column(pyarrow.string())
+        self._grand_grand_grand_parent_address = Column(pyarrow.string())
+        self._grand_grand_grand_grand_parent_address = Column(pyarrow.string())
+        self._ancestor_addresses = Column(pyarrow.list_(pyarrow.string()))
 
     def append(self, tx: Transaction):
         block_number = qty2int(tx['blockNumber'])
@@ -132,6 +138,15 @@ class TxTableBuilder(TableBuilder):
                 self.status.append(None)
                 self.contract_address.append(None)
 
+        parents = iter(tx['parents_'][:5])
+        ancestors = tx['parents_'][5:]
+        self._parent_address.append(next(parents, None))
+        self._grand_parent_address.append(next(parents, None))
+        self._grand_grand_parent_address.append(next(parents, None))
+        self._grand_grand_grand_parent_address.append(next(parents, None))
+        self._grand_grand_grand_grand_parent_address.append(next(parents, None))
+        self._ancestor_addresses.append(ancestors)
+
 
 class LogTableBuilder(TableBuilder):
     def __init__(self):
@@ -145,6 +160,12 @@ class LogTableBuilder(TableBuilder):
         self.topic1 = Column(pyarrow.string())
         self.topic2 = Column(pyarrow.string())
         self.topic3 = Column(pyarrow.string())
+        self._parent_address = Column(pyarrow.string())
+        self._grand_parent_address = Column(pyarrow.string())
+        self._grand_grand_parent_address = Column(pyarrow.string())
+        self._grand_grand_grand_parent_address = Column(pyarrow.string())
+        self._grand_grand_grand_grand_parent_address = Column(pyarrow.string())
+        self._ancestor_addresses = Column(pyarrow.list_(pyarrow.string()))
 
     def append(self, log: Log):
         self.block_number.append(qty2int(log['blockNumber']))
@@ -158,6 +179,15 @@ class LogTableBuilder(TableBuilder):
         self.topic1.append(next(topics, None))
         self.topic2.append(next(topics, None))
         self.topic3.append(next(topics, None))
+
+        parents = iter(log['parents_'][:5])
+        ancestors = log['parents_'][5:]
+        self._parent_address.append(next(parents, None))
+        self._grand_parent_address.append(next(parents, None))
+        self._grand_grand_parent_address.append(next(parents, None))
+        self._grand_grand_grand_parent_address.append(next(parents, None))
+        self._grand_grand_grand_grand_parent_address.append(next(parents, None))
+        self._ancestor_addresses.append(ancestors)
 
 
 class TraceTableBuilder(TableBuilder):

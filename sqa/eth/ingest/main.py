@@ -16,7 +16,7 @@ import pyarrow
 
 from sqa.eth.ingest.ingest import Ingest
 from sqa.eth.ingest.metrics import Metrics
-from sqa.eth.ingest.model import Block
+from sqa.eth.ingest.model import Block, Address20
 from sqa.eth.ingest.tables import qty2int
 from sqa.eth.ingest.util import short_hash
 from sqa.eth.ingest.writer import ArrowBatchBuilder, ParquetWriter
@@ -416,7 +416,7 @@ class WriteService:
             f'progress: {round(self.progress.speed())} blocks/sec'
         )
 
-    def _get_contracts(self) -> dict:
+    def _get_contracts(self) -> dict[Address20, Address20]:
         contracts = {}
         for chunk in get_chunks(self.fs):
             filename = f'{chunk.path()}/new_contracts.csv.gz'
@@ -426,6 +426,13 @@ class WriteService:
             for new_address, parent_address in csv_r:
                 contracts[new_address] = parent_address
         return contracts
+
+    def _get_parents(self, address: Address20, contracts: dict[Address20, Address20]) -> list[Address20]:
+        parents = []
+        while parent := contracts.get(address):
+            parents.append(parent)
+            address = parent
+        return parents
 
     async def _batches(
             self,
@@ -455,10 +462,11 @@ class WriteService:
                 new_contracts.update(block_new_contracts)
 
                 for log in block.get('logs_', []):
-                    pass
+                    log['parents_'] = self._get_parents(log['address'], contracts)
 
                 for tx in block['transactions']:
-                    pass
+                    if to := tx.get('to'):
+                        tx['parents_'] = self._get_parents(to, contracts)
 
             yield Batch(blocks=blocks, extra=extra, new_contracts=new_contracts)
 
