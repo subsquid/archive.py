@@ -117,22 +117,26 @@ class ParquetWriter:
             write_parquet(loc, batch)
 
 
-def write_new_contracts(loc: Fs, new_contracts: dict) -> None:
+def write_new_contracts(loc: Fs, new_contracts: dict[str, str]) -> None:
     if new_contracts:
         tmp = tempfile.NamedTemporaryFile(delete=False)
         try:
-            f = gzip.open(tmp, "w")
+            f = gzip.open(tmp, "wt")
             csv_w = csv.writer(f)
             for new_address, parent_address in new_contracts.items():
                 csv_w.writerow((new_address, parent_address))
             f.close()
             if isinstance(loc, LocalFs):
-                os.makedirs(os.path.dirname(loc.abs()), exist_ok=True)
+                dest = loc.abs('new_contracts.csv.gz')
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
                 os.rename(tmp.name, loc.abs('new_contracts.csv.gz'))
             else:
                 loc.upload(tmp.name, loc.abs('new_contracts.csv.gz'))
         finally:
-            os.remove(tmp.name)
+            try:
+                os.remove(tmp.name)
+            except FileNotFoundError:
+                pass
         LOG.debug('wrote %s', loc.abs('new_contracts.csv.gz'))
     else:
         LOG.debug('no new contracts to write')

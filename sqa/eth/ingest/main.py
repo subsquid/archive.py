@@ -10,12 +10,13 @@ import tempfile
 import time
 from functools import cached_property
 from typing import Optional, NamedTuple, AsyncIterator, Callable, Any
+import csv
 
 import pyarrow
 
 from sqa.eth.ingest.ingest import Ingest
 from sqa.eth.ingest.metrics import Metrics
-from sqa.eth.ingest.model import Block, DebugFrame
+from sqa.eth.ingest.model import Block
 from sqa.eth.ingest.tables import qty2int
 from sqa.eth.ingest.util import short_hash
 from sqa.eth.ingest.writer import ArrowBatchBuilder, ParquetWriter
@@ -415,12 +416,24 @@ class WriteService:
             f'progress: {round(self.progress.speed())} blocks/sec'
         )
 
+    def _get_contracts(self) -> dict:
+        contracts = {}
+        for chunk in get_chunks(self.fs):
+            filename = f'{chunk.path()}/new_contracts.csv.gz'
+            file = self.fs.open(filename, 'rb')
+            f = gzip.open(file, 'rt')
+            csv_r = csv.reader(f)
+            for new_address, parent_address in csv_r:
+                contracts[new_address] = parent_address
+        return contracts
+
     async def _batches(
             self,
             strides: AsyncIterator[list[Block]]
     ) -> AsyncIterator[Batch]:
         last_report = 0
         last_hash = self.last_hash()
+        contracts = self._get_contracts()
 
         async for blocks in strides:
             first_block = qty2int(blocks[0]['number'])
@@ -438,7 +451,14 @@ class WriteService:
                 last_hash = block_hash
 
                 block_new_contracts = get_new_contracts(block)
+                contracts.update(block_new_contracts)
                 new_contracts.update(block_new_contracts)
+
+                for log in block.get('logs_', []):
+                    pass
+
+                for tx in block['transactions']:
+                    pass
 
             yield Batch(blocks=blocks, extra=extra, new_contracts=new_contracts)
 
