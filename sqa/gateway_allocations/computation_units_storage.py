@@ -1,80 +1,78 @@
+import logging
 import sqlite3
-from .allocation import Allocation
+from typing import Optional
+
+LOG = logging.getLogger(__name__)
+
+CREATE_TABLE = """
+CREATE TABLE IF NOT EXISTS gateway_allocations(
+    gateway_id STRING PRIMARY KEY,
+    allocated_cus INTEGER NOT NULL DEFAULT 0,
+    spent_cus INTEGER NOT NULL DEFAULT 0,
+    epoch INTEGER NOT NULL
+)"""
+
+CHECK_ALLOCATION = "SELECT COUNT(*) FROM gateway_allocations WHERE gateway_id = ?1"
+
+SPEND_CUS = """
+UPDATE gateway_allocations
+SET spent_cus = spent_cus + ?2
+WHERE gateway_id = ?1 AND allocated_cus - spent_cus >= ?2
+"""
+
+CLEAN_OLD_ALLOCATIONS = "DELETE FROM gateway_allocations WHERE epoch < ?1"
+
+UPDATE_ALLOCATION = """
+INSERT INTO gateway_allocations (gateway_id, allocated_cus, spent_cus, epoch)
+VALUES (?1, ?2, 0, ?3)
+"""
+
+GET_EPOCH = "SELECT COALESCE(MAX(epoch), 0) FROM gateway_allocations"
 
 
 class ComputationUnitsStorage:
     def __init__(self, db_path: str):
-        self._own_id = None
+        self._own_id: 'Optional[int]' = None
+        self._epoch: 'Optional[int]' = None
         self._db_conn = sqlite3.connect(db_path)
 
     def initialize(self, own_id: int):
-        self._own_id = own_id
         with self._db_conn:
-            self._db_conn.execute(
-                'CREATE TABLE IF NOT EXISTS gateways(gatewayId varchar(255) not null primary key, workerId int, allocated int, used int, latest_block_updated int)')
-            self._db_conn.execute(
-                'CREATE TABLE IF NOT EXISTS blockScanned(workerId varchar(255) not null primary key, latestBlockScanned int)')
+            self._db_conn.execute(CREATE_TABLE)
+            self._epoch = self._db_conn.execute(GET_EPOCH).fetchone()[0]
+        self._own_id = own_id
 
     def __del__(self):
         self._db_conn.close()
 
     def _assert_initialized(self):
-        assert self._own_id is not None, "GatewayStorage uninitilized"
+        assert self._own_id is not None, "GatewayStorage uninitialized"
 
-    def increase_allocations(self, allocations: list[Allocation]):
+    def update_epoch(self, current_epoch: int) -> None:
         self._assert_initialized()
+        if current_epoch > self._epoch:
+            LOG.info(f"New epoch started: {current_epoch}")
+            with self._db_conn:
+                self._db_conn.execute(CLEAN_OLD_ALLOCATIONS, (current_epoch,))
+            self._epoch = current_epoch
 
+    def has_allocation(self, gateway_id: str) -> bool:
+        self._assert_initialized()
+        LOG.debug(f"Checking if gateway {gateway_id} has allocation")
         with self._db_conn:
-            self._db_conn.executemany(
-                'INSERT INTO gateways VALUES(?,?,?,0,?) ON CONFLICT(gatewayId) DO UPDATE SET allocated = allocated+?, latest_block_updated=? WHERE gatewayId=? AND workerId=?',
-                [(i.gateway, self._own_id, i.computation_units, i.block_number, i.computation_units, i.block_number,
-                  i.gateway, self._own_id)
-                 for i in allocations]
-            )
+            return self._db_conn.execute(CHECK_ALLOCATION, (gateway_id,)).fetchone()[0]
 
-    def get_latest_blocks_updated(self):
+    def try_spend_cus(self, gateway_id: str, used_units: int) -> bool:
         self._assert_initialized()
-
+        LOG.debug(f"Gateway {gateway_id} spending {used_units} CUs")
         with self._db_conn:
-            res = self._db_conn.execute(f'SELECT gatewayId, latest_block_updated FROM gateways WHERE workerId=?',
-                                        [self._own_id]).fetchall()
-            if res is None:
-                return {}
-            return dict(res)
+            return self._db_conn.execute(SPEND_CUS, (gateway_id, used_units)).rowcount > 0
 
-    def increase_gateway_usage(self, used_units: int, gateway: str):
+    def update_allocation(self, gateway_id: str, allocated_cus: int) -> None:
         self._assert_initialized()
-
-        with self._db_conn:
-            self._db_conn.execute(
-                'UPDATE gateways SET used = used+? WHERE gatewayId=? AND workerId=?',
-                (used_units, gateway, self._own_id)
-            )
-
-    def get_allocations_for(self, gateways: list[str]):
-        self._assert_initialized()
-
-        gateways_list = ','.join((f'"{i}"' for i in gateways))
-        with self._db_conn:
-            return self._db_conn.execute(
-                f'SELECT gatewayId, allocated, used FROM gateways WHERE gatewayId IN ({gateways_list}) AND workerId=?',
-                [self._own_id]
-            ).fetchall()
-
-    def latest_update_block(self) -> int | None:
-        self._assert_initialized()
-
-        with self._db_conn:
-            block_number = self._db_conn.execute(
-                'SELECT latestBlockScanned FROM blockScanned WHERE workerId=?', [self._own_id]
-            ).fetchone()
-            return int(block_number[0]) if block_number is not None else None
-
-    def update_latest_block_scanned(self, block_number: int):
-        self._assert_initialized()
-
+        LOG.debug(f"Gateway {gateway_id} allocated {allocated_cus}")
         with self._db_conn:
             self._db_conn.execute(
-                'INSERT INTO blockScanned VALUES(?,?) ON CONFLICT(workerId) DO UPDATE SET latestBlockScanned=? WHERE workerId=?',
-                [self._own_id, block_number, block_number, self._own_id]
+                UPDATE_ALLOCATION,
+                (gateway_id, allocated_cus, self._epoch)
             )
