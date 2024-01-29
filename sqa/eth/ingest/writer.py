@@ -123,15 +123,15 @@ def write_new_contracts(loc: Fs, new_contracts: dict[str, str]) -> None:
         try:
             f = gzip.open(tmp, "wt")
             csv_w = csv.writer(f)
-            for new_address, parent_address in new_contracts.items():
-                csv_w.writerow((new_address, parent_address))
+            csv_w.writerows(new_contracts.items())
             f.close()
+            tmp.close()
             if isinstance(loc, LocalFs):
                 dest = loc.abs('new_contracts.csv.gz')
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
-                os.rename(tmp.name, loc.abs('new_contracts.csv.gz'))
+                os.rename(tmp.name, dest)
             else:
-                loc.upload(tmp.name, loc.abs('new_contracts.csv.gz'))
+                loc.upload(tmp.name, 'new_contracts.csv.gz')
         finally:
             try:
                 os.remove(tmp.name)

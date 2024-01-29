@@ -420,11 +420,17 @@ class WriteService:
         contracts = {}
         for chunk in get_chunks(self.fs):
             filename = f'{chunk.path()}/new_contracts.csv.gz'
-            file = self.fs.open(filename, 'rb')
-            f = gzip.open(file, 'rt')
-            csv_r = csv.reader(f)
-            for new_address, parent_address in csv_r:
-                contracts[new_address] = parent_address
+
+            try:
+                file = self.fs.open(filename, 'rb')
+            except FileNotFoundError:
+                continue
+            else:
+                f = gzip.open(file, 'rt')
+                csv_r = csv.reader(f)
+                for new_address, parent_address in csv_r:
+                    contracts[new_address] = parent_address
+
         return contracts
 
     def _get_parents(self, address: Address20, contracts: dict[Address20, Address20]) -> list[Address20]:
