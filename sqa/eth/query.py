@@ -116,6 +116,12 @@ class LogRequest(TypedDict, total=False):
     topic1: list[str]
     topic2: list[str]
     topic3: list[str]
+    parentAddress: list[str]
+    grandParentAddress: list[str]
+    grandGrandParentAddress: list[str]
+    grandGrandGrandParentAddress: list[str]
+    grandGrandGrandGrandParentAddress: list[str]
+    ancestorAddress: list[str]
     transaction: bool
     transactionTraces: bool
     transactionLogs: bool
@@ -127,6 +133,12 @@ TxRequest = TypedDict('TxRequest', {
     'sighash': list[str],
     'firstNonce': int,
     'lastNonce': int,
+    'parentAddress': list[str],
+    'grandParentAddress': list[str],
+    'grandGrandParentAddress': list[str],
+    'grandGrandGrandParentAddress': list[str],
+    'grandGrandGrandGrandParentAddress': list[str],
+    'ancestorAddress': list[str],
     'logs': bool,
     'traces': bool,
     'stateDiffs': bool
@@ -322,6 +334,12 @@ class _TxScan(Scan):
         yield field_in('sighash', req.get('sighash'))
         yield field_gte('nonce', req.get('firstNonce'))
         yield field_lte('nonce', req.get('lastNonce'))
+        yield field_in('_parent_address', req.get('parentAddress'))
+        yield field_in('_grand_parent_address', req.get('grandParentAddress'))
+        yield field_in('_grand_grand_parent_address', req.get('grandGrandParentAddress'))
+        yield field_in('_grand_grand_grand_parent_address', req.get('grandGrandGrandParentAddress'))
+        yield field_in('_grand_grand_grand_grand_parent_address', req.get('grandGrandGrandGrandParentAddress'))
+        # yield field_in('_ancestor_addresses', req.get('ancestorAddress'))
 
 
 class _TxItem(Item):
@@ -359,6 +377,12 @@ class _LogScan(Scan):
         yield field_in('topic1', req.get('topic1'))
         yield field_in('topic2', req.get('topic2'))
         yield field_in('topic3', req.get('topic3'))
+        yield field_in('_parent_address', req.get('parentAddress'))
+        yield field_in('_grand_parent_address', req.get('grandParentAddress'))
+        yield field_in('_grand_grand_parent_address', req.get('grandGrandParentAddress'))
+        yield field_in('_grand_grand_grand_parent_address', req.get('grandGrandGrandParentAddress'))
+        yield field_in('_grand_grand_grand_grand_parent_address', req.get('grandGrandGrandGrandParentAddress'))
+        # yield field_in('_ancestor_addresses', req.get('ancestorAddress'))
 
 
 class _LogItem(Item):

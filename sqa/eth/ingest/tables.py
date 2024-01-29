@@ -138,8 +138,8 @@ class TxTableBuilder(TableBuilder):
                 self.status.append(None)
                 self.contract_address.append(None)
 
-        parents = iter(tx['parents_'][:5])
-        ancestors = tx['parents_'][5:]
+        parents = iter(tx.get('parents_', [])[:5])
+        ancestors = tx.get('parents_', [])[5:]
         self._parent_address.append(next(parents, None))
         self._grand_parent_address.append(next(parents, None))
         self._grand_grand_parent_address.append(next(parents, None))
@@ -180,8 +180,8 @@ class LogTableBuilder(TableBuilder):
         self.topic2.append(next(topics, None))
         self.topic3.append(next(topics, None))
 
-        parents = iter(log['parents_'][:5])
-        ancestors = log['parents_'][5:]
+        parents = iter(log.get('parents_', [])[:5])
+        ancestors = log.get('parents_', [])[5:]
         self._parent_address.append(next(parents, None))
         self._grand_parent_address.append(next(parents, None))
         self._grand_grand_parent_address.append(next(parents, None))
