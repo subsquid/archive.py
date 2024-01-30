@@ -1,8 +1,10 @@
 import logging
 import os
 from pathlib import Path
+from typing import Optional
 
 import base58
+import web3.exceptions
 from web3 import AsyncWeb3
 
 LOG = logging.getLogger(__name__)
@@ -57,10 +59,14 @@ class AllocationsProvider:
         LOG.debug("Getting current epoch number")
         return await self._network_controller.functions.epochNumber().call()
 
-    async def get_allocated_cus(self, gateway_id: str, worker_id: int) -> int:
+    async def get_allocated_cus(self, gateway_id: str, worker_id: int) -> Optional[int]:
         LOG.debug(f"Getting allocated CUs for gateway {gateway_id}")
         encoded_id = base58.b58decode(gateway_id)
-        strategy_addr = await self._gateway_registry.functions.getUsedStrategy(encoded_id).call()
-        checksum_addr = AsyncWeb3.to_checksum_address(strategy_addr)
-        strategy = self._w3.eth.contract(checksum_addr, abi=STRATEGY_ABI)
-        return await strategy.functions.computationUnitsPerEpoch(encoded_id, worker_id).call()
+        try:
+            strategy_addr = await self._gateway_registry.functions.getUsedStrategy(encoded_id).call()
+            checksum_addr = AsyncWeb3.to_checksum_address(strategy_addr)
+            strategy = self._w3.eth.contract(checksum_addr, abi=STRATEGY_ABI)
+            return await strategy.functions.computationUnitsPerEpoch(encoded_id, worker_id).call()
+        except web3.exceptions.Web3Exception:
+            LOG.warning(f"Cannot get CUs for gateway {gateway_id}", exc_info=True)
+            return None

@@ -49,5 +49,7 @@ class GatewayAllocations:
         if not self._storage.has_allocation(gateway_id):
             LOG.debug(f"No allocation for gateway {gateway_id}, checking on chain")
             allocated_cus = await self._provider.get_allocated_cus(gateway_id, self._own_id)
+            if allocated_cus is None:
+                return False
             self._storage.update_allocation(gateway_id, allocated_cus)
         return self._storage.try_spend_cus(gateway_id, SINGLE_EXECUTION_COST)
