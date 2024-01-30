@@ -27,6 +27,7 @@ class Ingest:
         use_trace_api: bool = False,
         use_debug_api_for_statediffs: bool = False,
         validate_tx_root: bool = False,
+        validate_tx_type: bool = False,
         validate_logs_bloom: bool = False,
     ):
         self._rpc = rpc
@@ -37,6 +38,7 @@ class Ingest:
         self._use_trace_api = use_trace_api
         self._use_debug_api_for_statediffs = use_debug_api_for_statediffs
         self._validate_tx_root = validate_tx_root
+        self._validate_tx_type = validate_tx_type
         self._validate_logs_bloom = validate_logs_bloom
         self._height = from_block - 1
         self._genesis = genesis_block
@@ -272,6 +274,8 @@ class Ingest:
                 continue
             if self._is_skale_nebula:
                 r['type'] = '0x0'
+            elif self._validate_tx_type:
+                assert r.get('type') is not None
 
             try:
                 tx = tx_by_index[r['blockHash']][r['transactionIndex']]
