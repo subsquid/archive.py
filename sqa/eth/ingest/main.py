@@ -183,6 +183,12 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
+        '--validate-logs-bloom',
+        action='store_true',
+        help='validate block logs against logs bloom'
+    )
+
+    program.add_argument(
         '--write-chunk-size',
         metavar='MB',
         type=int,
@@ -288,6 +294,7 @@ async def rpc_ingest(args, rpc: RpcClient, first_block: int, last_block: int | N
         use_trace_api=args.use_trace_api,
         use_debug_api_for_statediffs=args.use_debug_api_for_statediffs,
         validate_tx_root=args.validate_tx_root,
+        validate_logs_bloom=args.validate_logs_bloom,
     )
 
     try:
