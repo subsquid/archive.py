@@ -154,7 +154,7 @@ def transactions_root(transactions: list[Transaction]) -> str:
                 _encode_access_list(tx['accessList']),
                 qty2int(tx['maxFeePerBlobGas']),
                 [decode_hex(h) for h in tx['blobVersionedHashes']],
-                qty2int(tx['yParity']),
+                qty2int(tx['yParity']) if 'yParity' in tx else qty2int(tx['v']),
                 qty2int(tx['r']),
                 qty2int(tx['s']),
             ])
