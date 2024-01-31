@@ -15,7 +15,7 @@ import pyarrow
 
 from sqa.eth.ingest.ingest import Ingest
 from sqa.eth.ingest.metrics import Metrics
-from sqa.eth.ingest.model import Block, Address20
+from sqa.eth.ingest.model import Block
 from sqa.eth.ingest.tables import qty2int
 from sqa.eth.ingest.util import short_hash
 from sqa.eth.ingest.writer import ArrowBatchBuilder, ParquetWriter

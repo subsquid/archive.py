@@ -63,7 +63,7 @@ Transaction = TypedDict('Transaction', {
     'debugFrame_': NotRequired['DebugFrameResult'],
     'debugStateDiff_': NotRequired['DebugStateDiffResult'],
     'traceReplay_': NotRequired['TraceTransactionReplay'],
-    'parents_': list[Address20]
+    'parents_': NotRequired[list[Address20]]
 })
 
 
@@ -76,7 +76,7 @@ class Log(TypedDict):
     address: Address20
     data: Bytes
     topics: list[Bytes32]
-    parents_: list[Address20]
+    parents_: NotRequired[list[Address20]]
 
 
 class Receipt(TypedDict):
