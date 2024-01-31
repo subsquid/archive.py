@@ -43,18 +43,18 @@ def write_new_contracts(fs: Fs, new_contracts: dict[Address20, Address20]):
 
 
 def load_new_contracts(fs: Fs, chunk: DataChunk) -> dict[Address20, Address20]:
-        contracts = {}
-        filename = f'{chunk.path()}/new_contracts.csv.gz' 
-        file = fs.open(filename, 'rb')
-        gzip_file = gzip.open(file, 'rt')
+    contracts = {}
+    filename = f'{chunk.path()}/new_contracts.csv.gz' 
+    file = fs.open(filename, 'rb')
+    gzip_file = gzip.open(file, 'rt')
 
-        csv_reader = csv.reader(gzip_file)
-        for new_address, parent_address in csv_reader:
-            contracts[new_address] = parent_address
+    csv_reader = csv.reader(gzip_file)
+    for new_address, parent_address in csv_reader:
+        contracts[new_address] = parent_address
 
-        LOG.debug('read %s', fs.abs(filename))
+    LOG.debug('read %s', fs.abs(filename))
 
-        return contracts
+    return contracts
 
 
 class ContractTracker:
