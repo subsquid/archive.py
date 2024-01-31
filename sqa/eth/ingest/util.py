@@ -140,6 +140,24 @@ def transactions_root(transactions: list[Transaction]) -> str:
                 qty2int(tx['r']),
                 qty2int(tx['s'])
             ])
+        elif tx['type'] == '0x3':
+            # https://eips.ethereum.org/EIPS/eip-4844
+            trie[path] = b'\x03' + rlp.encode([
+                qty2int(tx['chainId']),
+                qty2int(tx['nonce']),
+                qty2int(tx['maxPriorityFeePerGas']),
+                qty2int(tx['maxFeePerGas']),
+                qty2int(tx['gas']),
+                decode_hex(tx['to']) if tx['to'] else b'',
+                qty2int(tx['value']),
+                decode_hex(tx['input']),
+                _encode_access_list(tx['accessList']),
+                qty2int(tx['maxFeePerBlobGas']),
+                [decode_hex(h) for h in tx['blobVersionedHashes']],
+                qty2int(tx['yParity']),
+                qty2int(tx['r']),
+                qty2int(tx['s']),
+            ])
         elif tx['type'] == '0x64':
             # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L338
             trie[path] = b'\x64' + rlp.encode([
