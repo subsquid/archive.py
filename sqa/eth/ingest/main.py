@@ -10,7 +10,6 @@ import tempfile
 import time
 from functools import cached_property
 from typing import Optional, NamedTuple, AsyncIterator, Callable, Any
-import csv
 
 import pyarrow
 
