@@ -20,12 +20,12 @@ from sqa.eth.ingest.model import Block, Address20
 from sqa.eth.ingest.tables import qty2int
 from sqa.eth.ingest.util import short_hash
 from sqa.eth.ingest.writer import ArrowBatchBuilder, ParquetWriter
+from sqa.eth.ingest.contract_tracker import ContractTracker
 from sqa.fs import create_fs, Fs, LocalFs
 from sqa.layout import ChunkWriter, get_chunks, DataChunk
 from sqa.util.asyncio import run_async_program
 from sqa.util.counters import Progress
 from sqa.util.rpc import RpcClient, RpcEndpoint
-from sqa.eth.ingest.tables import _traverse_frame
 
 
 LOG = logging.getLogger(__name__)
@@ -333,25 +333,6 @@ def load_chunk(fs: Fs, chunk: DataChunk, first_block: int, last_block: int) -> l
         return blocks
 
 
-def get_new_contracts(block: Block) -> dict:
-    new_contracts = {}
-
-    for tx in block['transactions']:
-        if frame := tx.get('debugFrame_'):
-            for _, _, frame in _traverse_frame(frame['result'], []):
-                frame_type = frame['type']
-                if frame_type in ('CREATE', 'CREATE2', 'Create'):
-                    if address := frame.get('to'):
-                        new_contracts[address] = frame['from']
-        elif trace := tx.get('traceReplay_', {}).get('trace'):
-            for record in trace:
-                if record['type'] == 'create':
-                    if result := record.get('result'):
-                        new_contracts[result['address']] = record['action']['from']
-
-    return new_contracts
-
-
 class Batch(NamedTuple):
     blocks: list[Block]
     extra: dict
@@ -416,37 +397,15 @@ class WriteService:
             f'progress: {round(self.progress.speed())} blocks/sec'
         )
 
-    def _get_contracts(self) -> dict[Address20, Address20]:
-        contracts = {}
-        for chunk in get_chunks(self.fs):
-            filename = f'{chunk.path()}/new_contracts.csv.gz'
-
-            try:
-                file = self.fs.open(filename, 'rb')
-            except FileNotFoundError:
-                continue
-            else:
-                f = gzip.open(file, 'rt')
-                csv_r = csv.reader(f)
-                for new_address, parent_address in csv_r:
-                    contracts[new_address] = parent_address
-
-        return contracts
-
-    def _get_parents(self, address: Address20, contracts: dict[Address20, Address20]) -> list[Address20]:
-        parents = []
-        while parent := contracts.get(address):
-            parents.append(parent)
-            address = parent
-        return parents
-
     async def _batches(
             self,
             strides: AsyncIterator[list[Block]]
     ) -> AsyncIterator[Batch]:
         last_report = 0
         last_hash = self.last_hash()
-        contracts = self._get_contracts()
+
+        contract_tracker = ContractTracker(self.fs)
+        contract_tracker.init()
 
         async for blocks in strides:
             first_block = qty2int(blocks[0]['number'])
@@ -454,7 +413,6 @@ class WriteService:
             extra = {'first_block': first_block, 'last_block': last_block}
             LOG.debug('got stride', extra=extra)
 
-            new_contracts = {}
             for block in blocks:
                 # validate chain continuity
                 block_parent_hash = short_hash(block['parentHash'])
@@ -463,17 +421,16 @@ class WriteService:
                     raise Exception(f'broken chain: block {block_hash} is not a direct child of {last_hash}')
                 last_hash = block_hash
 
-                block_new_contracts = get_new_contracts(block)
-                contracts.update(block_new_contracts)
-                new_contracts.update(block_new_contracts)
+                contract_tracker.update(block)
 
                 for log in block.get('logs_', []):
-                    log['parents_'] = self._get_parents(log['address'], contracts)
+                    log['parents_'] = contract_tracker.get_parents(log['address'])
 
                 for tx in block['transactions']:
                     if to := tx.get('to'):
-                        tx['parents_'] = self._get_parents(to, contracts)
+                        tx['parents_'] = contract_tracker.get_parents(to)
 
+            new_contracts = contract_tracker.get_new_contracts()
             yield Batch(blocks=blocks, extra=extra, new_contracts=new_contracts)
 
             current_time = time.time()

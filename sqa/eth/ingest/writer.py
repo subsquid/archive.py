@@ -1,9 +1,5 @@
 import logging
 from typing import TypedDict, NotRequired
-import csv
-import gzip
-import tempfile
-import os
 
 import pyarrow
 
@@ -11,7 +7,8 @@ from sqa.eth.ingest.model import Block
 from sqa.eth.ingest.tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder, TraceTableBuilder, \
     StateDiffTableBuilder
 from sqa.eth.ingest.util import short_hash
-from sqa.fs import Fs, LocalFs
+from sqa.eth.ingest.contract_tracker import write_new_contracts
+from sqa.fs import Fs
 from sqa.layout import ChunkWriter
 from sqa.writer.parquet import add_size_column, add_index_column
 
@@ -115,31 +112,6 @@ class ParquetWriter:
         with self.fs.transact(chunk.path()) as loc:
             write_new_contracts(loc, new_contracts)
             write_parquet(loc, batch)
-
-
-def write_new_contracts(loc: Fs, new_contracts: dict[str, str]) -> None:
-    if new_contracts:
-        tmp = tempfile.NamedTemporaryFile(delete=False)
-        try:
-            f = gzip.open(tmp, "wt")
-            csv_w = csv.writer(f)
-            csv_w.writerows(new_contracts.items())
-            f.close()
-            tmp.close()
-            if isinstance(loc, LocalFs):
-                dest = loc.abs('new_contracts.csv.gz')
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
-                os.rename(tmp.name, dest)
-            else:
-                loc.upload(tmp.name, 'new_contracts.csv.gz')
-        finally:
-            try:
-                os.remove(tmp.name)
-            except FileNotFoundError:
-                pass
-        LOG.debug('wrote %s', loc.abs('new_contracts.csv.gz'))
-    else:
-        LOG.debug('no new contracts to write')
 
 
 def write_parquet(loc: Fs, batch: ArrowDataBatch) -> None:

@@ -1,12 +1,12 @@
 import binascii
-from typing import TypedDict, NotRequired
+from typing import TypedDict, NotRequired, Iterable
 
 from trie import HexaryTrie
 from Crypto.Hash import keccak
 import rlp
 from eth_utils.encoding import int_to_big_endian
 
-from sqa.eth.ingest.model import Qty, Hash32, Transaction, Address20
+from sqa.eth.ingest.model import Qty, Hash32, Transaction, Address20, DebugFrame
 
 
 def qty2int(v: Qty) -> int:
@@ -229,3 +229,10 @@ def transactions_root(transactions: list[Transaction]) -> str:
         else:
             raise Exception(f'Unknown tx type {tx["type"]}')
     return encode_hex(trie.root_hash)
+
+
+def traverse_frame(frame: DebugFrame, address: list[int]) -> Iterable[tuple[list[int], int, DebugFrame]]:
+    subcalls = frame.get('calls', ())
+    yield address, len(subcalls), frame
+    for i, call in enumerate(subcalls):
+        yield from traverse_frame(call, [*address, i])

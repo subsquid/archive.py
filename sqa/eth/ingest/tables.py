@@ -5,7 +5,7 @@ import pyarrow
 from sqa.eth.ingest.model import Transaction, Log, Block, Qty, DebugFrame, DebugStateDiff, Address20, \
     Bytes, DebugStateMap, \
     TraceStateDiff, TraceDiff, TraceRec
-from sqa.eth.ingest.util import qty2int, get_tx_status_from_traces
+from sqa.eth.ingest.util import qty2int, get_tx_status_from_traces, traverse_frame
 from sqa.writer.parquet import Column, TableBuilder
 
 
@@ -310,7 +310,7 @@ class TraceTableBuilder(TableBuilder):
     def debug_append(self, block_number: Qty, transaction_index: Qty, top: DebugFrame):
         bn = qty2int(block_number)
         tix = qty2int(transaction_index)
-        for addr, subtraces, frame in _traverse_frame(top, []):
+        for addr, subtraces, frame in traverse_frame(top, []):
             trace_type: Literal['create', 'call', 'suicide']
             frame_type = frame['type']
             if frame_type in ('CALL', 'CALLCODE', 'STATICCALL', 'DELEGATECALL', 'INVALID', 'Call'):
@@ -383,13 +383,6 @@ class TraceTableBuilder(TableBuilder):
             self.reward_author.append(None)
             self.reward_value.append(None)
             self.reward_type.append(None)
-
-
-def _traverse_frame(frame: DebugFrame, address: list[int]) -> Iterable[tuple[list[int], int, DebugFrame]]:
-    subcalls = frame.get('calls', ())
-    yield address, len(subcalls), frame
-    for i, call in enumerate(subcalls):
-        yield from _traverse_frame(call, [*address, i])
 
 
 class StateDiffTableBuilder(TableBuilder):
