@@ -195,15 +195,18 @@ class RpcConnection:
             else:
                 assert isinstance(result, list)
                 assert len(result) == len(request)
-                result.sort(key=lambda i: i.get('id', -1))
+                result.sort(key=lambda i: self._unpack_id(i))
                 return [self._unpack_result(req, res, validate_result) for req, res in zip(request, result)]
         else:
             return self._unpack_result(request, result, validate_result)
 
+    def _unpack_id(self, result) -> int:
+        if 'id' not in result:
+            raise RpcResultNoId(self.endpoint.url)
+        return result['id']
+
     def _unpack_result(self, request: RpcRequest, result, validate_result) -> Any:
         assert isinstance(result, dict)
-        if 'id' not in result:
-            raise RpcResultNoId(request, self.endpoint.url)
         assert request['id'] == result['id']
         if 'error' in result:
             raise RpcError(result['error'], request, self.endpoint.url)
@@ -245,6 +248,8 @@ def _is_retryable_error(e: Exception) -> bool:
         return True
     elif isinstance(e, RpcResultIsInvalid):
         return True
+    elif isinstance(e, RpcResultNoId):
+        return True
     elif isinstance(e, RpcError) and isinstance(e.info, dict):
         code = e.info.get('code')
         return code == 429 or code == -32603 or code == -32000 or code == -32002
@@ -266,7 +271,6 @@ class RpcResultIsInvalid(Exception):
         self.url = url
 
 class RpcResultNoId(Exception):
-    def __init__(self, request: Union[RpcRequest, BatchRpcRequest], url: str):
+    def __init__(self, url: str):
         self.message = 'rpc result doesn\'t contain id'
-        self.request = request
         self.url = url
