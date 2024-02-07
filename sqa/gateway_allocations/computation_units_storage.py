@@ -1,33 +1,60 @@
 import logging
 import sqlite3
-from typing import Optional
+from typing import Optional, List
+
+from sqa.gateway_allocations.allocations_provider import GatewayCluster
 
 LOG = logging.getLogger(__name__)
 
-CREATE_TABLE = """
-CREATE TABLE IF NOT EXISTS gateway_allocations(
-    gateway_id STRING PRIMARY KEY,
+# Bump when changing DB schema
+SCHEMA_VERSION = 1
+
+PURGE_DB = """
+PRAGMA writable_schema = 1;
+DELETE FROM sqlite_master;
+PRAGMA writable_schema = 0;
+VACUUM;
+PRAGMA integrity_check;
+"""
+
+INIT_DB = f"""
+PRAGMA user_version = {SCHEMA_VERSION};
+
+CREATE TABLE IF NOT EXISTS operators(
+    address STRING PRIMARY KEY,
     allocated_cus INTEGER NOT NULL DEFAULT 0,
     spent_cus INTEGER NOT NULL DEFAULT 0,
     epoch INTEGER NOT NULL
-)"""
+);
 
-CHECK_ALLOCATION = "SELECT COUNT(*) FROM gateway_allocations WHERE gateway_id = ?1"
-
-SPEND_CUS = """
-UPDATE gateway_allocations
-SET spent_cus = spent_cus + ?2
-WHERE gateway_id = ?1 AND allocated_cus - spent_cus >= ?2
+CREATE TABLE IF NOT EXISTS gateways(
+    gateway_id STRING PRIMARY KEY,
+    operator_addr STRING NOT NULL,
+    FOREIGN KEY (operator_addr) 
+        REFERENCES operators(address)
+        ON DELETE CASCADE
+);
 """
 
-CLEAN_OLD_ALLOCATIONS = "DELETE FROM gateway_allocations WHERE epoch < ?1"
+CHECK_ALLOCATION = "SELECT COUNT(*) FROM gateways WHERE gateway_id = ?1"
+
+SPEND_CUS = """
+UPDATE operators
+SET spent_cus = spent_cus + ?2
+WHERE allocated_cus - spent_cus >= ?2
+AND address IN (SELECT operator_addr FROM gateways WHERE gateway_id = ?1)
+"""
+
+CLEAN_OLD_ALLOCATIONS = "DELETE FROM operators WHERE epoch < ?1"
 
 UPDATE_ALLOCATION = """
-INSERT INTO gateway_allocations (gateway_id, allocated_cus, spent_cus, epoch)
+INSERT INTO operators (address, allocated_cus, spent_cus, epoch)
 VALUES (?1, ?2, 0, ?3)
 """
 
-GET_EPOCH = "SELECT COALESCE(MAX(epoch), 0) FROM gateway_allocations"
+ADD_GATEWAY = "INSERT OR REPLACE INTO gateways (gateway_id, operator_addr) VALUES (?1, ?2)"
+
+GET_EPOCH = "SELECT COALESCE(MAX(epoch), 0) FROM operators"
 
 
 class ComputationUnitsStorage:
@@ -38,7 +65,15 @@ class ComputationUnitsStorage:
 
     def initialize(self, own_id: int):
         with self._db_conn:
-            self._db_conn.execute(CREATE_TABLE)
+            self._db_conn.execute("PRAGMA foreign_keys = ON")
+            try:
+                schema_version = self._db_conn.execute("PRAGMA user_version").fetchone()[0]
+            except (sqlite3.Error, KeyError):
+                schema_version = 0
+            if schema_version < SCHEMA_VERSION:
+                self._db_conn.executescript(PURGE_DB)
+                self._db_conn.executescript(INIT_DB)
+
             self._epoch = self._db_conn.execute(GET_EPOCH).fetchone()[0]
         self._own_id = own_id
 
@@ -68,11 +103,13 @@ class ComputationUnitsStorage:
         with self._db_conn:
             return self._db_conn.execute(SPEND_CUS, (gateway_id, used_units)).rowcount > 0
 
-    def update_allocation(self, gateway_id: str, allocated_cus: int) -> None:
+    def update_allocation(self, cluster: GatewayCluster, allocated_cus: int) -> None:
         self._assert_initialized()
-        LOG.debug(f"Gateway {gateway_id} allocated {allocated_cus}")
+        LOG.debug(f"Operator {cluster.operator_addr} allocated {allocated_cus}")
         with self._db_conn:
             self._db_conn.execute(
                 UPDATE_ALLOCATION,
-                (gateway_id, allocated_cus, self._epoch)
+                (cluster.operator_addr, allocated_cus, self._epoch)
             )
+            for gateway_id in cluster.gateway_ids:
+                self._db_conn.execute(ADD_GATEWAY, (gateway_id, cluster.operator_addr))

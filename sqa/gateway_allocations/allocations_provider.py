@@ -1,5 +1,6 @@
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -12,7 +13,7 @@ LOG = logging.getLogger(__name__)
 GATEWAY_REGISTRY_ADDRESS = AsyncWeb3.to_checksum_address(
     os.environ.get(
         'GATEWAY_REGISTRY_CONTRACT_ADDR',
-        '0x70FCB652F81436d8f1AFDc9F15085Fb2274281E8'
+        '0x4e79DB9e4bfb48d90FF39f6843ed09f53163bD97'
     )
 )
 WORKER_REGISTRATION_ADDRESS = AsyncWeb3.to_checksum_address(
@@ -38,6 +39,12 @@ GATEWAY_REGISTRY_ABI = read_abi('GatewayRegistry.json')
 WORKER_REGISTRATION_ABI = read_abi('WorkerRegistration.json')
 NETWORK_CONTROLLER_ABI = read_abi('NetworkController.json')
 STRATEGY_ABI = read_abi('Strategy.json')
+
+
+@dataclass
+class GatewayCluster:
+    operator_addr: str
+    gateway_ids: list[str]
 
 
 class AllocationsProvider:
@@ -68,5 +75,23 @@ class AllocationsProvider:
             strategy = self._w3.eth.contract(checksum_addr, abi=STRATEGY_ABI)
             return await strategy.functions.computationUnitsPerEpoch(encoded_id, worker_id).call()
         except web3.exceptions.Web3Exception:
-            LOG.warning(f"Cannot get CUs for gateway {gateway_id}", exc_info=True)
+            LOG.debug(f"Cannot get CUs for gateway {gateway_id}", exc_info=True)
+            return None
+
+    async def get_gateway_cluster(self, gateway_id: str) -> Optional[GatewayCluster]:
+        LOG.debug(f"Getting cluster for gateway {gateway_id}")
+        encoded_id = base58.b58decode(gateway_id)
+        try:
+            gateway = await self._gateway_registry.functions.getGateway(encoded_id).call()
+            LOG.info(repr(gateway))
+            operator_addr = gateway[0]
+            encoded_ids = await self._gateway_registry.functions.getCluster(encoded_id).call()
+            LOG.info(repr(encoded_ids))
+            gateway_ids = [base58.b58encode(gid).decode('utf-8') for gid in encoded_ids]
+            return GatewayCluster(
+                operator_addr=operator_addr,
+                gateway_ids=gateway_ids
+            )
+        except web3.exceptions.Web3Exception:
+            LOG.debug(f"Cannot get cluster for gateway {gateway_id}", exc_info=True)
             return None

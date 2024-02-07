@@ -7,6 +7,7 @@ from json import JSONDecodeError
 from typing import AsyncIterator, Optional, Dict, Iterator
 
 import grpc.aio
+from google.protobuf import empty_pb2
 from marshmallow import ValidationError
 
 from sqa.gateway_allocations.gateway_allocations import GatewayAllocations
@@ -34,7 +35,7 @@ LOGS_MESSAGE_MAX_BYTES = 64000
 LOGS_SEND_INTERVAL_SEC = int(os.environ.get('LOGS_SEND_INTERVAL_SEC', '600'))
 PING_TOPIC = "worker_ping"
 LOGS_TOPIC = "worker_query_logs"
-WORKER_VERSION = "0.2.1"
+WORKER_VERSION = "0.2.2"
 
 
 def bundle_logs(logs: list[msg_pb.QueryExecuted]) -> Iterator[msg_pb.Envelope]:
@@ -136,7 +137,7 @@ class P2PTransport:
         elif status == 'unsupported_version':
             LOG.error("Worker version not supported by the scheduler")
         elif status == 'jailed':
-            LOG.warning("Worker jailed until the end of epoch")
+            LOG.warning(f"Worker jailed. Reason: {msg.jailed}")
         elif status == 'active':
             # If the status is 'active', it contains assigned chunks
             await self._state_updates.put(msg.active)
@@ -166,7 +167,7 @@ class P2PTransport:
             envelope = msg_pb.Envelope(
                 query_result=msg_pb.QueryResult(
                     query_id=query.query_id,
-                    bad_request="Not enough compute units allocated",
+                    no_allocation=empty_pb2.Empty(),
                 )
             )
             await self._rpc.send_msg(envelope, peer_id=client_peer_id)
@@ -177,20 +178,18 @@ class P2PTransport:
 
     async def send_ping(self, state: State, stored_bytes: int, pause=False) -> None:
         STORED_BYTES.set(stored_bytes)
-        ping = msg_pb.PingV2(
+        ping = msg_pb.Ping(
             worker_id=self._local_peer_id,
             stored_ranges=state_to_proto(state),
             stored_bytes=stored_bytes,
             version=WORKER_VERSION,
         )
         await self._rpc.sign_msg(ping)
-        envelope = msg_pb.Envelope(ping_v2=ping)
+        envelope = msg_pb.Envelope(ping=ping)
 
         # We expect pong to be delivered before the next ping is sent
         if self._expected_pong is not None:
-            pass
-            # Temporarily disabled because Mirovia scheduler doesn't send pongs when there are no chunks assigned.
-            # LOG.error("Pong message not received in time. The scheduler is not responding. Contact tech support.")
+            LOG.error("Pong message not received in time. The scheduler is not responding. Contact tech support.")
         self._expected_pong = sha3_256(ping.SerializeToString())
 
         await self._rpc.send_msg(envelope, topic=PING_TOPIC)
