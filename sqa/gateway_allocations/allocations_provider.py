@@ -13,7 +13,7 @@ LOG = logging.getLogger(__name__)
 GATEWAY_REGISTRY_ADDRESS = AsyncWeb3.to_checksum_address(
     os.environ.get(
         'GATEWAY_REGISTRY_CONTRACT_ADDR',
-        '0x4e79DB9e4bfb48d90FF39f6843ed09f53163bD97'
+        '0x01D7D0CC06cDdD744a9E06C9bc5249DA6da3e848'
     )
 )
 WORKER_REGISTRATION_ADDRESS = AsyncWeb3.to_checksum_address(
