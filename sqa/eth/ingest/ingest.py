@@ -126,7 +126,7 @@ class Ingest:
             self._chain_height = await self._get_chain_height()
 
     async def _get_chain_height(self) -> int:
-        hex_height = await self._rpc.call('eth_blockNumber')
+        hex_height = await self._rpc.call('eth_blockNumber', [])
         height = int(hex_height, 0)
         return max(height - self._finality_confirmation, 0)
 
