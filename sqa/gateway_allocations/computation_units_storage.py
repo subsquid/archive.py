@@ -1,6 +1,6 @@
 import logging
 import sqlite3
-from typing import Optional, List
+from typing import Optional
 
 from sqa.gateway_allocations.allocations_provider import GatewayCluster
 
@@ -9,13 +9,7 @@ LOG = logging.getLogger(__name__)
 # Bump when changing DB schema
 SCHEMA_VERSION = 1
 
-PURGE_DB = """
-PRAGMA writable_schema = 1;
-DELETE FROM sqlite_master;
-PRAGMA writable_schema = 0;
-VACUUM;
-PRAGMA integrity_check;
-"""
+GET_TABLES = "SELECT name FROM sqlite_master WHERE type = 'table'"
 
 INIT_DB = f"""
 PRAGMA user_version = {SCHEMA_VERSION};
@@ -71,8 +65,12 @@ class ComputationUnitsStorage:
             except (sqlite3.Error, KeyError):
                 schema_version = 0
             if schema_version < SCHEMA_VERSION:
-                self._db_conn.executescript(PURGE_DB)
+                LOG.info(f"Upgrading allocations DB schema from version {schema_version} to {SCHEMA_VERSION}")
+                for table in self._db_conn.execute(GET_TABLES).fetchall():
+                    self._db_conn.execute(f"DROP TABLE {table[0]}")
+                self._db_conn.execute("VACUUM")
                 self._db_conn.executescript(INIT_DB)
+                LOG.info("Allocations DB upgraded")
 
             self._epoch = self._db_conn.execute(GET_EPOCH).fetchone()[0]
         self._own_id = own_id
