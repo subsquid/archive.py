@@ -19,8 +19,9 @@ from sqa.eth.ingest.model import Block
 from sqa.eth.ingest.tables import qty2int
 from sqa.eth.ingest.util import short_hash
 from sqa.eth.ingest.writer import ArrowBatchBuilder, ParquetWriter
+from sqa.eth.ingest.raw_ingest import RawIngest
 from sqa.fs import create_fs, Fs, LocalFs
-from sqa.layout import ChunkWriter, get_chunks, DataChunk
+from sqa.layout import ChunkWriter
 from sqa.util.asyncio import run_async_program
 from sqa.util.counters import Progress
 from sqa.util.rpc import RpcClient, RpcEndpoint
@@ -314,35 +315,10 @@ async def rpc_ingest(args, rpc: RpcClient, first_block: int, last_block: int | N
 async def raw_ingest(src: str, first_block: int = 0, last_block: int = math.inf) -> AsyncIterator[list[Block]]:
     LOG.info(f'ingesting pre-fetched data from {src}')
     fs = create_fs(src)
-    loop = asyncio.get_event_loop()
+    ingest = RawIngest(fs, first_block, last_block)
 
-    async for chunk in stream_chunks(fs, first_block, last_block):
-        blocks = await loop.run_in_executor(None, load_chunk, fs, chunk, first_block, last_block)
-        yield blocks
-
-
-async def stream_chunks(fs: Fs, first_block: int = 0, last_block: int = math.inf) -> AsyncIterator[DataChunk]:
-    while first_block <= last_block:
-        pos = first_block
-
-        for chunk in get_chunks(fs, first_block=first_block, last_block=last_block):
-            yield chunk
-            first_block = chunk.last_block + 1
-
-        if pos == first_block:
-            LOG.info('no chunks were found. waiting 5 min for a new try')
-            await asyncio.sleep(5 * 60)
-
-
-def load_chunk(fs: Fs, chunk: DataChunk, first_block: int, last_block: int) -> list[Block]:
-    with fs.open(f'{chunk.path()}/blocks.jsonl.gz', 'rb') as f, gzip.open(f) as lines:
-        blocks = []
-        for line in lines:
-            block: Block = json.loads(line)
-            height = qty2int(block['number'])
-            if first_block <= height <= last_block:
-                blocks.append(block)
-        return blocks
+    async for bb in ingest.loop():
+        yield bb
 
 
 class Batch(NamedTuple):
