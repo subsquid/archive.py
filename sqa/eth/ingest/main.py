@@ -19,6 +19,7 @@ from sqa.eth.ingest.model import Block
 from sqa.eth.ingest.tables import qty2int
 from sqa.eth.ingest.util import short_hash
 from sqa.eth.ingest.writer import ArrowBatchBuilder, ParquetWriter
+from sqa.eth.ingest.contract_tracker import ContractTracker
 from sqa.fs import create_fs, Fs, LocalFs
 from sqa.layout import ChunkWriter, get_chunks, DataChunk
 from sqa.util.asyncio import run_async_program
@@ -348,6 +349,7 @@ def load_chunk(fs: Fs, chunk: DataChunk, first_block: int, last_block: int) -> l
 class Batch(NamedTuple):
     blocks: list[Block]
     extra: dict
+    new_contracts: dict
 
 
 WriteTask = tuple[Callable, Any, ...]
@@ -415,21 +417,34 @@ class WriteService:
         last_report = 0
         last_hash = self.last_hash()
 
+        contract_tracker = ContractTracker(self.fs)
+        contract_tracker.init()
+
         async for blocks in strides:
             first_block = qty2int(blocks[0]['number'])
             last_block = qty2int(blocks[-1]['number'])
             extra = {'first_block': first_block, 'last_block': last_block}
             LOG.debug('got stride', extra=extra)
 
-            # validate chain continuity
             for block in blocks:
+                # validate chain continuity
                 block_parent_hash = short_hash(block['parentHash'])
                 block_hash = short_hash(block['hash'])
                 if last_hash and last_hash != block_parent_hash:
                     raise Exception(f'broken chain: block {block_hash} is not a direct child of {last_hash}')
                 last_hash = block_hash
 
-            yield Batch(blocks=blocks, extra=extra)
+                contract_tracker.update(block)
+
+                for log in block.get('logs_', []):
+                    log['parents_'] = contract_tracker.get_parents(log['address'])
+
+                for tx in block['transactions']:
+                    if to := tx.get('to'):
+                        tx['parents_'] = contract_tracker.get_parents(to)
+
+            new_contracts = contract_tracker.get_new_contracts()
+            yield Batch(blocks=blocks, extra=extra, new_contracts=new_contracts)
 
             current_time = time.time()
             self.progress.set_current_value(last_block, current_time)
@@ -507,6 +522,7 @@ class WriteService:
 
     async def _parquet_writer(self, batches: AsyncIterator[Batch]) -> AsyncIterator[WriteTask]:
         bb = ArrowBatchBuilder(self.options.with_traces, self.options.with_statediffs)
+        new_contracts_buffer = {}
         chunk_size = self.options.chunk_size
 
         writer = ParquetWriter(
@@ -516,19 +532,22 @@ class WriteService:
             with_statediffs=self.options.with_statediffs
         )
 
-        async for blocks, extra in batches:
+        async for blocks, extra, new_contracts in batches:
             for b in blocks:
                 bb.append(b)
+            new_contracts_buffer.update(new_contracts)
 
             if bb.buffered_bytes() > chunk_size * 1024 * 1024:
                 LOG.debug('time to write a chunk', extra=extra)
                 batch = bb.build()
-                yield writer.write, batch
+                new_contracts = new_contracts_buffer
+                new_contracts_buffer = {}
+                yield writer.write, batch, new_contracts
 
         if bb.buffered_bytes() > 0:
             batch = bb.build()
             LOG.debug('flush buffered data from last strides')
-            writer.write(batch)
+            writer.write(batch, new_contracts_buffer)
 
 
 def cli():

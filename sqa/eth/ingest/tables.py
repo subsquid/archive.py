@@ -5,7 +5,7 @@ import pyarrow
 from sqa.eth.ingest.model import Transaction, Log, Block, Qty, DebugFrame, DebugStateDiff, Address20, \
     Bytes, DebugStateMap, \
     TraceStateDiff, TraceDiff, TraceRec
-from sqa.eth.ingest.util import qty2int, get_tx_status_from_traces
+from sqa.eth.ingest.util import qty2int, get_tx_status_from_traces, traverse_frame
 from sqa.writer.parquet import Column, TableBuilder
 
 
@@ -85,6 +85,12 @@ class TxTableBuilder(TableBuilder):
         self.contract_address = Column(pyarrow.string())
         self.type = Column(pyarrow.uint8())
         self.status = Column(pyarrow.int8())
+        self._parent_address = Column(pyarrow.string())
+        self._grand_parent_address = Column(pyarrow.string())
+        self._grand_grand_parent_address = Column(pyarrow.string())
+        self._grand_grand_grand_parent_address = Column(pyarrow.string())
+        self._grand_grand_grand_grand_parent_address = Column(pyarrow.string())
+        self._ancestor_addresses = Column(pyarrow.list_(pyarrow.string()))
 
     def append(self, tx: Transaction):
         block_number = qty2int(tx['blockNumber'])
@@ -132,6 +138,15 @@ class TxTableBuilder(TableBuilder):
                 self.status.append(None)
                 self.contract_address.append(None)
 
+        parents = iter(tx.get('parents_', [])[:5])
+        ancestors = tx.get('parents_', [])[5:]
+        self._parent_address.append(next(parents, None))
+        self._grand_parent_address.append(next(parents, None))
+        self._grand_grand_parent_address.append(next(parents, None))
+        self._grand_grand_grand_parent_address.append(next(parents, None))
+        self._grand_grand_grand_grand_parent_address.append(next(parents, None))
+        self._ancestor_addresses.append(ancestors)
+
 
 class LogTableBuilder(TableBuilder):
     def __init__(self):
@@ -145,6 +160,12 @@ class LogTableBuilder(TableBuilder):
         self.topic1 = Column(pyarrow.string())
         self.topic2 = Column(pyarrow.string())
         self.topic3 = Column(pyarrow.string())
+        self._parent_address = Column(pyarrow.string())
+        self._grand_parent_address = Column(pyarrow.string())
+        self._grand_grand_parent_address = Column(pyarrow.string())
+        self._grand_grand_grand_parent_address = Column(pyarrow.string())
+        self._grand_grand_grand_grand_parent_address = Column(pyarrow.string())
+        self._ancestor_addresses = Column(pyarrow.list_(pyarrow.string()))
 
     def append(self, log: Log):
         self.block_number.append(qty2int(log['blockNumber']))
@@ -158,6 +179,15 @@ class LogTableBuilder(TableBuilder):
         self.topic1.append(next(topics, None))
         self.topic2.append(next(topics, None))
         self.topic3.append(next(topics, None))
+
+        parents = iter(log.get('parents_', [])[:5])
+        ancestors = log.get('parents_', [])[5:]
+        self._parent_address.append(next(parents, None))
+        self._grand_parent_address.append(next(parents, None))
+        self._grand_grand_parent_address.append(next(parents, None))
+        self._grand_grand_grand_parent_address.append(next(parents, None))
+        self._grand_grand_grand_grand_parent_address.append(next(parents, None))
+        self._ancestor_addresses.append(ancestors)
 
 
 class TraceTableBuilder(TableBuilder):
@@ -280,7 +310,7 @@ class TraceTableBuilder(TableBuilder):
     def debug_append(self, block_number: Qty, transaction_index: Qty, top: DebugFrame):
         bn = qty2int(block_number)
         tix = qty2int(transaction_index)
-        for addr, subtraces, frame in _traverse_frame(top, []):
+        for addr, subtraces, frame in traverse_frame(top, []):
             trace_type: Literal['create', 'call', 'suicide']
             frame_type = frame['type']
             if frame_type in ('CALL', 'CALLCODE', 'STATICCALL', 'DELEGATECALL', 'INVALID', 'Call'):
@@ -353,13 +383,6 @@ class TraceTableBuilder(TableBuilder):
             self.reward_author.append(None)
             self.reward_value.append(None)
             self.reward_type.append(None)
-
-
-def _traverse_frame(frame: DebugFrame, address: list[int]) -> Iterable[tuple[list[int], int, DebugFrame]]:
-    subcalls = frame.get('calls', ())
-    yield address, len(subcalls), frame
-    for i, call in enumerate(subcalls):
-        yield from _traverse_frame(call, [*address, i])
 
 
 class StateDiffTableBuilder(TableBuilder):

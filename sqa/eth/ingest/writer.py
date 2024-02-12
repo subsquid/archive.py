@@ -7,6 +7,7 @@ from sqa.eth.ingest.model import Block
 from sqa.eth.ingest.tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder, TraceTableBuilder, \
     StateDiffTableBuilder
 from sqa.eth.ingest.util import short_hash
+from sqa.eth.ingest.contract_tracker import write_new_contracts
 from sqa.fs import Fs
 from sqa.layout import ChunkWriter
 from sqa.writer.parquet import add_size_column, add_index_column
@@ -98,7 +99,7 @@ class ParquetWriter:
         self.with_traces = with_traces
         self.with_statediffs = with_statediffs
 
-    def write(self, batch: ArrowDataBatch) -> None:
+    def write(self, batch: ArrowDataBatch, new_contracts: dict) -> None:
         blocks = batch['blocks']
         block_numbers: pyarrow.ChunkedArray = blocks.column('number')
         first_block = block_numbers[0].as_py()
@@ -109,6 +110,7 @@ class ParquetWriter:
         LOG.debug('saving data chunk %s', chunk.path())
 
         with self.fs.transact(chunk.path()) as loc:
+            write_new_contracts(loc, new_contracts)
             write_parquet(loc, batch)
 
 
