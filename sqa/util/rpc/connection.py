@@ -240,7 +240,7 @@ class RpcConnection:
 def _is_retryable_error(e: Exception) -> bool:
     if isinstance(e, httpx.HTTPStatusError):
         return e.response.status_code in (429, 502, 503, 504, 524, 530)
-    elif isinstance(e, httpx.ConnectError) or isinstance(e, httpx.TimeoutException):
+    elif isinstance(e, (httpx.ConnectError, httpx.TimeoutException, httpx.ReadError)):
         return True
     elif isinstance(e, httpx.RemoteProtocolError) and 'without sending' in str(e):
         return True

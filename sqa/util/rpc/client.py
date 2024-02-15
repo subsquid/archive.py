@@ -268,7 +268,8 @@ class RpcClient:
             else:
                 if ex is None:
                     result = fut.result()
-                    item.future.set_result(result)
+                    if not item.future.cancelled():
+                        item.future.set_result(result)
                 elif isinstance(ex, RpcRetryException):
                     self._push(item)
                 else:
