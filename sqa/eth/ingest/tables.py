@@ -151,7 +151,7 @@ class LogTableBuilder(TableBuilder):
         self.log_index.append(qty2int(log['logIndex']))
         self.transaction_index.append(qty2int(log['transactionIndex']))
         self.transaction_hash.append(log['transactionHash'])
-        self.address.append(log['address'])
+        self.address.append(log['address'].lower())
         self.data.append(log['data'])
         topics = iter(log['topics'])
         self.topic0.append(next(topics, None))
