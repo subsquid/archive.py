@@ -528,7 +528,7 @@ class WriteService:
         if bb.buffered_bytes() > 0:
             batch = bb.build()
             LOG.debug('flush buffered data from last strides')
-            writer.write(batch)
+            yield writer.write, batch
 
 
 def cli():
