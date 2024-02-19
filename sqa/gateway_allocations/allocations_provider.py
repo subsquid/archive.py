@@ -83,10 +83,8 @@ class AllocationsProvider:
         encoded_id = base58.b58decode(gateway_id)
         try:
             gateway = await self._gateway_registry.functions.getGateway(encoded_id).call()
-            LOG.info(repr(gateway))
             operator_addr = gateway[0]
             encoded_ids = await self._gateway_registry.functions.getCluster(encoded_id).call()
-            LOG.info(repr(encoded_ids))
             gateway_ids = [base58.b58encode(gid).decode('utf-8') for gid in encoded_ids]
             return GatewayCluster(
                 operator_addr=operator_addr,
