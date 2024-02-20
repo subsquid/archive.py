@@ -109,7 +109,7 @@ class TriggerSmartContractTxRequest(TypedDict, total=False):
     internalTransactions: bool
 
 
-class TraceRequest(TypedDict, total=False):
+class InternalTxRequest(TypedDict, total=False):
     caller: list[str]
     transferTo: list[str]
     transaction: bool
@@ -375,7 +375,7 @@ class _InternalTxScan(Scan):
     def request_name(self) -> str:
         return 'internalTransactions'
 
-    def where(self, req: TraceRequest) -> Iterable[Expression | None]:
+    def where(self, req: InternalTxRequest) -> Iterable[Expression | None]:
         yield field_in('caller_address', req.get('caller'))
         yield field_in('transer_to_address', req.get('transferTo'))
 
