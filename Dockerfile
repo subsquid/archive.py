@@ -54,12 +54,13 @@ COPY --from=p2p-worker-builder /project/.venv /app/env/
 COPY --from=p2p-worker-builder /project/sqa /app/sqa/
 VOLUME /app/data
 ENV DATA_DIR=/app/data
-ENV ENABLE_ALLOCATIONS=1
 ENV PING_INTERVAL_SEC=20
 ENV LOGS_SEND_INTERVAL_SEC=600
 ENV PROMETHEUS_PORT=9090
+ENV NUM_WORKER_PROC=16
 RUN echo "#!/bin/bash \n exec /app/env/bin/python -m sqa.worker.p2p  \
     --data-dir \${DATA_DIR}  \
+    --procs \${NUM_WORKER_PROC} \
     --proxy \${PROXY_ADDR}  \
     --prometheus-port \${PROMETHEUS_PORT} \
     --scheduler-id \${SCHEDULER_ID}  \

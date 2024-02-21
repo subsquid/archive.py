@@ -11,6 +11,7 @@ from .query import QueryResult, validate_query, execute_query
 from .state.manager import StateManager
 from .transport import Transport
 
+
 LOG = logging.getLogger(__name__)
 PING_INTERVAL_SEC = int(os.environ.get('PING_INTERVAL_SEC', '10'))
 
@@ -20,10 +21,9 @@ class Worker:
         self._sm = sm
         self._transport = transport
         self._procs = procs or (os.cpu_count() or 1) * 3 // 2
-        self._pool = multiprocessing.Pool(
+        self._pool = multiprocessing.get_context('spawn').Pool(
             processes=self._procs,
-            initializer=init_child_process,
-            # maxtasksperchild=10
+            initializer=init_child_process
         )
         self._shutdown = False
 

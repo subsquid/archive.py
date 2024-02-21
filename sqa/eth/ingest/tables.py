@@ -116,7 +116,7 @@ class TxTableBuilder(TableBuilder):
             self.gas_used.append(receipt['gasUsed'])
             self.cumulative_gas_used.append(receipt['cumulativeGasUsed'])
             self.effective_gas_price.append(receipt.get('effectiveGasPrice'))
-            self.type.append(qty2int(receipt['type']))
+            self.type.append(receipt.get('type') and qty2int(receipt['type']))
             self.status.append(qty2int(receipt['status']))
             self.contract_address.append(receipt.get('contractAddress'))
         else:
@@ -151,7 +151,7 @@ class LogTableBuilder(TableBuilder):
         self.log_index.append(qty2int(log['logIndex']))
         self.transaction_index.append(qty2int(log['transactionIndex']))
         self.transaction_hash.append(log['transactionHash'])
-        self.address.append(log['address'])
+        self.address.append(log['address'].lower())
         self.data.append(log['data'])
         topics = iter(log['topics'])
         self.topic0.append(next(topics, None))
