@@ -18,8 +18,8 @@ LOG = logging.getLogger(__name__)
 
 def parse_cli_arguments():
     program = argparse.ArgumentParser(
-        prog='python3 -m sqa.substrate.writer',
-        description='Subsquid substrate archive writer'
+        prog='python3 -m sqa.tron.writer',
+        description='Subsquid tron archive writer'
     )
 
     program.add_argument(
