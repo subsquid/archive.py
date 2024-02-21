@@ -94,3 +94,15 @@ def field_in(field_name: str, value_list: list[Any] | None) -> pyarrow.dataset.E
         return pyarrow.compute.field(field_name) == pyarrow.compute.scalar(value_list[0])
     else:
         return pyarrow.compute.field(field_name).isin(value_list)
+
+
+def field_gte(field_name: str, value: Any | None) -> pyarrow.dataset.Expression | None:
+    if value is None:
+        return
+    return pyarrow.compute.field(field_name) >= value
+
+
+def field_lte(field_name: str, value: Any | None) -> pyarrow.dataset.Expression | None:
+    if value is None:
+        return
+    return pyarrow.compute.field(field_name) <= value

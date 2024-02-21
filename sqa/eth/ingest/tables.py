@@ -34,6 +34,7 @@ class BlockTableBuilder(TableBuilder):
         self.gas_used = Column(qty())
         self.timestamp = Column(pyarrow.timestamp('s'))
         self.base_fee_per_gas = Column(qty())
+        self.l1_block_number = Column(pyarrow.int32())
 
     def append(self, block: Block) -> None:
         self.number.append(qty2int(block['number']))
@@ -55,6 +56,7 @@ class BlockTableBuilder(TableBuilder):
         self.gas_limit.append(block['gasLimit'])
         self.timestamp.append(qty2int(block['timestamp']))
         self.base_fee_per_gas.append(block.get('baseFeePerGas'))
+        self.l1_block_number.append(block.get('l1BlockNumber') and qty2int(block['l1BlockNumber']))
 
 
 class TxTableBuilder(TableBuilder):
@@ -114,7 +116,7 @@ class TxTableBuilder(TableBuilder):
             self.gas_used.append(receipt['gasUsed'])
             self.cumulative_gas_used.append(receipt['cumulativeGasUsed'])
             self.effective_gas_price.append(receipt.get('effectiveGasPrice'))
-            self.type.append(qty2int(receipt['type']))
+            self.type.append(receipt.get('type') and qty2int(receipt['type']))
             self.status.append(qty2int(receipt['status']))
             self.contract_address.append(receipt.get('contractAddress'))
         else:
@@ -149,7 +151,7 @@ class LogTableBuilder(TableBuilder):
         self.log_index.append(qty2int(log['logIndex']))
         self.transaction_index.append(qty2int(log['transactionIndex']))
         self.transaction_hash.append(log['transactionHash'])
-        self.address.append(log['address'])
+        self.address.append(log['address'].lower())
         self.data.append(log['data'])
         topics = iter(log['topics'])
         self.topic0.append(next(topics, None))

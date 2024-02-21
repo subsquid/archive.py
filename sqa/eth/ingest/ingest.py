@@ -27,6 +27,8 @@ class Ingest:
         use_trace_api: bool = False,
         use_debug_api_for_statediffs: bool = False,
         validate_tx_root: bool = False,
+        validate_tx_type: bool = False,
+        validate_logs_bloom: bool = False,
     ):
         self._rpc = rpc
         self._finality_confirmation = finality_confirmation
@@ -36,6 +38,8 @@ class Ingest:
         self._use_trace_api = use_trace_api
         self._use_debug_api_for_statediffs = use_debug_api_for_statediffs
         self._validate_tx_root = validate_tx_root
+        self._validate_tx_type = validate_tx_type
+        self._validate_logs_bloom = validate_logs_bloom
         self._height = from_block - 1
         self._genesis = genesis_block
         self._end = to_block
@@ -52,7 +56,7 @@ class Ingest:
         self._is_polygon_testnet = False
         self._is_optimism = False
         self._is_astar = False
-        self._is_zksync = False
+        self._is_skale_nebula = False
 
     async def loop(self) -> AsyncIterator[list[Block]]:
         assert not self._running
@@ -84,7 +88,7 @@ class Ingest:
         self._is_polygon_testnet = genesis_hash == '0x7b66506a9ebdbf30d32b43c5f15a3b1216269a1ec3a75aa3182b86176a2b1ca7'
         self._is_optimism = genesis_hash == '0x7ca38a1916c42007829c55e69d3e9a73265554b586a499015373241b8a3fa48b'
         self._is_astar = genesis_hash == '0x0d28a86ac0fe37871285bd1dac45d83a4b3833e01a37571a1ac4f0a44c64cdc2'
-        self._is_zksync = genesis_hash == '0xe8e77626586f73b955364c7b4bbf0bb7f7685ebd40e852b164633a4acbd3244c'
+        self._is_skale_nebula = genesis_hash == '0x28e07f346c28a837dfd2897ce70c8500de6e67ddbc33cb5b9cd720fff4aeb598'
 
     def _schedule_strides(self):
         while len(self._strides) < max(1, min(10, self._rpc.get_total_capacity())) \
@@ -122,7 +126,7 @@ class Ingest:
             self._chain_height = await self._get_chain_height()
 
     async def _get_chain_height(self) -> int:
-        hex_height = await self._rpc.call('eth_blockNumber')
+        hex_height = await self._rpc.call('eth_blockNumber', [])
         height = int(hex_height, 0)
         return max(height - self._finality_confirmation, 0)
 
@@ -201,6 +205,11 @@ class Ingest:
             priority=from_block
         )
 
+        if self._is_skale_nebula:
+            for block in blocks:
+                for tx in block['transactions']:
+                    tx['type'] = '0x0'
+
         if self._validate_tx_root:
             for block in blocks:
                 assert block['transactionsRoot'] == transactions_root(block['transactions'])
@@ -233,7 +242,10 @@ class Ingest:
 
         for block in blocks:
             block_logs = logs_by_hash.get(block['hash'], [])
-            assert block['logsBloom'] == logs_bloom(block_logs)
+
+            if self._validate_logs_bloom:
+                assert block['logsBloom'] == logs_bloom(block_logs)
+
             block['logs_'] = block_logs
 
     async def _fetch_receipts(self, blocks: list[Block]) -> None:
@@ -260,6 +272,10 @@ class Ingest:
 
             if self._is_arbitrum_one and r['transactionHash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800':
                 continue
+            if self._is_skale_nebula:
+                r['type'] = '0x0'
+            elif self._validate_tx_type:
+                assert r.get('type') is not None
 
             try:
                 tx = tx_by_index[r['blockHash']][r['transactionIndex']]
@@ -295,8 +311,10 @@ class Ingest:
                 _fix_astar_995596(block)
 
             block_logs = logs_by_hash.get(block['hash'], [])
-            if not self._is_zksync:
+
+            if self._validate_logs_bloom:
                 assert block['logsBloom'] == logs_bloom(block_logs)
+
             for tx in block['transactions']:
                 if self._is_arbitrum_one and tx['hash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800' and block['number'] == hex(4527955):
                     continue
@@ -314,6 +332,9 @@ class Ingest:
             [tx['hash']],
             priority=block_number
         )
+
+        if self._is_skale_nebula:
+            receipt['type'] = '0x0'
 
         assert receipt['transactionHash'] == tx['hash']
         tx['receipt_'] = receipt

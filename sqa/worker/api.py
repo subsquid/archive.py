@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import random
 import time
 
@@ -46,14 +47,32 @@ async def get_json(req: fa.Request):
         raise falcon.HTTPUnsupportedMediaType(description='expected json body')
 
 
+class Limit:
+    def __init__(self, max_pending_requests: int):
+        self.max_pending_requests = max_pending_requests
+        self._pending_requests = 0
+
+    def assert_not_busy(self) -> None:
+        if self._pending_requests >= self.max_pending_requests:
+            raise falcon.HTTPServiceUnavailable(description='server is too busy')
+
+    def start_of_request(self) -> None:
+        self._pending_requests += 1
+
+    def end_of_request(self) -> None:
+        self._pending_requests -= 1
+
+
 class StatusResource:
-    def __init__(self, sm: StateManager, router_url: str, worker_id: str, worker_url: str):
+    def __init__(self, sm: StateManager, router_url: str, worker_id: str, worker_url: str, limit: Limit):
         self.sm = sm
         self.router_url = router_url
         self.worker_id = worker_id
         self.worker_url = worker_url
+        self.limit = limit
 
     async def on_get(self, req: fa.Request, res: fa.Response):
+        self.limit.assert_not_busy()
         res.content_type = 'application/json'
         res.text = json.dumps({
             'router_url': self.router_url,
@@ -67,14 +86,13 @@ class StatusResource:
 
 
 class QueryResource:
-    def __init__(self, worker: Worker):
+    def __init__(self, worker: Worker, limit: Limit):
         self._worker = worker
-        self._pending_requests = 0
-        self._max_pending_requests = worker.get_processes_count() * 2
+        self._limit = limit
 
     @falcon.before(max_body(4 * 1024 * 1024))
     async def on_post(self, req: fa.Request, res: fa.Response, dataset: str):
-        self._assert_not_busy()
+        self._limit.assert_not_busy()
 
         try:
             dataset = dataset_decode(dataset)
@@ -89,17 +107,21 @@ class QueryResource:
             'squid': get_squid_id(req)
         }
 
+        if self._is_sampling():
+            LOG.info('query sample', extra=log_extra)
+
         profiling = req.params.get('profile') == 'true'
 
-        self._assert_not_busy()
+        self._limit.assert_not_busy()
 
         start_time = time.time()
 
-        self._pending_requests += 1
+        self._limit.start_of_request()
         try:
             query_result = await self._worker.execute_query(query, dataset, profiling=profiling)
-            res.text = query_result.result
+            res.data = query_result.compressed_data
             res.content_type = 'application/json'
+            res.set_header('content-encoding', 'gzip')
         except InvalidQuery as e:
             LOG.warning(f'invalid query: {e}', extra=log_extra)
             raise falcon.HTTPBadRequest(description=str(e))
@@ -110,7 +132,7 @@ class QueryResource:
             LOG.exception('failed to execute query', extra=log_extra)
             raise falcon.HTTPInternalServerError(description=str(e))
         finally:
-            self._pending_requests -= 1
+            self._limit.end_of_request()
 
         end_time = time.time()
         duration = end_time - start_time
@@ -121,12 +143,11 @@ class QueryResource:
                 'query_exec_time': query_result.exec_time,
                 **log_extra
             })
-        elif random.random() < 0.05:
+        elif not self._is_sampling() and random.random() < 0.05:
             LOG.info('query sample', extra={
                 'query_time': duration,
                 **log_extra
             })
 
-    def _assert_not_busy(self) -> None:
-        if self._pending_requests >= self._max_pending_requests:
-            raise falcon.HTTPServiceUnavailable(description='server is too busy')
+    def _is_sampling(self) -> bool:
+        return os.environ.get('SQA_SAMPLE_ALL_QUERIES') == 'true'

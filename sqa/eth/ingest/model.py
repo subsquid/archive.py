@@ -32,6 +32,7 @@ class Block(TypedDict):
     baseFeePerGas: NotRequired[Qty]
     uncles: list[Hash32]
     transactions: list['Transaction']
+    l1BlockNumber: NotRequired[Qty]
     logs_: NotRequired[list['Log']]
     unknownTraceReplays_: NotRequired[list]
 
@@ -47,7 +48,7 @@ Transaction = TypedDict('Transaction', {
     'to': Optional[Address20],
     'input': Bytes,
     'value': Qty,
-    'type': Qty,
+    'type': NotRequired[Qty],
     'gas': Qty,
     'gasPrice': Qty,
     'maxFeePerGas': NotRequired[Qty],
@@ -86,7 +87,7 @@ class Receipt(TypedDict):
     gasUsed: Qty
     contractAddress: NotRequired[Address20]
     logs: list[Log]
-    type: Qty
+    type: NotRequired[Qty]
     status: NotRequired[Qty]
 
 

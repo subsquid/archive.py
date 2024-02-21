@@ -2,6 +2,8 @@ FROM python:3.11-slim-bullseye AS base
 
 
 FROM base AS builder
+RUN apt update
+RUN apt install -y gcc
 RUN pip install pdm
 WORKDIR /project
 RUN pdm venv create --with venv
@@ -56,8 +58,18 @@ FROM base as p2p-worker
 COPY --from=p2p-worker-builder /project/.venv /app/env/
 COPY --from=p2p-worker-builder /project/sqa /app/sqa/
 VOLUME /app/data
-ENV DATA_DIR=/app/data/worker
+ENV DATA_DIR=/app/data
 ENV PING_INTERVAL_SEC=20
-RUN echo "#!/bin/bash \n exec /app/env/bin/python -m sqa.worker.p2p --data-dir \${DATA_DIR} --proxy \${PROXY_ADDR} --scheduler-id \${SCHEDULER_ID}" > ./entrypoint.sh
+ENV LOGS_SEND_INTERVAL_SEC=600
+ENV PROMETHEUS_PORT=9090
+ENV NUM_WORKER_PROC=16
+RUN echo "#!/bin/bash \n exec /app/env/bin/python -m sqa.worker.p2p  \
+    --data-dir \${DATA_DIR}  \
+    --procs \${NUM_WORKER_PROC} \
+    --proxy \${PROXY_ADDR}  \
+    --prometheus-port \${PROMETHEUS_PORT} \
+    --scheduler-id \${SCHEDULER_ID}  \
+    --rpc-url \${RPC_URL} \
+    --logs-collector-id \${LOGS_COLLECTOR_ID}" > ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 ENTRYPOINT ["./entrypoint.sh"]

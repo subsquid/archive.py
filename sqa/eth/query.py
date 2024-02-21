@@ -2,11 +2,13 @@ import itertools
 from typing import TypedDict, Iterable
 
 import marshmallow as mm
+import marshmallow.validate
 from pyarrow.dataset import Expression
 
 from sqa.query.model import JoinRel, RefRel, Table, Item, FieldSelection, Scan, SubRel
 from sqa.query.schema import BaseQuerySchema
-from sqa.query.util import to_snake_case, json_project, get_selected_fields, field_in, remove_camel_prefix
+from sqa.query.util import to_snake_case, json_project, get_selected_fields, remove_camel_prefix, \
+    field_in, field_gte, field_lte
 
 
 class BlockFieldSelection(TypedDict, total=False):
@@ -29,6 +31,7 @@ class BlockFieldSelection(TypedDict, total=False):
     difficulty: bool
     totalDifficulty: bool
     baseFeePerGas: bool
+    l1BlockNumber: bool
 
 
 TxFieldSelection = TypedDict('TxFieldSelection', {
@@ -53,7 +56,6 @@ TxFieldSelection = TypedDict('TxFieldSelection', {
     'gasUsed': bool,
     'cumulativeGasUsed': bool,
     'effectiveGasPrice': bool,
-    'callAddress': bool,
     'type': bool,
     'status': bool
 }, total=False)
@@ -116,12 +118,15 @@ class LogRequest(TypedDict, total=False):
     topic3: list[str]
     transaction: bool
     transactionTraces: bool
+    transactionLogs: bool
 
 
 TxRequest = TypedDict('TxRequest', {
     'from': list[str],
     'to': list[str],
     'sighash': list[str],
+    'firstNonce': int,
+    'lastNonce': int,
     'logs': bool,
     'traces': bool,
     'stateDiffs': bool
@@ -135,8 +140,10 @@ class TraceRequest(TypedDict, total=False):
     callTo: list[str]
     callSighash: list[str]
     suicideRefundAddress: list[str]
+    createResultAddress: list[str]
     rewardAuthor: list[str]
     transaction: bool
+    transactionLogs: bool
     subtraces: bool
     parents: bool
 
@@ -172,12 +179,21 @@ class _LogRequestSchema(mm.Schema):
     topic3 = mm.fields.List(mm.fields.Str())
     transaction = mm.fields.Boolean()
     transactionTraces = mm.fields.Boolean()
+    transactionLogs = mm.fields.Boolean()
 
 
 _TxRequestSchema = mm.Schema.from_dict({
     'from': mm.fields.List(mm.fields.Str()),
     'to': mm.fields.List(mm.fields.Str()),
     'sighash': mm.fields.List(mm.fields.Str()),
+    'firstNonce': mm.fields.Integer(
+        strict=True,
+        validate=mm.validate.Range(min=0, min_inclusive=True)
+    ),
+    'lastNonce': mm.fields.Integer(
+        strict=True,
+        validate=mm.validate.Range(min=0, min_inclusive=True)
+    ),
     'logs': mm.fields.Boolean(),
     'traces': mm.fields.Boolean(),
     'stateDiffs': mm.fields.Boolean()
@@ -191,8 +207,10 @@ class _TraceRequestSchema(mm.Schema):
     callTo = mm.fields.List(mm.fields.Str())
     callSighash = mm.fields.List(mm.fields.Str())
     suicideRefundAddress = mm.fields.List(mm.fields.Str())
+    createResultAddress = mm.fields.List(mm.fields.Str())
     rewardAuthor = mm.fields.List(mm.fields.Str())
     transaction = mm.fields.Boolean()
+    transactionLogs = mm.fields.Boolean()
     subtraces = mm.fields.Boolean()
     parents = mm.fields.Boolean()
 
@@ -302,6 +320,8 @@ class _TxScan(Scan):
         yield field_in('to', req.get('to'))
         yield field_in('from', req.get('from'))
         yield field_in('sighash', req.get('sighash'))
+        yield field_gte('nonce', req.get('firstNonce'))
+        yield field_lte('nonce', req.get('lastNonce'))
 
 
 class _TxItem(Item):
@@ -390,6 +410,7 @@ class _TraceScan(Scan):
         yield field_in('call_to', req.get('callTo'))
         yield field_in('call_sighash', req.get('callSighash'))
         yield field_in('suicide_refund_address', req.get('suicideRefundAddress'))
+        yield field_in('create_result_address', req.get('createResultAddress'))
         yield field_in('reward_author', req.get('rewardAuthor'))
 
 
@@ -563,7 +584,7 @@ def _build_model():
         JoinRel(
             scan=trace_scan,
             include_flag_name='parents',
-            query='SELECT * FROM traces s, ('
+            query='SELECT * FROM traces i, ('
                   'WITH RECURSIVE selected_traces(block_number, transaction_index, trace_address) AS ('
                   'SELECT block_number, transaction_index, array_pop_back(trace_address) AS trace_address '
                   'FROM s WHERE length(s.trace_address) > 0 '
@@ -587,7 +608,23 @@ def _build_model():
             query='SELECT * FROM logs i, s WHERE '
                   'i.block_number = s.block_number AND '
                   'i.transaction_index = s.transaction_index'
-        )
+        ),
+        JoinRel(
+            scan=log_scan,
+            include_flag_name='transactionLogs',
+            scan_columns=['transaction_index'],
+            query='SELECT * FROM logs i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        ),
+        JoinRel(
+            scan=trace_scan,
+            include_flag_name='transactionLogs',
+            scan_columns=['transaction_index'],
+            query='SELECT * FROM logs i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        ),
     ])
 
     tx_item.sources.extend([

@@ -1,10 +1,9 @@
 import logging
-from typing import Iterable
-
 from sqa.util.log import init_logging
 init_logging()
 
 import sys
+from typing import Iterable
 
 import pyarrow
 

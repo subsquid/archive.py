@@ -222,7 +222,8 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
             '_evm_log_address',
             '_evm_log_topic0',
             '_contract_address',
-            '_gear_program_id'
+            '_gear_program_id',
+            '_idx'
         ],
         **kwargs
     )
@@ -252,7 +253,8 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
             'extrinsic_index',
             'name',
             '_ethereum_transact_to',
-            '_ethereum_transact_sighash'
+            '_ethereum_transact_sighash',
+            '_idx'
         ],
         **kwargs
     )
@@ -267,7 +269,8 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         write_statistics=[
             'block_number',
             'index',
-            'version'
+            'version',
+            '_idx'
         ],
         **kwargs
     )
