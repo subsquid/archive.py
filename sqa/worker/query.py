@@ -10,6 +10,7 @@ import psutil
 
 import sqa.eth.query
 import sqa.substrate.query
+import sqa.solana.query
 from sqa.fs import LocalFs
 from sqa.layout import get_chunks, get_filelist, Partition
 from sqa.query.model import Model
@@ -33,6 +34,8 @@ def validate_query(q) -> ArchiveQuery:
         q = _validate_shape(q, sqa.eth.query.QUERY_SCHEMA)
     elif query_type == 'substrate':
         q = _validate_shape(q, sqa.substrate.query.QUERY_SCHEMA)
+    elif query_type == 'solana':
+        q = _validate_shape(q, sqa.solana.query.QUERY_SCHEMA)
     else:
         raise InvalidQuery(f'unknown query type - {query_type}"')
 
@@ -68,6 +71,8 @@ def _get_model(q: dict) -> Model:
         return sqa.eth.query.MODEL
     elif query_type == 'substrate':
         return sqa.substrate.query.MODEL
+    elif query_type == 'solana':
+        return sqa.solana.query.MODEL
     else:
         raise TypeError(f'unknown query type - {query_type}')
 

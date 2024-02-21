@@ -29,3 +29,11 @@ class BaseQuerySchema(mm.Schema):
     )
 
     includeAllBlocks = mm.fields.Boolean(required=False)
+
+
+def field_map_schema(typed_dict):
+    return mm.fields.Dict(
+        mm.fields.Str(validate=lambda k: k in typed_dict.__optional_keys__),
+        mm.fields.Boolean(),
+        required=False
+    )

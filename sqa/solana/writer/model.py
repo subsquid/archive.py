@@ -6,9 +6,9 @@ JSON = Any
 
 
 class BlockHeader(TypedDict):
+    hash: Base58Bytes
     height: int
     slot: int
-    hash: Base58Bytes
     parentSlot: int
     parentHash: Base58Bytes
     timestamp: int
@@ -38,7 +38,6 @@ class Transaction(TypedDict):
     err: NotRequired[JSON]
     computeUnitsConsumed: NotRequired[int]
     fee: int
-    logMessages: list[str]
     loadedAddresses: LoadedAddresses
 
 
@@ -48,9 +47,20 @@ class Instruction(TypedDict):
     programId: Base58Bytes
     accounts: list[Base58Bytes]
     data: Base58Bytes
+    error: NotRequired[str]
+
+
+class LogMessage(TypedDict):
+    transactionIndex: int
+    logIndex: int
+    instructionAddress: list[int]
+    programId: Base58Bytes
+    kind: Literal['log', 'data', 'other']
+    message: str
 
 
 class Block(TypedDict):
     header: BlockHeader
     transactions: list[Transaction]
     instructions: list[Instruction]
+    logs: list[LogMessage]

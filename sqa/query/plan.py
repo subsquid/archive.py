@@ -301,7 +301,8 @@ class QueryPlan:
                  model: Model,
                  filelist: list[str],
                  q: ArchiveQuery,
-                 size_limit: int = 50_000_000
+                 size_limit: int = 50_000_000,
+                 block_number_type=pyarrow.int64()
                  ):
         builder = _Builder(
             model=model,
@@ -317,6 +318,7 @@ class QueryPlan:
         self._first_block = q['fromBlock']
         self._last_block = q.get('toBlock', math.inf)
         self._size_limit = size_limit
+        self._block_number_type = block_number_type
 
     def fetch(self, partition: Partition) -> pyarrow.Table:
         scan_data: ScanData = {}
@@ -358,18 +360,18 @@ class QueryPlan:
                 pyarrow.table({
                     'block_number': pyarrow.array(
                         range(first_block, last_block+1),
-                        type=pyarrow.int32()
+                        type=self._block_number_type
                     ),
                     'weight': pyarrow.array(
                         (0 for _ in range(last_block - first_block + 1)),
-                        type=pyarrow.int64()
+                        type=self._block_number_type
                     )
                 })
             )
         else:
             union.append(
                 pyarrow.table({
-                    'block_number': pyarrow.array([first_block, last_block], type=pyarrow.int32()),
+                    'block_number': pyarrow.array([first_block, last_block], type=self._block_number_type),
                     'weight': pyarrow.array([0, 0], type=pyarrow.int64())
                 })
             )

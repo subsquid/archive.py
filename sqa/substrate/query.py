@@ -4,7 +4,7 @@ import marshmallow as mm
 import pyarrow.dataset
 
 from sqa.query.model import Model, JoinRel, RefRel, Table, Item, FieldSelection, Scan, SubRel
-from sqa.query.schema import BaseQuerySchema
+from sqa.query.schema import BaseQuerySchema, field_map_schema
 from sqa.query.util import json_project, get_selected_fields, field_in
 
 
@@ -48,19 +48,11 @@ class EventFieldSelection(TypedDict, total=False):
     callAddress: bool
 
 
-def _field_map_schema(typed_dict):
-    return mm.fields.Dict(
-        mm.fields.Str(validate=lambda k: k in typed_dict.__optional_keys__),
-        mm.fields.Boolean(),
-        required=False
-    )
-
-
 class _FieldSelectionSchema(mm.Schema):
-    block = _field_map_schema(BlockFieldSelection)
-    extrinsic = _field_map_schema(ExtrinsicFieldSelection)
-    call = _field_map_schema(CallFieldSelection)
-    event = _field_map_schema(EventFieldSelection)
+    block = field_map_schema(BlockFieldSelection)
+    extrinsic = field_map_schema(ExtrinsicFieldSelection)
+    call = field_map_schema(CallFieldSelection)
+    event = field_map_schema(EventFieldSelection)
 
 
 class _CallRelations(TypedDict, total=False):
