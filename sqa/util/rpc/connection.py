@@ -171,7 +171,7 @@ class RpcConnection:
 
         http_response = await self._client.post(self.endpoint.url, json=request, headers={
             'accept': 'application/json',
-            'accept-encoding': 'gzip, br',
+            'accept-encoding': 'gzip, deflate',
             'content-type': 'application/json',
         })
 
