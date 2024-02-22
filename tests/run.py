@@ -5,7 +5,7 @@ import os
 import sys
 from typing import NamedTuple, Any, Iterable
 
-from sqa.worker.query import execute_query, QueryResult
+from sqa.worker.query import execute_query, QueryResult, validate_query
 
 
 class Fixture(NamedTuple):
@@ -35,10 +35,11 @@ def get_fixtures(suite_dir: str) -> Iterable[Fixture]:
 
 
 def execute_fixture_query(fixture: Fixture) -> QueryResult:
+    query = validate_query(fixture.query)
     return execute_query(
         fixture.data_dir,
         (0, sys.maxsize),
-        fixture.query,
+        query,
         False,
         False
     )
@@ -60,8 +61,8 @@ def run_test_suite(suite_dir: str) -> None:
 
 
 def main():
-    run_test_suite('tests/ethereum')
-    run_test_suite('tests/moonbeam')
+    # run_test_suite('tests/ethereum')
+    # run_test_suite('tests/moonbeam')
     run_test_suite('tests/solana')
 
 

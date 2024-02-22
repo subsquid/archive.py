@@ -52,7 +52,7 @@ def validate_query(q) -> ArchiveQuery:
 
 def _validate_shape(obj, schema: mm.Schema):
     try:
-        return schema.load(obj)
+        return schema.load(obj, unknown=mm.RAISE)
     except mm.ValidationError as err:
         raise InvalidQuery(str(err.normalized_messages()))
 

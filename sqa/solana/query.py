@@ -44,6 +44,7 @@ class InstructionFieldSelection(TypedDict, total=False):
 
 
 class LogFieldSelection(TypedDict, total=False):
+    instructionAddress: bool
     programId: bool
     kind: bool
     message: bool
