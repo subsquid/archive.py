@@ -266,14 +266,14 @@ class RpcClient:
                 if not self._closed:
                     raise e
             else:
-                if ex is None:
-                    result = fut.result()
-                    if not item.future.cancelled():
+                if not item.future.cancelled():
+                    if ex is None:
+                        result = fut.result()
                         item.future.set_result(result)
-                elif isinstance(ex, RpcRetryException):
-                    self._push(item)
-                else:
-                    item.future.set_exception(ex)
+                    elif isinstance(ex, RpcRetryException):
+                        self._push(item)
+                    else:
+                        item.future.set_exception(ex)
                 self._schedule_soon()
 
         future = con.request(item.id, item.request, item.validate_result, current_time=current_time)
