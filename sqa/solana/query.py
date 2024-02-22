@@ -37,10 +37,10 @@ class InstructionFieldSelection(TypedDict, total=False):
     accounts: bool
     data: bool
     error: bool
+    d1: bool
+    d2: bool
+    d4: bool
     d8: bool
-    d16: bool
-    d32: bool
-    d64: bool
 
 
 class LogFieldSelection(TypedDict, total=False):
@@ -78,10 +78,10 @@ class _TransactionRequestSchema(mm.Schema):
 
 class InstructionRequest(TypedDict, total=False):
     programId: list[Base58Bytes]
-    d8: list[int]
-    d16: list[int]
-    d32: list[int]
-    d64: list[int]
+    d1: list[str]
+    d2: list[str]
+    d4: list[str]
+    d8: list[str]
     a0: list[Base58Bytes]
     a1: list[Base58Bytes]
     a2: list[Base58Bytes]
@@ -93,15 +93,16 @@ class InstructionRequest(TypedDict, total=False):
     a8: list[Base58Bytes]
     a9: list[Base58Bytes]
     transaction: bool
+    innerInstructions: bool
     logs: bool
 
 
 class _InstructionRequestSchema(mm.Schema):
     programId = mm.fields.List(mm.fields.Str())
-    d8 = mm.fields.List(mm.fields.Integer())
-    d16 = mm.fields.List(mm.fields.Integer())
-    d32 = mm.fields.List(mm.fields.Integer())
-    d64 = mm.fields.List(mm.fields.Integer())
+    d1 = mm.fields.List(mm.fields.Str())
+    d2 = mm.fields.List(mm.fields.Str())
+    d4 = mm.fields.List(mm.fields.Str())
+    d8 = mm.fields.List(mm.fields.Str())
     a0 = mm.fields.List(mm.fields.Str())
     a1 = mm.fields.List(mm.fields.Str())
     a2 = mm.fields.List(mm.fields.Str())
@@ -113,6 +114,7 @@ class _InstructionRequestSchema(mm.Schema):
     a8 = mm.fields.List(mm.fields.Str())
     a9 = mm.fields.List(mm.fields.Str())
     transaction = mm.fields.Boolean()
+    innerInstructions = mm.fields.Boolean()
     logs = mm.fields.Boolean()
 
 
@@ -170,7 +172,13 @@ class _BlockItem(Item):
 
 _transactions_table = Table(
     name='transactions',
-    primary_key=['index']
+    primary_key=['index'],
+    column_weights={
+        'account_keys': 'account_keys_size',
+        'address_table_lookups': 'address_table_lookups_size',
+        'signatures': 'signatures_size',
+        'loaded_addresses': 'loaded_addresses_size'
+    }
 )
 
 
@@ -225,10 +233,10 @@ class _InstructionScan(Scan):
 
     def where(self, req: InstructionRequest) -> Iterable[pyarrow.dataset.Expression | None]:
         yield field_in('program_id', req.get('programId'))
+        yield field_in('d1', req.get('d1'))
+        yield field_in('d2', req.get('d2'))
+        yield field_in('d4', req.get('d4'))
         yield field_in('d8', req.get('d8'))
-        yield field_in('d16', req.get('d16'))
-        yield field_in('d32', req.get('d32'))
-        yield field_in('d64', req.get('d64'))
         yield field_in('a0', req.get('a0'))
         yield field_in('a1', req.get('a1'))
         yield field_in('a2', req.get('a2'))
@@ -348,6 +356,15 @@ def _build_model():
             query='SELECT * FROM instructions i, s WHERE '
                   'i.block_number = s.block_number AND '
                   'i.transaction_index = s.index'
+        ),
+        JoinRel(
+            scan=ins_scan,
+            include_flag_name='innerInstructions',
+            query='SELECT * FROM instructions i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index AND '
+                  'len(i.instruction_address) > len(s.instruction_address) AND '
+                  'i.instruction_address[1:len(s.instruction_address)] = s.instruction_address'
         ),
         RefRel(
             scan=log_scan,

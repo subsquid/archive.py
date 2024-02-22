@@ -68,23 +68,49 @@ class TransactionTable(TableBuilder):
         ]))
         # index
         self.fee_payer = Column(base58_bytes())
+        # sizes
+        self.account_keys_size = Column(pyarrow.int64())
+        self.address_table_lookups_size = Column(pyarrow.int64())
+        self.signatures_size = Column(pyarrow.int64())
+        self.loaded_addresses_size = Column(pyarrow.int64())
 
     def append(self, block_number: int, tx: Transaction) -> None:
         self.block_number.append(block_number)
         self.index.append(tx['index'])
         self.version.append(-1 if tx['version'] == 'legacy' else tx['version'])
-        self.account_keys.append(tx['accountKeys'])
-        self.address_table_lookups.append(tx['addressTableLookups'])
+
+        account_keys = tx['accountKeys']
+        self.account_keys.append(account_keys)
+        self.account_keys_size.append(_list_size(account_keys))
+
+        address_table_lookups = tx['addressTableLookups']
+        self.address_table_lookups.append(address_table_lookups)
+        self.address_table_lookups_size.append(sum(
+            len(t['accountKey']) + len(t['readonlyIndexes']) + len(t['writableIndexes'])
+            for t in address_table_lookups
+        ))
+
         self.num_readonly_signed_accounts.append(tx['numReadonlySignedAccounts'])
         self.num_readonly_unsigned_accounts.append(tx['numReadonlyUnsignedAccounts'])
         self.num_required_signatures.append(tx['numRequiredSignatures'])
         self.recent_block_hash.append(tx['recentBlockhash'])
-        self.signatures.append(tx['signatures'])
+
+        signatures = tx['signatures']
+        self.signatures.append(signatures)
+        self.signatures_size.append(_list_size(signatures))
+
         err = tx.get('err')
         self.err.append(None if err is None else json.dumps(err))
+
         self.compute_units_consumed.append(tx.get('computeUnitsConsumed'))
         self.fee.append(tx['fee'])
-        self.loaded_addresses.append(tx['loadedAddresses'])
+
+        loaded_addresses = tx['loadedAddresses']
+        self.loaded_addresses.append(loaded_addresses)
+        self.loaded_addresses_size.append(
+            _list_size(loaded_addresses['writable']) + _list_size(loaded_addresses['readonly'])
+        )
+
         self.fee_payer.append(tx['accountKeys'][0])
 
 
@@ -108,10 +134,10 @@ class InstructionTable(TableBuilder):
         self.data = Column(base58_bytes())
         self.error = Column(pyarrow.string())
         # discriminators
-        self.d8 = Column(pyarrow.uint8())
-        self.d16 = Column(pyarrow.uint16())
-        self.d32 = Column(pyarrow.uint32())
-        self.d64 = Column(pyarrow.uint64())
+        self.d1 = Column(pyarrow.string())
+        self.d2 = Column(pyarrow.string())
+        self.d4 = Column(pyarrow.string())
+        self.d8 = Column(pyarrow.string())
         self.accounts_size = Column(pyarrow.int64())
 
     def append(self, block_number: int, i: Instruction) -> None:
@@ -124,10 +150,10 @@ class InstructionTable(TableBuilder):
         self.error.append(i.get('error'))
 
         data = base58.b58decode(i['data'])
-        self.d8.append(data[0] if data else None)
-        self.d16.append(struct.unpack_from('<H', data)[0] if len(data) >= 2 else None)
-        self.d32.append(struct.unpack_from('<I', data)[0] if len(data) >= 4 else None)
-        self.d64.append(struct.unpack_from('<Q', data)[0] if len(data) >= 8 else None)
+        self.d1.append(f'0x{data[:1].hex()}' if data else None)
+        self.d2.append(f'0x{data[:2].hex()}' if len(data) >= 2 else None)
+        self.d4.append(f'0x{data[:4].hex()}' if len(data) >= 4 else None)
+        self.d8.append(f'0x{data[:8].hex()}' if len(data) >= 8 else None)
 
     def _set_accounts(self, accounts: list[str]) -> None:
         for i in range(10):
@@ -137,7 +163,7 @@ class InstructionTable(TableBuilder):
             self.rest_accounts.append(accounts[10:])
         else:
             self.rest_accounts.append(None)
-        self.accounts_size.append(sum(len(a) for a in accounts))
+        self.accounts_size.append(_list_size(accounts))
 
 
 class LogTable(TableBuilder):
@@ -229,6 +255,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     instructions = tables['instructions']
     instructions = instructions.sort_by([
         ('program_id', 'ascending'),
+        ('d1', 'ascending'),
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
         # ('instruction_address', 'ascending')
@@ -242,14 +269,15 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         use_dictionary=[
             'program_id',
             'a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9',
-            'rest_accounts.list.element'
+            'rest_accounts.list.element',
+            'd1', 'd2', 'd4', 'd8',
         ],
         write_statistics=[
             'block_number',
             'transaction_index',
             'program_id',
             'a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9',
-            'd8', 'd16', 'd32', 'd64',
+            'd1', 'd2', 'd4', 'd8',
             '_idx'
         ],
         row_group_size=100_000,
@@ -282,3 +310,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         blocks,
         **kwargs
     )
+
+
+def _list_size(ls: list[str]) -> int:
+    return sum(len(i) for i in ls)
