@@ -6,6 +6,7 @@ import pyarrow
 
 from sqa.duckdb import execute_sql
 from sqa.fs import Fs
+from . import Writer, Block
 
 
 class Column:
@@ -72,7 +73,7 @@ class TableBuilder:
 _WRITE_POOL = concurrent.futures.ThreadPoolExecutor(thread_name_prefix='parquet_writer')
 
 
-class BaseParquetSink:
+class BaseParquetWriter(Writer):
     @cached_property
     def _tables(self) -> dict[str, TableBuilder]:
         tables = {}
@@ -115,6 +116,15 @@ class BaseParquetSink:
 
     def end(self):
         self._wait_for_prev_write()
+
+    def get_block_height(self, block: Block) -> int:
+        raise NotImplementedError()
+
+    def get_block_hash(self, block: Block) -> str:
+        raise NotImplementedError()
+
+    def get_block_parent_hash(self, block: Block) -> str:
+        raise NotImplementedError()
 
 
 def add_size_column(table: pyarrow.Table, col: str) -> pyarrow.Table:
