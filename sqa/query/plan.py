@@ -30,7 +30,8 @@ class _ScanQuery(NamedTuple):
         return pyarrow.parquet.read_table(
             partition.get_table_file(self.table_name),
             columns=self.columns,
-            filters=self.filter
+            filters=self.filter,
+            use_threads=False
         )
 
     def include_columns(self, columns: list[ColumnName]) -> None:
@@ -302,7 +303,7 @@ class QueryPlan:
                  filelist: list[str],
                  q: ArchiveQuery,
                  size_limit: int = 50_000_000,
-                 block_number_type=pyarrow.int64()
+                 block_number_type=pyarrow.int32()
                  ):
         builder = _Builder(
             model=model,
@@ -364,7 +365,7 @@ class QueryPlan:
                     ),
                     'weight': pyarrow.array(
                         (0 for _ in range(last_block - first_block + 1)),
-                        type=self._block_number_type
+                        type=pyarrow.int64()
                     )
                 })
             )

@@ -272,7 +272,10 @@ class _InstructionItem(Item):
     def project(self, fields: FieldSelection) -> str:
         def rewrite_accounts(f: str):
             if f == 'accounts':
-                return 'accounts', f'[a for a in list_value(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9) if a is not null]'
+                return ('accounts',
+                        f'list_concat('
+                        f'[a for a in list_value(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9) if a is not null], '
+                        f'rest_accounts)')
             else:
                 return f
 

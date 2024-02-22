@@ -23,7 +23,7 @@ def JSON():
 
 class BlockTable(TableBuilder):
     def __init__(self):
-        self.number = Column(pyarrow.int64())
+        self.number = Column(pyarrow.int32())
         self.hash = Column(base58_bytes())
         self.slot = Column(pyarrow.int64())
         self.parent_slot = Column(pyarrow.int64())
@@ -41,7 +41,7 @@ class BlockTable(TableBuilder):
 
 class TransactionTable(TableBuilder):
     def __init__(self):
-        self.block_number = Column(pyarrow.int64())
+        self.block_number = Column(pyarrow.int32())
         self.index = Column(pyarrow.int32())
         self.version = Column(pyarrow.int16())  # -1 = legacy
         # transaction message
@@ -90,7 +90,7 @@ class TransactionTable(TableBuilder):
 
 class InstructionTable(TableBuilder):
     def __init__(self):
-        self.block_number = Column(pyarrow.int64())
+        self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
         self.instruction_address = Column(address())
         self.program_id = Column(base58_bytes())
@@ -142,7 +142,7 @@ class InstructionTable(TableBuilder):
 
 class LogTable(TableBuilder):
     def __init__(self):
-        self.block_number = Column(pyarrow.int64())
+        self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
         self.log_index = Column(pyarrow.int32())
         self.instruction_address = Column(address())
