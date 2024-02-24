@@ -104,7 +104,7 @@ class Sink:
     def _get_height(self, block: Block) -> int:
         return self._writer.get_block_height(block)
 
-    def write(self, strides: Iterable[list[Block]]) -> bool:
+    def write(self, strides: Iterable[list[Block]]) -> None:
         assert not self._writing
         self._writing = True
 
@@ -170,8 +170,6 @@ class Sink:
 
         if self._progress.has_news():
             self._report()
-
-        return last_block == write_range[1]
 
 
 def _short_hash(value: str) -> str:
