@@ -432,8 +432,8 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     fs.write_parquet(
         'rewards.parquet',
         rewards,
-        use_dictionary=['pubkey'],
-        write_statistics=['pubkey', 'block_number', '_idx'],
+        use_dictionary=['pubkey', 'reward_type'],
+        write_statistics=['pubkey', 'reward_type', 'block_number', '_idx'],
         **kwargs
     )
 

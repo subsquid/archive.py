@@ -61,12 +61,14 @@ def join_condition(columns: Iterable[str], left: str, right: str) -> str:
     )
 
 
-def json_project(fields: Iterable[str | tuple[str, str]]) -> str:
+def json_project(fields: Iterable[str | tuple[str, str]], rewrite: dict[str, str] | None = None) -> str:
     props = []
     for alias in fields:
         if isinstance(alias, tuple):
             exp = alias[1]
             alias = alias[0]
+        elif rewrite and alias in rewrite:
+            exp = rewrite[alias]
         else:
             exp = f'"{to_snake_case(alias)}"'
         props.append(f"'{alias}'")

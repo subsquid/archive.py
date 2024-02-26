@@ -3,7 +3,7 @@ from typing import TypedDict, Literal, Iterable
 import marshmallow as mm
 import pyarrow
 
-from sqa.query.model import Table, Item, Scan, ReqName, JoinRel, RefRel
+from sqa.query.model import Table, Item, Scan, ReqName, JoinRel, RefRel, R
 from sqa.query.schema import field_map_schema, BaseQuerySchema
 from sqa.query.util import get_selected_fields, json_project, field_in, to_snake_case
 from sqa.solana.writer.model import Base58Bytes
@@ -50,11 +50,34 @@ class LogFieldSelection(TypedDict, total=False):
     message: bool
 
 
+class BalanceFieldSelection(TypedDict, total=False):
+    pre: bool
+    post: bool
+
+
+class TokenBalanceFieldSelection(TypedDict, total=False):
+    owner: bool
+    programId: bool
+    decimals: bool
+    pre: bool
+    post: bool
+
+
+class RewardFieldSelection(TypedDict, total=False):
+    lamports: bool
+    postBalance: bool
+    rewardType: bool
+    commission: bool
+
+
 class FieldSelection(TypedDict, total=False):
     block: BlockFieldSelection
     transaction: TransactionFieldSelection
     instruction: InstructionFieldSelection
     log: LogFieldSelection
+    balance: BalanceFieldSelection
+    tokenBalance: TokenBalanceFieldSelection
+    reward: RewardFieldSelection
 
 
 class _FieldSelectionSchema(mm.Schema):
@@ -62,6 +85,9 @@ class _FieldSelectionSchema(mm.Schema):
     transaction = field_map_schema(TransactionFieldSelection)
     instruction = field_map_schema(InstructionFieldSelection)
     log = field_map_schema(LogFieldSelection)
+    balance = field_map_schema(BalanceFieldSelection)
+    tokenBalance = field_map_schema(TokenBalanceFieldSelection)
+    reward = field_map_schema(RewardFieldSelection)
 
 
 class TransactionRequest(TypedDict, total=False):
@@ -132,11 +158,52 @@ class _LogRequestSchema(mm.Schema):
     instruction = mm.fields.Boolean()
 
 
+class BalanceRequest(TypedDict, total=False):
+    account: list[Base58Bytes]
+    transaction: bool
+    transactionInstructions: bool
+
+
+class _BalanceRequestSchema(mm.Schema):
+    account = mm.fields.List(mm.fields.Str())
+    transaction = mm.fields.Boolean()
+    transactionInstructions = mm.fields.Boolean()
+
+
+class TokenBalanceRequest(TypedDict, total=False):
+    account: list[Base58Bytes]
+    mint: list[Base58Bytes]
+    owner: list[Base58Bytes]
+    programId: list[Base58Bytes]
+    transaction: bool
+    transactionInstructions: bool
+
+
+class _TokenBalanceRequestSchema(mm.Schema):
+    account = mm.fields.List(mm.fields.Str())
+    mint = mm.fields.List(mm.fields.Str())
+    owner = mm.fields.List(mm.fields.Str())
+    programId = mm.fields.List(mm.fields.Str())
+    transaction = mm.fields.Boolean()
+    transactionInstructions = mm.fields.Boolean()
+
+
+class RewardRequest(TypedDict, total=False):
+    pubkey: list[Base58Bytes]
+
+
+class _RewardRequestSchema(mm.Schema):
+    pubkey = mm.fields.List(mm.fields.Str())
+
+
 class _QuerySchema(BaseQuerySchema):
     fields = mm.fields.Nested(_FieldSelectionSchema())
     transactions = mm.fields.List(mm.fields.Nested(_TransactionRequestSchema()))
     instructions = mm.fields.List(mm.fields.Nested(_InstructionRequestSchema()))
     logs = mm.fields.List(mm.fields.Nested(_LogRequestSchema()))
+    balances = mm.fields.List(mm.fields.Nested(_BalanceRequestSchema()))
+    tokenBalances = mm.fields.List(mm.fields.Nested(_TokenBalanceRequestSchema()))
+    rewards = mm.fields.List(mm.fields.Nested(_RewardRequestSchema()))
 
 
 QUERY_SCHEMA = _QuerySchema()
@@ -159,15 +226,9 @@ class _BlockItem(Item):
         return get_selected_fields(fields.get('block'), ['number', 'hash'])
 
     def project(self, fields: FieldSelection) -> str:
-        def rewrite_timestamp(f: str):
-            if f == 'timestamp':
-                return 'timestamp', f'epoch_ms(timestamp)'
-            else:
-                return f
-
-        return json_project(
-            map(rewrite_timestamp, self.get_selected_fields(fields))
-        )
+        return json_project(self.get_selected_fields(fields), rewrite={
+            'timestamp': 'epoch_ms(timestamp)'
+        })
 
 
 _transactions_table = Table(
@@ -202,6 +263,11 @@ class _TransactionItem(Item):
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
         return get_selected_fields(fields.get('transaction'), ['index'])
+
+    def project(self, fields: FieldSelection) -> str:
+        return json_project(self.get_selected_fields(fields), rewrite={
+            'err': 'err::json'
+        })
 
 
 _instructions_table = Table(
@@ -279,18 +345,11 @@ class _InstructionItem(Item):
         return columns
 
     def project(self, fields: FieldSelection) -> str:
-        def rewrite_accounts(f: str):
-            if f == 'accounts':
-                return ('accounts',
-                        f'list_concat('
+        return json_project(self.get_selected_fields(fields), rewrite={
+            'accounts': f'list_concat('
                         f'[a for a in list_value(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9) if a is not null], '
-                        f'rest_accounts)')
-            else:
-                return f
-
-        return json_project(
-            map(rewrite_accounts, self.get_selected_fields(fields))
-        )
+                        f'rest_accounts)'
+        })
 
 
 _logs_table = Table(
@@ -324,15 +383,130 @@ class _LogItem(Item):
         return get_selected_fields(fields.get('log'), ['transactionIndex', 'logIndex'])
 
 
+_balance_table = Table(
+    name='balances',
+    primary_key=['transaction_index', 'account']
+)
+
+
+class _BalanceScan(Scan):
+    def table(self) -> Table:
+        return _balance_table
+
+    def request_name(self) -> ReqName:
+        return 'balances'
+
+    def where(self, req: BalanceRequest) -> Iterable[pyarrow.dataset.Expression | None]:
+        yield field_in('account', req.get('account'))
+
+
+class _BalanceItem(Item):
+    def table(self) -> Table:
+        return _balance_table
+
+    def name(self) -> str:
+        return 'balances'
+
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('balance'), ['transactionIndex', 'account'])
+
+    def project(self, fields: FieldSelection) -> str:
+        return json_project(self.get_selected_fields(fields), rewrite={
+            'pre': 'pre::text',
+            'post': 'post::text'
+        })
+
+
+_token_balance_table = Table(
+    name='token_balances',
+    primary_key=[
+        'transaction_index',
+        'account',
+        'mint'  # FIXME: verify this
+    ]
+)
+
+
+class _TokenBalanceScan(Scan):
+    def table(self) -> Table:
+        return _token_balance_table
+
+    def request_name(self) -> ReqName:
+        return 'tokenBalances'
+
+    def where(self, req: TokenBalanceRequest) -> Iterable[pyarrow.dataset.Expression | None]:
+        yield field_in('account', req.get('account'))
+        yield field_in('mint', req.get('mint'))
+        yield field_in('owner', req.get('owner'))
+        yield field_in('programId', req.get('programId'))
+
+
+class _TokenBalanceItem(Item):
+    def table(self) -> Table:
+        return _token_balance_table
+
+    def name(self) -> str:
+        return 'tokenBalances'
+
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('tokenBalance'), ['transactionIndex', 'account', 'mint'])
+
+    def project(self, fields: FieldSelection) -> str:
+        return json_project(self.get_selected_fields(fields), rewrite={
+            'pre': 'pre::text',
+            'post': 'post::text'
+        })
+
+
+_reward_table = Table(
+    name='rewards',
+    primary_key=['pubkey']
+)
+
+
+class _RewardScan(Scan):
+    def table(self) -> Table:
+        return _reward_table
+
+    def request_name(self) -> ReqName:
+        return 'rewards'
+
+    def where(self, req: RewardRequest) -> Iterable[pyarrow.dataset.Expression | None]:
+        yield field_in('pubkey', req.get('pubkey'))
+
+
+class _RewardItem(Item):
+    def table(self) -> Table:
+        return _reward_table
+
+    def name(self) -> str:
+        return 'rewards'
+
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('reward'), ['pubkey'])
+
+    def project(self, fields: FieldSelection) -> str:
+        return json_project(self.get_selected_fields(fields), rewrite={
+            'lamports': 'lamports::text',
+            'postBalance': 'post_balance::text'
+        })
+
+
 def _build_model():
     tx_scan = _TransactionScan()
     ins_scan = _InstructionScan()
     log_scan = _LogScan()
+    balance_scan = _BalanceScan()
+    token_balance_scan = _TokenBalanceScan()
+    reward_scan = _RewardScan()
 
     block_item = _BlockItem()
     tx_item = _TransactionItem()
     ins_item = _InstructionItem()
     log_item = _LogItem()
+    balance_item = _BalanceItem()
+    token_balance_item = _TokenBalanceItem()
+    reward_item = _RewardItem()
 
     tx_item.sources.extend([
         tx_scan,
@@ -346,6 +520,16 @@ def _build_model():
             include_flag_name='transaction',
             scan_columns=['transaction_index'],
         ),
+        RefRel(
+            scan=balance_scan,
+            include_flag_name='transaction',
+            scan_columns=['transaction_index']
+        ),
+        RefRel(
+            scan=token_balance_scan,
+            include_flag_name='transaction',
+            scan_columns=['transaction_index']
+        )
     ])
 
     ins_item.sources.extend([
@@ -373,6 +557,17 @@ def _build_model():
         )
     ])
 
+    for s in (balance_scan, token_balance_scan):
+        ins_item.sources.append(
+            JoinRel(
+                scan=s,
+                include_flag_name='transactionInstructions',
+                query='SELECT * FROM instructions i, s WHERE '
+                      'i.block_number = s.block_number AND '
+                      'i.transaction_index = s.transaction_index'
+            )
+        )
+
     log_item.sources.extend([
         log_scan,
         JoinRel(
@@ -392,14 +587,32 @@ def _build_model():
         )
     ])
 
+    balance_item.sources.extend([
+        balance_scan
+    ])
+
+    token_balance_item.sources.extend([
+        token_balance_scan
+    ])
+
+    reward_item.sources.extend([
+        reward_scan
+    ])
+
     return [
         tx_scan,
         ins_scan,
         log_scan,
+        balance_scan,
+        token_balance_scan,
+        reward_scan,
         block_item,
         tx_item,
         ins_item,
-        log_item
+        log_item,
+        balance_item,
+        token_balance_item,
+        reward_item
     ]
 
 
