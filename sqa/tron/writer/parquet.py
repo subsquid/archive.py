@@ -4,7 +4,7 @@ from typing import Any
 import pyarrow
 
 from sqa.fs import Fs
-from sqa.writer.parquet import TableBuilder, Column, BaseParquetSink, add_size_column, add_index_column
+from sqa.writer.parquet import TableBuilder, Column, BaseParquetWriter, add_size_column, add_index_column
 from .model import Block, BlockHeader, Transaction, Log, InternalTransaction
 
 
@@ -206,7 +206,7 @@ class InternalTransactionTable(TableBuilder):
         self.extra.append(internal_tx.get('extra'))
 
 
-class ParquetSink(BaseParquetSink):
+class ParquetWriter(BaseParquetWriter):
     def __init__(self):
         self.blocks = BlockTable()
         self.transactions = TransactionTable()
@@ -225,6 +225,15 @@ class ParquetSink(BaseParquetSink):
     def _write(self, fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         write_parquet(fs, tables)
 
+    def get_block_height(self, block: Block) -> int:
+        return block['header']['height']
+
+    def get_block_hash(self, block: Block) -> str:
+        return '0x' + block['header']['hash'][16:]
+
+    def get_block_parent_hash(self, block: Block) -> str:
+        return '0x' + block['header']['parentHash'][16:]
+
 
 def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     kwargs = {
@@ -239,7 +248,8 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     logs = logs.sort_by([
         ('address', 'ascending'),
         ('topic0', 'ascending'),
-        ('block_number', 'ascending')
+        ('block_number', 'ascending'),
+        ('log_index', 'ascending')
     ])
     logs = add_size_column(logs, 'data')
     logs = add_index_column(logs)

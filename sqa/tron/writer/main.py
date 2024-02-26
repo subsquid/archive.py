@@ -10,7 +10,7 @@ from sqa.tron.writer.metrics import Metrics
 
 from sqa.writer import ArchiveWriteOptions, ArchiveWriter
 from .model import Block
-from .parquet import ParquetSink
+from .parquet import ParquetWriter
 
 
 LOG = logging.getLogger(__name__)
@@ -74,14 +74,9 @@ def parse_cli_arguments():
 
 
 class WriteOptions(ArchiveWriteOptions):
-    def get_block_height(self, block: Block) -> int:
-        return block['header']['height']
+    
 
-    def get_block_hash(self, block: Block) -> str:
-        return '0x' + block['header']['hash'][16:]
-
-    def get_block_parent_hash(self, block: Block) -> str:
-        return '0x' + block['header']['parentHash'][16:]
+    
 
     def chunk_check(self, filelist: list[str]) -> bool:
         return 'blocks.parquet' in filelist
@@ -112,7 +107,7 @@ def main(args):
         blocks = read_from_stdin(options, writer.get_next_block())
 
     end_of_write = writer.write(
-        ParquetSink(),
+        ParquetWriter(),
         batch(blocks)
     )
 
