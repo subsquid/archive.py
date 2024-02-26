@@ -4,7 +4,7 @@ from typing import Any
 import pyarrow
 
 from sqa.fs import Fs
-from sqa.writer.parquet import TableBuilder, Column, BaseParquetSink, add_size_column, add_index_column
+from sqa.writer.parquet import TableBuilder, Column, BaseParquetWriter, add_size_column, add_index_column
 from .model import BlockHeader, Extrinsic, Call, BigInt, Event, Block
 
 
@@ -155,7 +155,7 @@ class EventTable(TableBuilder):
         self._gear_program_id.append(event.get('_gearProgramId'))
 
 
-class ParquetSink(BaseParquetSink):
+class ParquetWriter(BaseParquetWriter):
     def __init__(self):
         self.blocks = BlockTable()
         self.extrinsics = ExtrinsicTable()
@@ -178,6 +178,15 @@ class ParquetSink(BaseParquetSink):
 
     def _write(self, fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         write_parquet(fs, tables)
+
+    def get_block_height(self, block: Block) -> int:
+        return block['header']['height']
+
+    def get_block_hash(self, block: Block) -> str:
+        return block['header']['hash']
+
+    def get_block_parent_hash(self, block: Block) -> str:
+        return block['header']['parentHash']
 
 
 def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:

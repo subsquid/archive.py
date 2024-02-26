@@ -6,7 +6,7 @@ import marshmallow.validate
 from pyarrow.dataset import Expression
 
 from sqa.query.model import JoinRel, RefRel, Table, Item, FieldSelection, Scan, SubRel
-from sqa.query.schema import BaseQuerySchema
+from sqa.query.schema import BaseQuerySchema, field_map_schema
 from sqa.query.util import to_snake_case, json_project, get_selected_fields, remove_camel_prefix, \
     field_in, field_gte, field_lte
 
@@ -155,20 +155,12 @@ class StateDiffRequest(TypedDict, total=False):
     transaction: bool
 
 
-def _field_map_schema(typed_dict):
-    return mm.fields.Dict(
-        mm.fields.Str(validate=lambda k: k in typed_dict.__optional_keys__),
-        mm.fields.Boolean(),
-        required=False
-    )
-
-
 class _FieldSelectionSchema(mm.Schema):
-    block = _field_map_schema(BlockFieldSelection)
-    transaction = _field_map_schema(TxFieldSelection)
-    log = _field_map_schema(LogFieldSelection)
-    trace = _field_map_schema(TraceFieldSelection)
-    stateDiff = _field_map_schema(StateDiffFieldSelection)
+    block = field_map_schema(BlockFieldSelection)
+    transaction = field_map_schema(TxFieldSelection)
+    log = field_map_schema(LogFieldSelection)
+    trace = field_map_schema(TraceFieldSelection)
+    stateDiff = field_map_schema(StateDiffFieldSelection)
 
 
 class _LogRequestSchema(mm.Schema):

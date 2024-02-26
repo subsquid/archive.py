@@ -150,7 +150,7 @@ class RpcConnection:
             self._count_request(timer)
             return res
         except Exception as e:
-            if _is_retryable_error(e):
+            if self._is_retryable_error(e):
                 LOG.warning('rpc connection error', exc_info=e, extra={**self._extra, 'rpc_req': req_id})
                 self._backoff()
                 raise RpcRetryException
@@ -236,25 +236,27 @@ class RpcConnection:
         if self._online_callback:
             self._online_callback()
 
-
-def _is_retryable_error(e: Exception) -> bool:
-    if isinstance(e, httpx.HTTPStatusError):
-        return e.response.status_code in (429, 502, 503, 504, 524, 530)
-    elif isinstance(e, (httpx.ConnectError, httpx.TimeoutException, httpx.ReadError)):
-        return True
-    elif isinstance(e, httpx.RemoteProtocolError) and 'without sending' in str(e):
-        return True
-    elif isinstance(e, RpcResultIsNull):
-        return True
-    elif isinstance(e, RpcResultIsInvalid):
-        return True
-    elif isinstance(e, RpcResultNoId):
-        return True
-    elif isinstance(e, RpcError) and isinstance(e.info, dict):
-        code = e.info.get('code')
-        return code == 429 or code == -32603 or code == -32000 or code == -32002
-    else:
-        return False
+    def _is_retryable_error(self, e: Exception) -> bool:
+        if isinstance(e, httpx.HTTPStatusError):
+            if e.response.status_code in (429, 502, 503, 504, 524, 530):
+                return True
+            else:
+                return self._errors_in_row <= 20
+        elif isinstance(e, (httpx.ConnectError, httpx.TimeoutException, httpx.ReadError)):
+            return True
+        elif isinstance(e, httpx.RemoteProtocolError) and 'without sending' in str(e):
+            return True
+        elif isinstance(e, RpcResultIsNull):
+            return True
+        elif isinstance(e, RpcResultIsInvalid):
+            return True
+        elif isinstance(e, RpcResultNoId):
+            return True
+        elif isinstance(e, RpcError) and isinstance(e.info, dict):
+            code = e.info.get('code')
+            return code == 429 or code == -32603 or code == -32000 or code == -32002
+        else:
+            return False
 
 
 class RpcResultIsNull(Exception):

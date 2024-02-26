@@ -10,7 +10,7 @@ def _format_block(block_number: int):
 
 
 def _parse_range(dirname: str) -> Optional[tuple[int, int, str]]:
-    m = re.match(r'^(\d{10})-(\d{10})-(\w{8})$', dirname)
+    m = re.match(r'^(\d{10})-(\d{10})-(\w+)$', dirname)
     if m:
         beg = int(m[1])
         end = int(m[2])

@@ -10,6 +10,7 @@ import psutil
 
 import sqa.eth.query
 import sqa.substrate.query
+import sqa.solana.query
 import sqa.tron.query
 from sqa.fs import LocalFs
 from sqa.layout import get_chunks, get_filelist, Partition
@@ -34,6 +35,8 @@ def validate_query(q) -> ArchiveQuery:
         q = _validate_shape(q, sqa.eth.query.QUERY_SCHEMA)
     elif query_type == 'substrate':
         q = _validate_shape(q, sqa.substrate.query.QUERY_SCHEMA)
+    elif query_type == 'solana':
+        q = _validate_shape(q, sqa.solana.query.QUERY_SCHEMA)
     elif query_type == 'tron':
         q = _validate_shape(q, sqa.tron.query.QUERY_SCHEMA)
     else:
@@ -52,7 +55,7 @@ def validate_query(q) -> ArchiveQuery:
 
 def _validate_shape(obj, schema: mm.Schema):
     try:
-        return schema.load(obj)
+        return schema.load(obj, unknown=mm.RAISE)
     except mm.ValidationError as err:
         raise InvalidQuery(str(err.normalized_messages()))
 
@@ -71,6 +74,8 @@ def _get_model(q: dict) -> Model:
         return sqa.eth.query.MODEL
     elif query_type == 'substrate':
         return sqa.substrate.query.MODEL
+    elif query_type == 'solana':
+        return sqa.solana.query.MODEL
     elif query_type == 'tron':
         return sqa.tron.query.MODEL
     else:
@@ -83,6 +88,7 @@ class QueryResult:
     data_size: int
     data_sha3_256: Optional[str]
     num_read_chunks: int
+    last_block: Optional[int] = None
     exec_time: Optional[dict] = None
 
 
@@ -115,9 +121,11 @@ def execute_query(
     )
 
     num_read_chunks = 0
+    last_visited_block = -1
 
     def json_lines() -> Iterable[str]:
         nonlocal num_read_chunks
+        nonlocal last_visited_block
         size = 0
 
         for chunk in get_chunks(fs, first_block=first_block, last_block=last_block):
@@ -137,13 +145,16 @@ def execute_query(
                 yield line
                 size += len(line)
 
+            if line:
+                last_visited_block = json.loads(line)['header']['number']
+
             if size > 20 * 1024 * 1024:
                 return
 
             if time.time() - beg > 2:
                 return
 
-            if line and json.loads(line)['header']['number'] < chunk.last_block:
+            if last_visited_block and last_visited_block < chunk.last_block:
                 return
 
     result = f'[{",".join(json_lines())}]'
@@ -177,5 +188,6 @@ def execute_query(
         data_size=len(data),
         data_sha3_256=data_hash,
         num_read_chunks=num_read_chunks,
+        last_block=last_visited_block,
         exec_time=exec_time
     )

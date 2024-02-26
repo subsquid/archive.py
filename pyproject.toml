@@ -22,6 +22,7 @@ writer = [
     "trie==2.1.1",
     "rlp>=3.0.0",
     "setuptools>=68.2.2",
+    "base58>=2.1.1",
 ]
 
 http-worker = [
