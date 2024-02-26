@@ -361,7 +361,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     fs.write_parquet(
         'logs.parquet',
         logs,
-        use_dictionary=['program_id'],
+        use_dictionary=['program_id', 'kind'],
         write_statistics=[
             'block_number',
             'transaction_index',
@@ -392,8 +392,9 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
 
     token_balances = tables['token_balances']
     token_balances = token_balances.sort_by([
-        ('mint', 'ascending'),
         ('account', 'ascending'),
+        ('owner', 'ascending'),
+        ('mint', 'ascending'),
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
     ])
@@ -432,7 +433,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         'rewards.parquet',
         rewards,
         use_dictionary=['pubkey'],
-        write_statistics=['pubkey', 'block_number'],
+        write_statistics=['pubkey', 'block_number', '_idx'],
         **kwargs
     )
 
