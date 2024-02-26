@@ -3,6 +3,7 @@ from typing import TypedDict, Any, NotRequired, Literal
 
 Base58Bytes = str
 JSON = Any
+JsBigInt = str
 
 
 class BlockHeader(TypedDict):
@@ -26,7 +27,7 @@ class LoadedAddresses(TypedDict):
 
 
 class Transaction(TypedDict):
-    index: int
+    transactionIndex: int
     version: Literal['legacy'] | int
     accountKeys: list[Base58Bytes]
     addressTableLookups: list[AddressTableLookup]
@@ -37,7 +38,7 @@ class Transaction(TypedDict):
     signatures: list[Base58Bytes]
     err: NotRequired[JSON]
     computeUnitsConsumed: NotRequired[int]
-    fee: int
+    fee: JsBigInt
     loadedAddresses: LoadedAddresses
 
 
@@ -59,8 +60,38 @@ class LogMessage(TypedDict):
     message: str
 
 
+class Balance(TypedDict):
+    transactionIndex: int
+    account: Base58Bytes
+    pre: JsBigInt
+    post: JsBigInt
+
+
+class TokenBalance(TypedDict):
+    transactionIndex: int
+    account: Base58Bytes
+    mint: Base58Bytes
+    owner: NotRequired[Base58Bytes]
+    programId: NotRequired[Base58Bytes]
+    decimals: int
+    pre: JsBigInt
+    post: JsBigInt
+
+
+class Reward(TypedDict):
+    pubkey: Base58Bytes
+    lamports: JsBigInt
+    postBalance: JsBigInt
+    rewardType: NotRequired[str]
+    commission: NotRequired[str]
+
+
 class Block(TypedDict):
     header: BlockHeader
     transactions: list[Transaction]
     instructions: list[Instruction]
     logs: list[LogMessage]
+    balances: list[Balance]
+    tokenBalances: list[TokenBalance]
+    rewards: list[Reward]
+

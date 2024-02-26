@@ -6,7 +6,7 @@ import pyarrow
 
 from sqa.fs import Fs
 from sqa.writer.parquet import TableBuilder, Column, BaseParquetWriter, add_index_column, add_size_column
-from .model import BlockHeader, Transaction, Instruction, Block, LogMessage
+from .model import BlockHeader, Transaction, Instruction, Block, LogMessage, Balance, TokenBalance, Reward
 
 
 def base58_bytes():
@@ -76,7 +76,7 @@ class TransactionTable(TableBuilder):
 
     def append(self, block_number: int, tx: Transaction) -> None:
         self.block_number.append(block_number)
-        self.index.append(tx['index'])
+        self.index.append(tx['transactionIndex'])
         self.version.append(-1 if tx['version'] == 'legacy' else tx['version'])
 
         account_keys = tx['accountKeys']
@@ -103,7 +103,7 @@ class TransactionTable(TableBuilder):
         self.err.append(None if err is None else json.dumps(err))
 
         self.compute_units_consumed.append(tx.get('computeUnitsConsumed'))
-        self.fee.append(tx['fee'])
+        self.fee.append(int(tx['fee']))
 
         loaded_addresses = tx['loadedAddresses']
         self.loaded_addresses.append(loaded_addresses)
@@ -186,12 +186,73 @@ class LogTable(TableBuilder):
         self.message.append(log['message'])
 
 
+class BalanceTable(TableBuilder):
+    def __init__(self):
+        self.block_number = Column(pyarrow.int32())
+        self.transaction_index = Column(pyarrow.int32())
+        self.account = Column(base58_bytes())
+        self.pre = Column(pyarrow.uint64())
+        self.post = Column(pyarrow.uint64())
+
+    def append(self, block_number: int, b: Balance) -> None:
+        self.block_number.append(block_number)
+        self.transaction_index.append(b['transactionIndex'])
+        self.account.append(b['account'])
+        self.pre.append(int(b['pre']))
+        self.post.append(int(b['post']))
+
+
+class TokenBalanceTable(TableBuilder):
+    def __init__(self):
+        self.block_number = Column(pyarrow.int32())
+        self.transaction_index = Column(pyarrow.int32())
+        self.account = Column(base58_bytes())
+        self.mint = Column(base58_bytes())
+        self.owner = Column(base58_bytes())
+        self.program_id = Column(base58_bytes())
+        self.decimals = Column(pyarrow.uint16())
+        self.pre = Column(pyarrow.uint64())
+        self.post = Column(pyarrow.uint64())
+
+    def append(self, block_number: int, b: TokenBalance) -> None:
+        self.block_number.append(block_number)
+        self.transaction_index.append(b['transactionIndex'])
+        self.account.append(b['account'])
+        self.mint.append(b['mint'])
+        self.owner.append(b.get('owner'))
+        self.program_id.append(b.get('programId'))
+        self.decimals.append(b['decimals'])
+        self.pre.append(int(b['pre']))
+        self.post.append(int(b['post']))
+
+
+class RewardTable(TableBuilder):
+    def __init__(self):
+        self.block_number = Column(pyarrow.int32())
+        self.pubkey = Column(base58_bytes())
+        self.lamports = Column(pyarrow.int64())
+        self.post_balance = Column(pyarrow.uint64())
+        self.reward_type = Column(pyarrow.string())
+        self.commission = Column(pyarrow.uint8())
+
+    def append(self, block_number: int, r: Reward) -> None:
+        self.block_number.append(block_number)
+        self.pubkey.append(r['pubkey'])
+        self.lamports.append(int(r['lamports']))
+        self.post_balance.append(int(r['postBalance']))
+        self.reward_type.append(r.get('rewardType'))
+        self.commission.append(r.get('commission'))
+
+
 class ParquetWriter(BaseParquetWriter):
     def __init__(self):
         self.blocks = BlockTable()
         self.transactions = TransactionTable()
         self.instructions = InstructionTable()
         self.logs = LogTable()
+        self.balances = BalanceTable()
+        self.token_balances = TokenBalanceTable()
+        self.rewards = RewardTable()
 
     def push(self, block: Block) -> None:
         block_number = block['header']['height']
@@ -206,6 +267,15 @@ class ParquetWriter(BaseParquetWriter):
 
         for msg in block['logs']:
             self.logs.append(block_number, msg)
+
+        for b in block['balances']:
+            self.balances.append(block_number, b)
+
+        for b in block['tokenBalances']:
+            self.token_balances.append(block_number, b)
+
+        for r in block['rewards']:
+            self.rewards.append(block_number, r)
 
     def _write(self, fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         write_parquet(fs, tables)
@@ -300,6 +370,69 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
             '_idx'
         ],
         row_group_size=100_000,
+        **kwargs
+    )
+
+    balances = tables['balances']
+    balances = balances.sort_by([
+        ('account', 'ascending'),
+        ('block_number', 'ascending'),
+        ('transaction_index', 'ascending'),
+    ])
+    balances = add_index_column(balances)
+
+    fs.write_parquet(
+        'balances.parquet',
+        balances,
+        use_dictionary=['account'],
+        write_statistics=['account', 'block_number', 'transaction_index', '_idx'],
+        row_group_size=100_000,
+        **kwargs
+    )
+
+    token_balances = tables['token_balances']
+    token_balances = token_balances.sort_by([
+        ('mint', 'ascending'),
+        ('account', 'ascending'),
+        ('block_number', 'ascending'),
+        ('transaction_index', 'ascending'),
+    ])
+    token_balances = add_index_column(token_balances)
+
+    fs.write_parquet(
+        'token_balances.parquet',
+        token_balances,
+        use_dictionary=[
+            'account',
+            'mint',
+            'owner',
+            'program_id'
+        ],
+        write_statistics=[
+            'account',
+            'mint',
+            'owner',
+            'program_id',
+            'block_number',
+            'transaction_index',
+            '_idx'
+        ],
+        row_group_size=100_000,
+        **kwargs
+    )
+
+    rewards = tables['rewards']
+    rewards = rewards.sort_by([
+        ('pubkey', 'ascending'),
+        ('block_number', 'ascending'),
+    ])
+    rewards = add_index_column(rewards)
+
+    fs.write_parquet(
+        'rewards.parquet',
+        rewards,
+        use_dictionary=['pubkey'],
+        write_statistics=['pubkey', 'block_number'],
         **kwargs
     )
 

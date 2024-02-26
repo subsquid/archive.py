@@ -105,7 +105,7 @@ class CLI:
         first_block = self._sink().get_next_block()
         last_block = args.last_block
 
-        if first_block > last_block:
+        if last_block is not None and first_block > last_block:
             return
 
         if args.src:
