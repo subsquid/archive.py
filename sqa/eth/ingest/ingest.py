@@ -484,6 +484,9 @@ def _validate_debug_trace(result):
     for trace in result:
         if len(trace.keys()) == 1 and trace.get('error') == 'execution timeout':
             return False
+        if error := trace.get('error'):
+            if isinstance(error, dict):
+                return False
     return True
 
 
