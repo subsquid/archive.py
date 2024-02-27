@@ -14,6 +14,7 @@ class BlockHeader(TypedDict):
 
 class Log(TypedDict):
     logIndex: int
+    transactionIndex: int
     transactionHash: str
     address: str
     data: str
@@ -22,6 +23,7 @@ class Log(TypedDict):
 
 class Transaction(TypedDict):
     hash: str
+    transactionIndex: int
     ret: NotRequired[str]
     signature: NotRequired[list[str]]
     type: str
@@ -57,6 +59,7 @@ class CallValueInfo(TypedDict):
 
 
 class InternalTransaction(TypedDict):
+    transactionIndex: int
     transactionHash: str
     hash: str
     callerAddress: str

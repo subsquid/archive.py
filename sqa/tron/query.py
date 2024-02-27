@@ -4,7 +4,7 @@ import marshmallow as mm
 from pyarrow.dataset import Expression
 
 from sqa.query.model import JoinRel, RefRel, Table, Item, FieldSelection, Scan
-from sqa.query.schema import BaseQuerySchema
+from sqa.query.schema import BaseQuerySchema, field_map_schema
 from sqa.query.util import to_snake_case, json_project, get_selected_fields, field_in
 
 
@@ -115,19 +115,11 @@ class InternalTxRequest(TypedDict, total=False):
     transaction: bool
 
 
-def _field_map_schema(typed_dict):
-    return mm.fields.Dict(
-        mm.fields.Str(validate=lambda k: k in typed_dict.__optional_keys__),
-        mm.fields.Boolean(),
-        required=False
-    )
-
-
 class _FieldSelectionSchema(mm.Schema):
-    block = _field_map_schema(BlockFieldSelection)
-    log = _field_map_schema(LogFieldSelection)
-    transaction = _field_map_schema(TxFieldSelection)
-    internalTransaction = _field_map_schema(InternalTransactionFieldSelection)
+    block = field_map_schema(BlockFieldSelection)
+    log = field_map_schema(LogFieldSelection)
+    transaction = field_map_schema(TxFieldSelection)
+    internalTransaction = field_map_schema(InternalTransactionFieldSelection)
 
 
 class _LogRequestSchema(mm.Schema):
@@ -163,6 +155,7 @@ class _TransferAssetTxRequestSchema(mm.Schema):
 class _TriggerSmartContractTxRequestSchema(mm.Schema):
     owner = mm.fields.List(mm.fields.Str())
     contract = mm.fields.List(mm.fields.Str())
+    sighash = mm.fields.List(mm.fields.Str())
     logs = mm.fields.Boolean()
     internalTransactions = mm.fields.Boolean()
 

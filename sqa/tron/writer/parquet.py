@@ -51,6 +51,7 @@ class BlockTable(TableBuilder):
 class TransactionTable(TableBuilder):
     def __init__(self):
         self.block_number = Column(pyarrow.int32())
+        self.transaction_index = Column(pyarrow.int32())
         self.hash = Column(pyarrow.string())
         self.ret = Column(pyarrow.list_(JSON()))
         self.signature = Column(pyarrow.list_(pyarrow.string()))
@@ -100,6 +101,7 @@ class TransactionTable(TableBuilder):
 
     def append(self, block_number: int, tx: Transaction) -> None:
         self.block_number.append(block_number)
+        self.transaction_index.append(tx['transactionIndex'])
         self.hash.append(tx['hash'])
         self.ret.append(_to_json(tx.get('ret')))
         self.signature.append(tx.get('signature'))
@@ -161,6 +163,7 @@ class LogTable(TableBuilder):
     def __init__(self):
         self.block_number = Column(pyarrow.int32())
         self.log_index = Column(pyarrow.int32())
+        self.transaction_index = Column(pyarrow.int32())
         self.transaction_hash = Column(pyarrow.string())
         self.address = Column(pyarrow.string())
         self.data = Column(pyarrow.string())
@@ -172,6 +175,7 @@ class LogTable(TableBuilder):
     def append(self, block_number: int, log: Log):
         self.block_number.append(block_number)
         self.log_index.append(log['logIndex'])
+        self.transaction_index.append(log['transactionIndex'])
         self.transaction_hash.append(log['transactionHash'])
         self.address.append(log['address'])
         self.data.append(log.get('data'))
@@ -185,6 +189,7 @@ class LogTable(TableBuilder):
 class InternalTransactionTable(TableBuilder):
     def __init__(self):
         self.block_number = Column(pyarrow.int32())
+        self.transaction_index = Column(pyarrow.int32())
         self.transaction_hash = Column(pyarrow.string())
         self.hash = Column(pyarrow.string())
         self.caller_address = Column(pyarrow.string())
@@ -196,6 +201,7 @@ class InternalTransactionTable(TableBuilder):
 
     def append(self, block_number: int, internal_tx: InternalTransaction):
         self.block_number.append(block_number)
+        self.transaction_index.append(internal_tx['transactionIndex'])
         self.transaction_hash.append(internal_tx['transactionHash'])
         self.hash.append(internal_tx['hash'])
         self.caller_address.append(internal_tx['callerAddress'])
@@ -266,7 +272,8 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     transactions = tables['transactions']
     transactions = transactions.sort_by([
         ('type', 'ascending'),
-        ('block_number', 'ascending')
+        ('block_number', 'ascending'),
+        ('transaction_index', 'ascending')
     ])
     transactions = add_size_column(transactions, 'raw_data_hex')
     transactions = add_index_column(transactions)
