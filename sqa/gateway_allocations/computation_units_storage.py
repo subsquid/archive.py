@@ -44,7 +44,7 @@ CLEAN_OLD_ALLOCATIONS = "DELETE FROM operators WHERE epoch < ?1"
 UPDATE_ALLOCATION = """
 INSERT INTO operators (address, allocated_cus, spent_cus, epoch)
 VALUES (?1, ?2, 0, ?3)
-ON CONFLICT DO UPDATE SET allocated_cus=excluded.allocated_cus, epoch=excluded.epoch
+ON CONFLICT(address) DO UPDATE SET allocated_cus=excluded.allocated_cus, epoch=excluded.epoch
 """
 
 ADD_GATEWAY = "INSERT OR REPLACE INTO gateways (gateway_id, operator_addr) VALUES (?1, ?2)"
