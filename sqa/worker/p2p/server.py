@@ -35,7 +35,7 @@ LOGS_MESSAGE_MAX_BYTES = 64000
 LOGS_SEND_INTERVAL_SEC = int(os.environ.get('LOGS_SEND_INTERVAL_SEC', '600'))
 PING_TOPIC = "worker_ping"
 LOGS_TOPIC = "worker_query_logs"
-WORKER_VERSION = "0.2.2"
+WORKER_VERSION = "0.2.3"
 
 
 def bundle_logs(logs: list[msg_pb.QueryExecuted]) -> Iterator[msg_pb.Envelope]:
@@ -87,23 +87,27 @@ class P2PTransport:
 
     async def _receive_loop(self, gateway_allocations: GatewayAllocations) -> None:
         async for peer_id, envelope in self._rpc.get_messages():
-            msg_type = envelope.WhichOneof('msg')
+            try:
+                msg_type = envelope.WhichOneof('msg')
 
-            if msg_type == 'pong':
-                await self._handle_pong(peer_id, envelope.pong)
+                if msg_type == 'pong':
+                    await self._handle_pong(peer_id, envelope.pong)
 
-            elif msg_type == 'query':
-                await self._handle_query(peer_id, envelope.query, gateway_allocations)
+                elif msg_type == 'query':
+                    await self._handle_query(peer_id, envelope.query, gateway_allocations)
 
-            elif msg_type == 'logs_collected':
-                if peer_id != self._logs_collector_id:
-                    LOG.warning(f"Wrong next_seq_no message origin: {peer_id}")
-                    continue
-                last_collected_seq_no = envelope.logs_collected.sequence_numbers.get(self._local_peer_id)
-                self._logs_storage.logs_collected(last_collected_seq_no)
+                elif msg_type == 'logs_collected':
+                    if peer_id != self._logs_collector_id:
+                        LOG.warning(f"Wrong next_seq_no message origin: {peer_id}")
+                        continue
+                    last_collected_seq_no = envelope.logs_collected.sequence_numbers.get(self._local_peer_id)
+                    self._logs_storage.logs_collected(last_collected_seq_no)
 
-            else:
-                continue  # Just ignore pings and logs from other workers
+                else:
+                    continue  # Just ignore pings and logs from other workers
+            except Exception as e:
+                LOG.exception(f"Message processing failed: {envelope}")
+                SERVER_ERROR.inc()
 
     async def _send_logs_loop(self) -> None:
         while True:
@@ -342,8 +346,9 @@ async def _main():
     )
     async with channel as chan:
         transport = P2PTransport(chan, args.scheduler_id, args.logs_collector_id)
+        # TODO: catch exceptions here
         worker_peer_id = await transport.initialize(logs_db_path)
-        gateway_allocations = GatewayAllocations(args.rpc_url, worker_peer_id, allocations_db_path)
+        gateway_allocations = await GatewayAllocations.new(args.rpc_url, worker_peer_id, allocations_db_path)
         worker = Worker(sm, transport, args.procs)
         await monitor_service_tasks([
             asyncio.create_task(transport.run(gateway_allocations), name='p2p_transport'),
