@@ -3,7 +3,7 @@ from typing import TypedDict, Literal, Iterable
 import marshmallow as mm
 import pyarrow
 
-from sqa.query.model import Table, Item, Scan, ReqName, JoinRel, RefRel, R
+from sqa.query.model import Table, Item, Scan, ReqName, JoinRel, RefRel
 from sqa.query.schema import field_map_schema, BaseQuerySchema
 from sqa.query.util import get_selected_fields, json_project, field_in, to_snake_case
 from sqa.solana.writer.model import Base58Bytes
@@ -266,6 +266,8 @@ class _TransactionItem(Item):
 
     def project(self, fields: FieldSelection) -> str:
         return json_project(self.get_selected_fields(fields), rewrite={
+            'computeUnitsConsumed': 'compute_units_consumed::text',
+            'fee': 'fee::text',
             'err': 'err::json'
         })
 
