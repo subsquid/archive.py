@@ -21,7 +21,6 @@ class RpcRequest(TypedDict):
 
 BatchRpcRequest = list[RpcRequest]
 
-
 class RpcError(Exception):
     def __init__(self, info: Any, request: Union[RpcRequest, BatchRpcRequest], url: str):
         self.message = 'rpc error'
@@ -254,7 +253,7 @@ class RpcConnection:
             return True
         elif isinstance(e, RpcError) and isinstance(e.info, dict):
             code = e.info.get('code')
-            return code == 429 or code == -32603 or code == -32000 or code == -32002
+            return code in (429, -32000, -32002, -32007, -32603)
         else:
             return False
 
