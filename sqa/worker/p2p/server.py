@@ -87,23 +87,27 @@ class P2PTransport:
 
     async def _receive_loop(self, gateway_allocations: GatewayAllocations) -> None:
         async for peer_id, envelope in self._rpc.get_messages():
-            msg_type = envelope.WhichOneof('msg')
+            try:
+                msg_type = envelope.WhichOneof('msg')
 
-            if msg_type == 'pong':
-                await self._handle_pong(peer_id, envelope.pong)
+                if msg_type == 'pong':
+                    await self._handle_pong(peer_id, envelope.pong)
 
-            elif msg_type == 'query':
-                await self._handle_query(peer_id, envelope.query, gateway_allocations)
+                elif msg_type == 'query':
+                    await self._handle_query(peer_id, envelope.query, gateway_allocations)
 
-            elif msg_type == 'logs_collected':
-                if peer_id != self._logs_collector_id:
-                    LOG.warning(f"Wrong next_seq_no message origin: {peer_id}")
-                    continue
-                last_collected_seq_no = envelope.logs_collected.sequence_numbers.get(self._local_peer_id)
-                self._logs_storage.logs_collected(last_collected_seq_no)
+                elif msg_type == 'logs_collected':
+                    if peer_id != self._logs_collector_id:
+                        LOG.warning(f"Wrong next_seq_no message origin: {peer_id}")
+                        continue
+                    last_collected_seq_no = envelope.logs_collected.sequence_numbers.get(self._local_peer_id)
+                    self._logs_storage.logs_collected(last_collected_seq_no)
 
-            else:
-                continue  # Just ignore pings and logs from other workers
+                else:
+                    continue  # Just ignore pings and logs from other workers
+            except Exception as e:
+                LOG.exception(f"Message processing failed: {envelope}")
+                SERVER_ERROR.inc()
 
     async def _send_logs_loop(self) -> None:
         while True:
