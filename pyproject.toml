@@ -49,4 +49,5 @@ build-backend = "pdm.backend"
 [tool.pdm.dev-dependencies]
 dev = [
     "locust>=2.15.1",
+    "pyarrow-stubs>=10.0.1.7",
 ]
