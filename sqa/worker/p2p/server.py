@@ -346,8 +346,9 @@ async def _main():
     )
     async with channel as chan:
         transport = P2PTransport(chan, args.scheduler_id, args.logs_collector_id)
+        # TODO: catch exceptions here
         worker_peer_id = await transport.initialize(logs_db_path)
-        gateway_allocations = GatewayAllocations(args.rpc_url, worker_peer_id, allocations_db_path)
+        gateway_allocations = await GatewayAllocations.new(args.rpc_url, worker_peer_id, allocations_db_path)
         worker = Worker(sm, transport, args.procs)
         await monitor_service_tasks([
             asyncio.create_task(transport.run(gateway_allocations), name='p2p_transport'),
