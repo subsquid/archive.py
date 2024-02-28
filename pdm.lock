@@ -5,7 +5,7 @@
 groups = ["default", "dev", "http-worker", "p2p-worker", "writer"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.4.1"
-content_hash = "sha256:8729487a5a620c51a8cfbca2da310c0ae729bec0f842e4a02fad504e9d613031"
+content_hash = "sha256:0979d998c2da0e3627b7b9b8fbe0febb9d0c363b64fe81a04d7787d16c146702"
 
 [[package]]
 name = "aiobotocore"
@@ -1298,6 +1298,16 @@ files = [
     {file = "pyarrow-15.0.0-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:6eda9e117f0402dfcd3cd6ec9bfee89ac5071c48fc83a84f3075b60efa96747f"},
     {file = "pyarrow-15.0.0-cp312-cp312-win_amd64.whl", hash = "sha256:9a3a6180c0e8f2727e6f1b1c87c72d3254cac909e609f35f22532e4115461177"},
     {file = "pyarrow-15.0.0.tar.gz", hash = "sha256:876858f549d540898f927eba4ef77cd549ad8d24baa3207cf1b72e5788b50e83"},
+]
+
+[[package]]
+name = "pyarrow-stubs"
+version = "10.0.1.7"
+requires_python = ">=3.7,<4.0"
+summary = "Type annotations for pyarrow"
+groups = ["dev"]
+files = [
+    {file = "pyarrow_stubs-10.0.1.7-py3-none-any.whl", hash = "sha256:cccc7a46eddeea4e3cb85330eb8972c116a615da6188b8ae1f7a44cb724b21ac"},
 ]
 
 [[package]]
