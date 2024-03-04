@@ -53,6 +53,13 @@ ingest-kusama:
 		--first-block 18961964 \
 		--chunk-size 256
 
+ingest-starknet:
+	@python3 -m sqa.starknet.writer --dest data/starknet \
+		-e ${STARKNET_NODE} \
+		-c 10 \
+		-r 200 \
+		--batch-limit 300 \
+		--first-block 0
 
 router:
 	@python3 tests/fake_router.py

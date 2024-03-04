@@ -446,7 +446,10 @@ class WriteService:
             tasks = self._raw_writer(batches)
         else:
             tasks = self._parquet_writer(batches)
+        
+        await self.submit_write_tasks(tasks)
 
+    async def submit_write_tasks(self, tasks: AsyncIterator[WriteTask]):
         with concurrent.futures.ThreadPoolExecutor(
                 max_workers=1,
                 thread_name_prefix='block_writer'
