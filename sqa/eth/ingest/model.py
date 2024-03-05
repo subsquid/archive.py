@@ -62,7 +62,7 @@ Transaction = TypedDict('Transaction', {
     'accessList': NotRequired[list],
     'chainId': NotRequired[Qty],
     'maxFeePerBlobGas': NotRequired[Qty],
-    'blobVersionedHashes': NotRequired[Hash32],
+    'blobVersionedHashes': NotRequired[list[Hash32]],
     'receipt_': NotRequired['Receipt'],
     'debugFrame_': NotRequired['DebugFrameResult'],
     'debugStateDiff_': NotRequired['DebugStateDiffResult'],
