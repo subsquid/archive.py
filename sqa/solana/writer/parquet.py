@@ -1,5 +1,4 @@
 import json
-import struct
 
 import base58
 import pyarrow
@@ -42,7 +41,7 @@ class BlockTable(TableBuilder):
 class TransactionTable(TableBuilder):
     def __init__(self):
         self.block_number = Column(pyarrow.int32())
-        self.index = Column(pyarrow.int32())
+        self.transaction_index = Column(pyarrow.int32())
         self.version = Column(pyarrow.int16())  # -1 = legacy
         # transaction message
         self.account_keys = Column(pyarrow.list_(base58_bytes()))
@@ -76,7 +75,7 @@ class TransactionTable(TableBuilder):
 
     def append(self, block_number: int, tx: Transaction) -> None:
         self.block_number.append(block_number)
-        self.index.append(tx['transactionIndex'])
+        self.transaction_index.append(tx['transactionIndex'])
         self.version.append(-1 if tx['version'] == 'legacy' else tx['version'])
 
         account_keys = tx['accountKeys']
@@ -102,7 +101,7 @@ class TransactionTable(TableBuilder):
         err = tx.get('err')
         self.err.append(None if err is None else json.dumps(err))
 
-        self.compute_units_consumed.append(tx.get('computeUnitsConsumed'))
+        self.compute_units_consumed.append(_to_int(tx.get('computeUnitsConsumed')))
         self.fee.append(int(tx['fee']))
 
         loaded_addresses = tx['loadedAddresses']
@@ -132,12 +131,18 @@ class InstructionTable(TableBuilder):
         self.a9 = Column(base58_bytes())
         self.rest_accounts = Column(pyarrow.list_(base58_bytes()))
         self.data = Column(base58_bytes())
+
+        # meta
+        self.compute_units_consumed = Column(pyarrow.uint64())
         self.error = Column(pyarrow.string())
+        self.is_committed = Column(pyarrow.bool_())
+
         # discriminators
         self.d1 = Column(pyarrow.string())
         self.d2 = Column(pyarrow.string())
         self.d4 = Column(pyarrow.string())
         self.d8 = Column(pyarrow.string())
+
         self.accounts_size = Column(pyarrow.int64())
 
     def append(self, block_number: int, i: Instruction) -> None:
@@ -147,13 +152,16 @@ class InstructionTable(TableBuilder):
         self.program_id.append(i['programId'])
         self._set_accounts(i['accounts'])
         self.data.append(i['data'])
+
+        self.is_committed.append(i['isCommitted'])
+        self.compute_units_consumed.append(_to_int(i.get('computeUnitsConsumed')))
         self.error.append(i.get('error'))
 
         data = base58.b58decode(i['data'])
-        self.d1.append(f'0x{data[:1].hex()}' if data else None)
-        self.d2.append(f'0x{data[:2].hex()}' if len(data) >= 2 else None)
-        self.d4.append(f'0x{data[:4].hex()}' if len(data) >= 4 else None)
-        self.d8.append(f'0x{data[:8].hex()}' if len(data) >= 8 else None)
+        self.d1.append(f'0x{data[:1].hex()}')
+        self.d2.append(f'0x{data[:2].hex()}')
+        self.d4.append(f'0x{data[:4].hex()}')
+        self.d8.append(f'0x{data[:8].hex()}')
 
     def _set_accounts(self, accounts: list[str]) -> None:
         for i in range(10):
@@ -292,14 +300,19 @@ class ParquetWriter(BaseParquetWriter):
 
 def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     kwargs = {
-        'data_page_size': 128 * 1024,
-        'dictionary_pagesize_limit': 2 * 1024 * 1024,
+        'data_page_size': 32 * 1024,
+        'dictionary_pagesize_limit': 192 * 1024,
         'compression': 'zstd',
         'write_page_index': True,
-        'write_batch_size': 200
+        'write_batch_size': 50
     }
 
     transactions = tables['transactions']
+    transactions = transactions.sort_by([
+        ('fee_payer', 'ascending'),
+        ('block_number', 'ascending'),
+        ('transaction_index', 'ascending'),
+    ])
     transactions = add_index_column(transactions)
 
     fs.write_parquet(
@@ -313,19 +326,19 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
             'fee_payer'
         ],
         write_statistics=[
-            'block_number',
-            'index',
+            '_idx',
             'fee_payer',
-            '_idx'
+            'block_number',
+            'transaction_index',
         ],
-        row_group_size=100_000,
+        row_group_size=5_000,
         **kwargs
     )
 
     instructions = tables['instructions']
     instructions = instructions.sort_by([
-        ('program_id', 'ascending'),
         ('d1', 'ascending'),
+        ('program_id', 'ascending'),
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
         # ('instruction_address', 'ascending')
@@ -340,21 +353,27 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
             'program_id',
             'a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9',
             'rest_accounts.list.element',
-            'd1', 'd2', 'd4', 'd8',
+            'd1'
         ],
         write_statistics=[
+            '_idx',
             'block_number',
             'transaction_index',
             'program_id',
             'a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9',
-            'd1', 'd2', 'd4', 'd8',
-            '_idx'
+            'd1', 'd2', 'd4', 'd8'
         ],
-        row_group_size=100_000,
+        row_group_size=20_000,
         **kwargs
     )
 
     logs = tables['logs']
+    logs = logs.sort_by([
+        ('program_id', 'ascending'),
+        ('kind', 'ascending'),
+        ('block_number', 'ascending'),
+        ('log_index', 'ascending')
+    ])
     logs = add_size_column(logs, 'message')
     logs = add_index_column(logs)
 
@@ -363,13 +382,14 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         logs,
         use_dictionary=['program_id', 'kind'],
         write_statistics=[
+            '_idx',
             'block_number',
             'transaction_index',
             'log_index',
             'program_id',
-            '_idx'
+            'kind'
         ],
-        row_group_size=100_000,
+        row_group_size=50_000,
         **kwargs
     )
 
@@ -385,16 +405,17 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         'balances.parquet',
         balances,
         use_dictionary=['account'],
-        write_statistics=['account', 'block_number', 'transaction_index', '_idx'],
-        row_group_size=100_000,
+        write_statistics=['_idx', 'account', 'block_number', 'transaction_index'],
+        row_group_size=20_000,
         **kwargs
     )
 
     token_balances = tables['token_balances']
     token_balances = token_balances.sort_by([
-        ('account', 'ascending'),
-        ('owner', 'ascending'),
+        ('program_id', 'ascending'),
         ('mint', 'ascending'),
+        ('owner', 'ascending'),
+        ('account', 'ascending'),
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
     ])
@@ -410,15 +431,15 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
             'program_id'
         ],
         write_statistics=[
+            '_idx',
             'account',
             'mint',
             'owner',
             'program_id',
             'block_number',
-            'transaction_index',
-            '_idx'
+            'transaction_index'
         ],
-        row_group_size=100_000,
+        row_group_size=8_000,
         **kwargs
     )
 
@@ -433,7 +454,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         'rewards.parquet',
         rewards,
         use_dictionary=['pubkey', 'reward_type'],
-        write_statistics=['pubkey', 'reward_type', 'block_number', '_idx'],
+        write_statistics=['_idx', 'pubkey', 'reward_type', 'block_number'],
         **kwargs
     )
 
@@ -448,3 +469,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
 
 def _list_size(ls: list[str]) -> int:
     return sum(len(i) for i in ls)
+
+
+def _to_int(val: str | None) -> int | None:
+    return None if val is None else int(val)

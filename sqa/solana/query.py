@@ -5,7 +5,7 @@ import pyarrow
 
 from sqa.query.model import Table, Item, Scan, ReqName, JoinRel, RefRel
 from sqa.query.schema import field_map_schema, BaseQuerySchema
-from sqa.query.util import get_selected_fields, json_project, field_in, to_snake_case
+from sqa.query.util import get_selected_fields, json_project, field_in, to_snake_case, field_eq
 from sqa.solana.writer.model import Base58Bytes
 
 
@@ -36,11 +36,13 @@ class InstructionFieldSelection(TypedDict, total=False):
     programId: bool
     accounts: bool
     data: bool
-    error: bool
     d1: bool
     d2: bool
     d4: bool
     d8: bool
+    error: bool
+    computeUnitsConsumed: bool
+    isCommitted: bool
 
 
 class LogFieldSelection(TypedDict, total=False):
@@ -56,6 +58,7 @@ class BalanceFieldSelection(TypedDict, total=False):
 
 
 class TokenBalanceFieldSelection(TypedDict, total=False):
+    mint: bool
     owner: bool
     programId: bool
     decimals: bool
@@ -118,6 +121,7 @@ class InstructionRequest(TypedDict, total=False):
     a7: list[Base58Bytes]
     a8: list[Base58Bytes]
     a9: list[Base58Bytes]
+    isCommitted: bool
     transaction: bool
     innerInstructions: bool
     logs: bool
@@ -139,6 +143,7 @@ class _InstructionRequestSchema(mm.Schema):
     a7 = mm.fields.List(mm.fields.Str())
     a8 = mm.fields.List(mm.fields.Str())
     a9 = mm.fields.List(mm.fields.Str())
+    isCommitted = mm.fields.Boolean()
     transaction = mm.fields.Boolean()
     innerInstructions = mm.fields.Boolean()
     logs = mm.fields.Boolean()
@@ -233,7 +238,7 @@ class _BlockItem(Item):
 
 _transactions_table = Table(
     name='transactions',
-    primary_key=['index'],
+    primary_key=['transaction_index'],
     column_weights={
         'account_keys': 'account_keys_size',
         'address_table_lookups': 'address_table_lookups_size',
@@ -262,10 +267,11 @@ class _TransactionItem(Item):
         return 'transactions'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('transaction'), ['index'])
+        return get_selected_fields(fields.get('transaction'), ['transactionIndex'])
 
     def project(self, fields: FieldSelection) -> str:
         return json_project(self.get_selected_fields(fields), rewrite={
+            'version': "if(version < 0, 'legacy'::json, version::json)",
             'computeUnitsConsumed': 'compute_units_consumed::text',
             'fee': 'fee::text',
             'err': 'err::json'
@@ -315,6 +321,7 @@ class _InstructionScan(Scan):
         yield field_in('a7', req.get('a7'))
         yield field_in('a8', req.get('a8'))
         yield field_in('a9', req.get('a9'))
+        yield field_eq('is_committed', req.get('isCommitted'))
 
 
 class _InstructionItem(Item):
@@ -423,8 +430,7 @@ _token_balance_table = Table(
     name='token_balances',
     primary_key=[
         'transaction_index',
-        'account',
-        'mint'  # FIXME: verify this
+        'account'
     ]
 )
 
@@ -451,7 +457,7 @@ class _TokenBalanceItem(Item):
         return 'tokenBalances'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('tokenBalance'), ['transactionIndex', 'account', 'mint'])
+        return get_selected_fields(fields.get('tokenBalance'), ['transactionIndex', 'account'])
 
     def project(self, fields: FieldSelection) -> str:
         return json_project(self.get_selected_fields(fields), rewrite={
@@ -577,7 +583,7 @@ def _build_model():
             include_flag_name='logs',
             query='SELECT * FROM logs i, s WHERE '
                   'i.block_number = s.block_number AND '
-                  'i.transaction_index = s.index'
+                  'i.transaction_index = s.transaction_index'
         ),
         JoinRel(
             scan=ins_scan,

@@ -48,7 +48,9 @@ class Instruction(TypedDict):
     programId: Base58Bytes
     accounts: list[Base58Bytes]
     data: Base58Bytes
+    computeUnitsConsumed: NotRequired[JsBigInt]
     error: NotRequired[str]
+    isCommitted: bool
 
 
 class LogMessage(TypedDict):
