@@ -21,7 +21,6 @@ RUN pdm sync -G writer --no-editable --prod
 FROM base AS writer-base
 COPY --from=writer-builder /project/.venv /app/env/
 COPY --from=writer-builder /project/sqa /app/sqa/
-ADD rewrite_archive.py /app/rewrite_archive.py
 
 
 FROM writer-base AS eth-ingest
