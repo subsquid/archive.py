@@ -28,6 +28,11 @@ RUN /app/env/bin/python -m sqa.eth.ingest --help > /dev/null # win a little bit 
 ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.eth.ingest"]
 
 
+FROM writer-base AS solana-writer
+RUN /app/env/bin/python -m sqa.solana.writer --help > /dev/null # win a little bit of startup time
+ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.solana.writer"]
+
+
 FROM writer-base AS substrate-writer
 RUN /app/env/bin/python -m sqa.substrate.writer --help > /dev/null # win a little bit of startup time
 ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.substrate.writer"]

@@ -51,13 +51,15 @@ class Sink:
             dest: str,
             first_block: int = 0,
             last_block: int | None = None,
-            chunk_size: int = 1024
+            chunk_size: int = 1024,
+            top_dir_size: int = 500
     ):
         self._writer = writer
         self._fs = create_fs(dest)
         self._first_block = first_block
         self._last_block = last_block if last_block is not None else math.inf
         self._chunk_size = chunk_size
+        self._top_dir_size = top_dir_size
         self._writing = False
         self._last_seen_block = -1
         self._last_flushed_block = 1
@@ -68,7 +70,8 @@ class Sink:
             self._fs,
             self._writer.chunk_check,
             first_block=self._first_block,
-            last_block=self._last_block
+            last_block=self._last_block,
+            top_dir_size=self._top_dir_size
         )
 
     def get_next_block(self) -> int:
