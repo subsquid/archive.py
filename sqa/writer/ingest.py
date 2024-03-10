@@ -32,6 +32,7 @@ def ingest_from_service(
     while data_range['from'] <= last_block:
         try:
             with httpx.stream('POST', service_url, json=data_range, timeout=httpx.Timeout(None)) as res:
+                res.raise_for_status()
                 for line in res.iter_lines():
                     block: Block = json.loads(line)
                     height = get_block_height(block)
