@@ -306,7 +306,7 @@ class TraceTableBuilder(TableBuilder):
             if trace_type == 'create':
                 self.create_from.append(frame['from'])
                 self.create_value.append(frame['value'])
-                self.create_gas.append(frame['gas'])
+                self.create_gas.append(frame.get('gas'))
                 self.create_init.append(frame['input'])
                 self.create_result_gas_used.append(frame.get('gasUsed'))
                 self.create_result_code.append(frame.get('output'))
@@ -324,7 +324,7 @@ class TraceTableBuilder(TableBuilder):
                 self.call_from.append(frame['from'])
                 self.call_to.append(frame['to'])
                 self.call_value.append(frame.get('value'))
-                self.call_gas.append(frame['gas'])
+                self.call_gas.append(frame.get('gas'))
                 self.call_sighash.append(_to_sighash(frame['input']))
                 self.call_input.append(frame['input'])
                 self.call_type.append(frame_type.lower())
