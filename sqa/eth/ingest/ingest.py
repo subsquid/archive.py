@@ -386,7 +386,7 @@ class Ingest:
                     'diffMode': True
                 }
             }
-        ], priority=block_number)
+        ], priority=block_number, validate_result=_validate_debug_statediffs)
 
         transactions = block['transactions']
         assert len(transactions) == len(diffs)
@@ -485,6 +485,13 @@ def _validate_debug_trace(result):
         if len(trace.keys()) == 1 and trace.get('error') == 'execution timeout':
             return False
         if error := trace.get('error'):
+            if isinstance(error, dict):
+                return False
+    return True
+
+def _validate_debug_statediffs(result):
+    for diff in result:
+        if error := diff.get('error'):
             if isinstance(error, dict):
                 return False
     return True
