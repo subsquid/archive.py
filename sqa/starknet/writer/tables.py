@@ -1,66 +1,100 @@
-from sqa.starknet.writer.model import Block, Event, Transaction
-from sqa.writer.parquet import Column, TableBuilder
 import pyarrow
+
+from sqa.starknet.writer.model import (WriterBlock, WriterEvent,
+                                       WriterTransaction)
+from sqa.writer.parquet import Column, TableBuilder
+
 
 class BlockTableBuilder(TableBuilder):
     def __init__(self):
         self.number = Column(pyarrow.int32())
-        self.block_hash = Column(pyarrow.string())
+        self.hash = Column(pyarrow.string())
         self.parent_hash = Column(pyarrow.string())
+
+        self.status = Column(pyarrow.string())
+        self.new_root = Column(pyarrow.string())
         self.timestamp = Column(pyarrow.timestamp('s'))
         self.sequencer_address = Column(pyarrow.string())
-        self.new_root = Column(pyarrow.string())
-        self.status = Column(pyarrow.string())
+        self.starknet_version = Column(pyarrow.string())
+        self.l1_gas_price_in_fri = Column(pyarrow.string())
+        self.l1_gas_price_in_wei = Column(pyarrow.string())
 
-    def append(self, block: Block) -> None:
+    def append(self, block: WriterBlock) -> None:
         self.number.append(block['number'])
-        self.block_hash.append(block['block_hash'])
+        self.hash.append(block['hash'])
         self.parent_hash.append(block['parent_hash'])
+
+        self.status.append(block['status'])
+        self.new_root.append(block['new_root'])
         self.timestamp.append(block['timestamp'])
         self.sequencer_address.append(block['sequencer_address'])
-        self.new_root.append(block['new_root'])
-        self.status.append(block.get('status', ''))
+        self.starknet_version.append(block['starknet_version'])
+        self.l1_gas_price_in_fri.append(block['l1_gas_price']['price_in_fri'])
+        self.l1_gas_price_in_wei.append(block['l1_gas_price']['price_in_wei'])
 
 
 class TxTableBuilder(TableBuilder):
     def __init__(self):
-        self.block_number = Column(pyarrow.int32())
+        self.transaction_index = Column(pyarrow.int64())
         self.transaction_hash = Column(pyarrow.string())
+        self.block_number = Column(pyarrow.int32())
+
         self.contract_address = Column(pyarrow.string())
         self.entry_point_selector = Column(pyarrow.string())
         self.calldata = Column(pyarrow.list_(pyarrow.string()))
+        self.max_fee = Column(pyarrow.string())
         self.type = Column(pyarrow.string())
-        self.max_fee = Column(pyarrow.int64())
-        self.version = Column(pyarrow.int32())
+        self.sender_address = Column(pyarrow.string())
+        self.version = Column(pyarrow.string())
         self.signature = Column(pyarrow.list_(pyarrow.string()))
-        self.nonce = Column(pyarrow.int64())
+        self.nonce = Column(pyarrow.int32())
+        self.class_hash = Column(pyarrow.string())
+        self.compiled_class_hash = Column(pyarrow.string())
+        self.contract_address_salt = Column(pyarrow.string())
+        self.constructor_calldata = Column(pyarrow.string())
+        # TODO: 6 Fields that havent been received left unmatched for a moment
 
-    def append(self, tx: Transaction):
-        self.block_number.append(tx['block_number'])
+    def append(self, tx: WriterTransaction):
+        self.transaction_index.append(tx['transaction_index'])
         self.transaction_hash.append(tx['transaction_hash'])
-        self.contract_address.append(tx.get('contract_address', ''))
-        self.entry_point_selector.append(tx.get('entry_point_selector', ''))
-        self.calldata.append(tx.get('calldata', []))
-        self.type.append(tx.get('type', ''))
-        self.max_fee.append(int(tx.get('max_fee') or '0x0', 16))
-        self.version.append(int(tx.get('version') or '0x0', 16))
-        self.signature.append(tx.get('signature', []))
-        self.nonce.append(int(tx.get('nonce') or '0x0', 16))
+        self.block_number.append(tx['block_number'])
+
+        self.contract_address.append(tx.get('contract_address'))
+        self.entry_point_selector.append(tx.get('entry_point_selector'))
+        self.calldata.append(tx.get('calldata'))
+        self.max_fee.append(tx.get('max_fee'))
+        self.version.append(tx.get('version'))
+        self.signature.append(tx.get('signature'))
+        # TODO: if nonce none how would >/< filters will work
+        nonce_value = tx.get('nonce')
+        self.nonce.append(int(nonce_value, 16) if nonce_value is not None else None)
+        self.type.append(tx['type'])
+        self.sender_address.append(tx.get('sender_address'))
+        self.class_hash.append(tx.get('class_hash'))
+        self.compiled_class_hash.append(tx.get('compiled_class_hash'))
+        self.contract_address_salt.append(tx.get('contract_address_salt'))
+        self.constructor_calldata.append(tx.get('constructor_calldata'))
 
 
-class LogTableBuilder(TableBuilder):
+class EventTableBuilder(TableBuilder):
     def __init__(self):
+        self.block_number = Column(pyarrow.int32())
+        self.block_hash = Column(pyarrow.string())
+        self.transaction_index = Column(pyarrow.int64())
+        self.transaction_hash = Column(pyarrow.string())
+        self.event_index = Column(pyarrow.int32())
+
         self.from_address = Column(pyarrow.string())
         self.keys = Column(pyarrow.list_(pyarrow.string()))
         self.data = Column(pyarrow.list_(pyarrow.string()))
-        self.block_hash = Column(pyarrow.string())
-        self.block_number = Column(pyarrow.int32())
-        self.transaction_hash = Column(pyarrow.string())
 
-    def append(self, event: Event):
+    def append(self, event: WriterEvent):
+        self.block_number.append(event['block_number'])
+        self.block_hash.append(event['block_hash'])
+        self.transaction_index.append(event['transaction_index'])
+        self.transaction_hash.append(event['transaction_hash'])
+        self.event_index.append(event['event_index'])
+
         self.from_address.append(event['from_address'])
         self.keys.append(event['keys'])
         self.data.append(event['data'])
-        self.block_hash.append(event['block_hash'])
-        self.block_number.append(event['block_number'])
-        self.transaction_hash.append(event['transaction_hash'])

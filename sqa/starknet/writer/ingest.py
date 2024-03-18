@@ -1,14 +1,81 @@
 import asyncio
 import logging
-from typing import AsyncIterator, cast
-from sqa.starknet.writer.model import EventPage, Block, Event
-from sqa.eth.ingest.ingest import Ingest, _run_subtasks, _txs_with_missing_status
+from typing import AsyncIterator, Optional, cast
+from sqa.starknet.writer.model import EventPage, Block, Event, WriterBlock, WriterEvent, WriterTransaction
+from sqa.eth.ingest.ingest import _run_subtasks
+from sqa.util.rpc.client import RpcClient
 
 LOG = logging.getLogger(__name__)
 
 LOGS_CHUNK_SIZE = 200  # TODO: think about
 
-class IngestStarknet(Ingest):
+class IngestStarknet:
+
+    def __init__(
+        self,
+        rpc: RpcClient,
+        finality_confirmation: int,
+        genesis_block: int = 0,
+        from_block: int = 0,
+        to_block: Optional[int] = None,
+        with_receipts: bool = False,
+        with_traces: bool = False,
+        with_statediffs: bool = False,
+        validate_tx_root: bool = False,
+        validate_tx_type: bool = False
+    ):
+        self._rpc = rpc
+        self._finality_confirmation = finality_confirmation
+        self._with_receipts = with_receipts
+        self._with_traces = with_traces
+        self._with_statediffs = with_statediffs
+        self._validate_tx_root = validate_tx_root
+        self._validate_tx_type = validate_tx_type
+        self._height = from_block - 1
+        self._genesis = genesis_block
+        self._end = to_block
+        self._chain_height = 0
+        self._strides: list[asyncio.Task] = []
+        self._stride_size = 20
+        self._closed = False
+        self._running = False
+
+    async def loop(self) -> AsyncIterator[list[WriterBlock]]:
+        assert not self._running
+        self._running = True
+        while not self._closed and not self._is_finished() or len(self._strides):
+            try:
+                stride = self._strides.pop(0)
+            except IndexError:
+                await self._wait_chain()
+                self._schedule_strides()
+            else:
+                blocks = await stride
+                self._schedule_strides()
+                yield blocks
+
+    def close(self):
+        self._closed = True
+        self._rpc.close()
+
+    def _is_finished(self) -> bool:
+        if self._end is None:
+            return False
+        else:
+            return self._height >= self._end
+
+    async def _wait_chain(self):
+        stride_size = self._stride_size
+
+        if self._end is not None:
+            stride_size = min(stride_size, self._end - self._height)
+
+        if self._dist() < stride_size:
+            self._chain_height = await self._get_chain_height()
+
+        while self._dist() <= 0:
+            await asyncio.sleep(2)
+            self._chain_height = await self._get_chain_height()
 
     def _schedule_strides(self):
         while len(self._strides) < max(1, min(10, self._rpc.get_total_capacity())) \
@@ -23,7 +90,7 @@ class IngestStarknet(Ingest):
             self._strides.append(task)
             self._height = to_block
 
-    async def _fetch_starknet_stride(self, from_block: int, to_block: int) -> list[Block]:
+    async def _fetch_starknet_stride(self, from_block: int, to_block: int) -> list[WriterBlock]:
         extra = {'first_block': from_block, 'last_block': to_block}
 
         LOG.debug('fetching new stride', extra=extra)
@@ -34,8 +101,10 @@ class IngestStarknet(Ingest):
 
         # TODO: if self._with_traces and not self._with_receipts:_txs_with_missing_status
 
+        # NOTE: This code moved here to separate retrieving raw data as it is in node from preparing data to comply with archive format
+        strides: list[WriterBlock] = self.make_writer_ready_blocks(blocks)
         LOG.debug('stride is ready', extra=extra)
-        return blocks
+        return strides
 
     def _starknet_stride_subtasks(self, blocks: list[Block]):
         if self._with_receipts:
@@ -46,13 +115,13 @@ class IngestStarknet(Ingest):
         # TODO: _fetch_traces
 
     async def _fetch_starknet_logs(self, blocks: list[Block]) -> None:
-        priority = blocks[0]['number']
+        priority = blocks[0]['block_number']
 
         first_page: EventPage = await self._rpc.call(
             'starknet_getEvents',
             [{
-                'from_block': {'block_number': blocks[0]['number']},
-                'to_block': {'block_number': blocks[-1]['number']},
+                'from_block': {'block_number': blocks[0]['block_number']},
+                'to_block': {'block_number': blocks[-1]['block_number']},
                 'chunk_size': LOGS_CHUNK_SIZE,
             }],
             priority=priority
@@ -64,8 +133,8 @@ class IngestStarknet(Ingest):
             pages.append(await self._rpc.call(
                 'starknet_getEvents',
                 [{
-                    'from_block': {'block_number': blocks[0]['number']},
-                    'to_block': {'block_number': blocks[-1]['number']},
+                    'from_block': {'block_number': blocks[0]['block_number']},
+                    'to_block': {'block_number': blocks[-1]['block_number']},
                     'chunk_size': LOGS_CHUNK_SIZE,
                     'continuation_token': pages[-1].get('continuation_token')
                 }],
@@ -79,7 +148,7 @@ class IngestStarknet(Ingest):
                 block_logs.append(event)
         
         for block in blocks:
-            block['logs_'] = logs_by_hash.get(block['block_hash'], [])
+            block['events'] = logs_by_hash.get(block['block_hash'], [])
 
     async def _fetch_starknet_receipts(self, blocks: list[Block]) -> None:
         raise NotImplementedError('receipts for starknet not implemented') # TODO: https://docs.alchemy.com/reference/starknet-gettransactionreceipt for block for tx
@@ -96,12 +165,6 @@ class IngestStarknet(Ingest):
             priority=from_block
         )
 
-        for block in blocks:
-            block_number = block.pop('block_number')
-            block['number'] = block_number
-            for tx in block['transactions']:
-                tx['block_number'] = block_number
-        
         # TODO: validate tx root?
 
         return blocks
@@ -109,3 +172,34 @@ class IngestStarknet(Ingest):
     async def _get_chain_height(self) -> int:
         height = (await self._rpc.call('starknet_blockNumber'))
         return max(height - self._finality_confirmation, 0)
+    
+    @staticmethod
+    def make_writer_ready_blocks(blocks: list[Block]) -> list[WriterBlock]:
+        # NOTE: care for efficiency function modify existing list as well as returning it with different typing
+        stride: list[WriterBlock] = cast(list[WriterBlock], blocks)  # cast ahead for less mypy problems
+        # NOTE: This function transform exact RPC node objects to Writer object with all extra fields for writing to table
+        transaction_index = 0
+        transaction_hash_to_index = {}
+        event_index = {}
+        for block in stride:
+            block['number'] = block['block_number']
+            block['hash'] = block['block_hash']
+            
+            block['writer_txs'] = cast(list[WriterTransaction], block['transactions'])
+            for tx in block['writer_txs']:
+                tx['transaction_index'] = transaction_index
+                transaction_index += 1
+                tx['block_number'] = block['block_number']
+
+                transaction_hash_to_index[tx['transaction_hash']] = tx['transaction_index']
+                event_index[tx['transaction_hash']] = 0
+
+        # could be done with one dict, but i thought its nicer with two
+        for block in stride:
+            block['writer_events'] = cast(list[WriterEvent], block['events'])
+            for event in block['writer_events']:
+                event['transaction_index'] = transaction_hash_to_index[event['transaction_hash']]
+                event['event_index'] = event_index[event['transaction_hash']]
+                event_index[event['transaction_hash']] += 1
+
+        return stride

@@ -10,46 +10,43 @@ from sqa.query.util import field_gte, field_in, field_lte, get_selected_fields, 
 
 class StarknetBlockFieldSelection(TypedDict, total=False):
     status: bool
-    block_hash: bool
-    parent_hash: bool
+    blockHash: bool
+    parentHash: bool
     number: bool
-    new_root: bool
+    newRoot: bool
     timestamp: bool
-    sequencer_address: bool
+    sequencerAddress: bool
 
 class StarknetTxFieldSelection(TypedDict, total=False):
-    transaction_hash: bool
-    contract_address: bool
-    entry_point_selector: bool
+    transactionHash: bool
+    contractAddress: bool
+    entryPointSelector: bool
     calldata: bool
-    max_fee: bool
+    maxFee: bool
     version: bool
     signature: bool
     nonce: bool
     type: bool
-    sender_address: bool
-    class_hash: bool
-    compiled_class_hash: bool
-    contract_address_salt: bool
-    constructor_calldata: bool
+    senderAddress: bool
+    classHash: bool
+    compiledClassHash: bool
+    contractAddressSalt: bool
+    constructorCalldata: bool
 
 class StarknetLogFieldSelection(TypedDict, total=False):
-    from_address: bool
+    fromAddress: bool
     keys: bool
     data: bool
-    block_hash: bool
-    block_number: bool
-    transaction_hash: bool
+    transactionHash: bool
 
 class TxRequest(TypedDict, total=False):
-    contract_address: list[str]
+    contractAddress: list[str]
     type: list[str]
-    sender_address: list[str]
     firstNonce: int
     lastNonce: int
 
 class LogRequest(TypedDict, total=False):
-    from_address: list[str]
+    fromAddress: list[str]
 
 class _FieldSelectionSchema(mm.Schema):
     block = field_map_schema(StarknetBlockFieldSelection)
@@ -58,9 +55,9 @@ class _FieldSelectionSchema(mm.Schema):
 
 
 class _StarknetTxRequestSchema(mm.Schema):
-    contract_address = mm.fields.List(mm.fields.Str())
+    contractAddress = mm.fields.List(mm.fields.Str())
     type = mm.fields.List(mm.fields.Str())
-    sender_address = mm.fields.List(mm.fields.Str())
+    senderAddress = mm.fields.List(mm.fields.Str())
     firstNonce = mm.fields.Integer(
         strict=True,
         validate=mm.validate.Range(min=0, min_inclusive=True)
@@ -69,12 +66,12 @@ class _StarknetTxRequestSchema(mm.Schema):
         strict=True,
         validate=mm.validate.Range(min=0, min_inclusive=True)
     )
-    # TODO: logs = mm.fields.Boolean()
-    #traces = mm.fields.Boolean()
-    #state_diffs = mm.fields.Boolean()
+    # TODO: is it needed? logs = mm.fields.Boolean()
+    # TODO: traces = mm.fields.Boolean()
+    #stateDiffs = mm.fields.Boolean()
 
 class _StarknetLogRequestSchema(mm.Schema):
-    from_address = mm.fields.List(mm.fields.Str())
+    fromAddress = mm.fields.List(mm.fields.Str())
 
 
 class _QuerySchema(BaseQuerySchema):
@@ -89,17 +86,17 @@ QUERY_SCHEMA = _QuerySchema()
 # NOTE: In eth column weights were used
 _blocks_table = Table(
     name='blocks',
-    primary_key=[],
+    primary_key=['number'],
 )
 
 _tx_table = Table(
     name='transactions',
-    primary_key=['_idx'],
+    primary_key=['transaction_index'],
 )
 
 _logs_table = Table(
     name='logs',
-    primary_key=['_idx'],
+    primary_key=['transaction_index', 'event_index'],
 )
 
 
@@ -132,9 +129,9 @@ class _TxScan(Scan):
         return 'transactions'
 
     def where(self, req: TxRequest) -> Iterable[Expression | None]:
-        yield field_in('to', req.get('contract_address'))
-        yield field_in('from', req.get('type'))
-        yield field_in('sighash', req.get('sender_address'))
+        yield field_in('contract_address', req.get('contractAddress'))
+        yield field_in('sender_address', req.get('contractAddress'))
+        yield field_in('type', req.get('type'))
         yield field_gte('nonce', req.get('firstNonce'))
         yield field_lte('nonce', req.get('lastNonce'))
 
@@ -158,7 +155,7 @@ class _LogScan(Scan):
         return 'logs'
 
     def where(self, req: LogRequest) -> Iterable[Expression | None]:
-        yield field_in('from_address', req.get('from_address'))
+        yield field_in('from_address', req.get('fromAddress'))
 
 
 class _LogItem(Item):
@@ -169,7 +166,7 @@ class _LogItem(Item):
         return 'logs'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('log'), ['_idx', 'transaction_hash'])
+        return get_selected_fields(fields.get('log'), ['_idx', 'transactionHash'])
 
 
 def _build_model() -> Model:

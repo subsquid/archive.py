@@ -79,11 +79,8 @@ async def rpc_ingest(args, rpc: RpcClient, first_block: int, last_block: int | N
         with_receipts=args.with_receipts,
         with_traces=args.with_traces,
         with_statediffs=args.with_statediffs,
-        use_trace_api=args.use_trace_api,
-        use_debug_api_for_statediffs=args.use_debug_api_for_statediffs,
         validate_tx_root=args.validate_tx_root,
-        validate_tx_type=args.validate_tx_type,
-        validate_logs_bloom=args.validate_logs_bloom,
+        validate_tx_type=args.validate_tx_type
     )
 
     try:
@@ -155,7 +152,7 @@ class WriteService:
 
     async def _batches_starknet(
             self,
-            strides: AsyncIterator[list[Block]]
+            strides: AsyncIterator[list[WriterBlock]]
     ) -> AsyncIterator[StarknetBatch]:
         last_report = 0
         last_block_hash = self.last_hash()
@@ -186,7 +183,7 @@ class WriteService:
         if self.progress.has_news():
             self.report()
 
-    async def write_starknet(self, strides: AsyncIterator[list[Block]]):
+    async def write_starknet(self, strides: AsyncIterator[list[WriterBlock]]):
         batches = self._batches_starknet(strides)
 
         if self.options.raw:

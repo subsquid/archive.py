@@ -4,7 +4,7 @@ from typing import TypedDict, NotRequired
 import pyarrow
 
 from sqa.starknet.writer.model import Block
-from sqa.starknet.writer.tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder
+from sqa.starknet.writer.tables import BlockTableBuilder, EventTableBuilder, TxTableBuilder
 from sqa.eth.ingest.util import short_hash
 from sqa.eth.ingest.writer import ArrowDataBatch
 from sqa.fs import Fs
@@ -24,7 +24,7 @@ class ArrowBatchBuilder:
     def _init(self):
         self.block_table = BlockTableBuilder()
         self.tx_table = TxTableBuilder()
-        self.log_table = LogTableBuilder()
+        self.log_table = EventTableBuilder()
         # self.trace_table = TraceTableBuilder()
         # self.statediff_table = StateDiffTableBuilder()
 
@@ -102,6 +102,7 @@ def write_parquet(loc: Fs, batch: ArrowDataBatch) -> None:
     # Handling Starknet transactions
     transactions = batch['transactions']
     transactions = add_size_column(transactions, 'calldata')
+    transactions = add_size_column(transactions, 'signature')
     transactions = add_index_column(transactions)
 
     loc.write_parquet(
@@ -123,6 +124,8 @@ def write_parquet(loc: Fs, batch: ArrowDataBatch) -> None:
     ])
     # TODO: maybe add size columns for data and keys arrays
     logs = add_index_column(logs)
+    logs = add_size_column(logs, 'keys')
+    logs = add_size_column(logs, 'data')
 
     loc.write_parquet(
         'logs.parquet',
