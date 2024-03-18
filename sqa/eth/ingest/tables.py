@@ -281,11 +281,6 @@ class TraceTableBuilder(TableBuilder):
         bn = qty2int(block_number)
         tix = qty2int(transaction_index)
         for addr, subtraces, frame in _traverse_frame(top, []):
-            if not 'type' in frame:
-                assert len(frame.keys()) == 1
-                assert 'error' in frame
-                continue
-
             trace_type: Literal['create', 'call', 'suicide']
             frame_type = frame['type']
             if frame_type in ('CALL', 'CALLCODE', 'STATICCALL', 'DELEGATECALL', 'INVALID', 'Call'):
