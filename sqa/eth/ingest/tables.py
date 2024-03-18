@@ -280,7 +280,14 @@ class TraceTableBuilder(TableBuilder):
     def debug_append(self, block_number: Qty, transaction_index: Qty, top: DebugFrame):
         bn = qty2int(block_number)
         tix = qty2int(transaction_index)
+        print(top)
         for addr, subtraces, frame in _traverse_frame(top, []):
+            if frame.get('error') == "TypeError: cannot read property 'toString' of undefined    in server-side tracer function 'result'":
+                print('skip broken trace')
+                continue
+            if frame.get('error') == 'execution timeout':
+                import pdb; pdb.set_trace()
+                pass
             trace_type: Literal['create', 'call', 'suicide']
             frame_type = frame['type']
             if frame_type in ('CALL', 'CALLCODE', 'STATICCALL', 'DELEGATECALL', 'INVALID', 'Call'):
@@ -306,7 +313,7 @@ class TraceTableBuilder(TableBuilder):
             if trace_type == 'create':
                 self.create_from.append(frame['from'])
                 self.create_value.append(frame['value'])
-                self.create_gas.append(frame['gas'])
+                self.create_gas.append(frame.get('gas'))
                 self.create_init.append(frame['input'])
                 self.create_result_gas_used.append(frame.get('gasUsed'))
                 self.create_result_code.append(frame.get('output'))
@@ -324,7 +331,7 @@ class TraceTableBuilder(TableBuilder):
                 self.call_from.append(frame['from'])
                 self.call_to.append(frame['to'])
                 self.call_value.append(frame.get('value'))
-                self.call_gas.append(frame['gas'])
+                self.call_gas.append(frame.get('gas'))
                 self.call_sighash.append(_to_sighash(frame['input']))
                 self.call_input.append(frame['input'])
                 self.call_type.append(frame_type.lower())
@@ -342,9 +349,9 @@ class TraceTableBuilder(TableBuilder):
                 self.call_result_output.append(None)
 
             if trace_type == 'suicide':
-                self.suicide_address.append(frame['from'])
-                self.suicide_refund_address.append(frame['to'])
-                self.suicide_balance.append(frame['value'])
+                self.suicide_address.append(frame.get('from'))
+                self.suicide_refund_address.append(frame.get('to'))
+                self.suicide_balance.append(frame.get('value'))
             else:
                 self.suicide_address.append(None)
                 self.suicide_refund_address.append(None)

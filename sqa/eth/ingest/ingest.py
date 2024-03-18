@@ -482,7 +482,8 @@ def _fix_astar_995596(block: Block):
 
 def _validate_debug_trace(result):
     for trace in result:
-        if len(trace.keys()) == 1 and trace.get('error') == 'execution timeout':
+        if trace.get('error') == 'execution timeout':
+            print('execution timeout')
             return False
         if error := trace.get('error'):
             if isinstance(error, dict):
