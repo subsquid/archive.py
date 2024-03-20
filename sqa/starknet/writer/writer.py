@@ -3,94 +3,50 @@ from typing import TypedDict, NotRequired
 
 import pyarrow
 
-from sqa.starknet.writer.model import Block
+from sqa.starknet.writer.model import Block, WriterBlock
 from sqa.starknet.writer.tables import BlockTableBuilder, EventTableBuilder, TxTableBuilder
 from sqa.eth.ingest.util import short_hash
-from sqa.eth.ingest.writer import ArrowDataBatch
 from sqa.fs import Fs
 from sqa.layout import ChunkWriter
-from sqa.writer.parquet import add_size_column, add_index_column
+from sqa.writer.parquet import BaseParquetWriter, add_size_column, add_index_column
 
 
 LOG = logging.getLogger(__name__)
-
-
-class ArrowBatchBuilder:
-    def __init__(self, with_traces: bool, with_statediffs: bool):
-        self._with_traces = with_traces
-        self._with_statediffs = with_statediffs
-        self._init()
-
-    def _init(self):
-        self.block_table = BlockTableBuilder()
-        self.tx_table = TxTableBuilder()
-        self.log_table = EventTableBuilder()
-        # self.trace_table = TraceTableBuilder()
-        # self.statediff_table = StateDiffTableBuilder()
-
-    def buffered_bytes(self) -> int:
-        return self.block_table.bytesize() \
-            + self.tx_table.bytesize() \
-            + self.log_table.bytesize() \
-            # + self.trace_table.bytesize() \
-            # + self.statediff_table.bytesize()
     
-    def append(self, block: Block):
+
+class ParquetWriter(BaseParquetWriter):
+    def __init__(self):
+        self.blocks = BlockTableBuilder()
+        self.transactions = TxTableBuilder()
+        self.events = EventTableBuilder()
+
+    def push(self, block: WriterBlock) -> None:
         # TODO: add functionality from eth writer
-        self.block_table.append(block)
+        self.blocks.append(block)
 
         for tx in block['transactions']:
-            self.tx_table.append(tx)
+            self.transactions.append(tx)
 
-        if 'logs_' in block:
-            for log in block['logs_']:
-                self.log_table.append(log)
+        if 'writer_events' in block:
+            for event in block['writer_events']:
+                self.events.append(event)
         else:
             raise NotImplementedError('Receipts not implemented')
 
-    def build(self) -> ArrowDataBatch:
-        bytesize = self.buffered_bytes()
+    def _write(self, fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
+        write_parquet(fs, tables)
 
-        batch = ArrowDataBatch(
-            blocks=self.block_table.to_table(),
-            transactions=self.tx_table.to_table(),
-            logs=self.log_table.to_table(),
-            bytesize=bytesize
-        )
+    def get_block_height(self, block: WriterBlock) -> int:  # type: ignore
+        return block['number']
 
-        # if self._with_traces:
-        #     batch['traces'] = self.trace_table.to_table()
+    def get_block_hash(self, block: WriterBlock) -> str:  # type: ignore
+        return block['hash']
 
-        # if self._with_statediffs:
-        #     batch['statediffs'] = self.statediff_table.to_table()
-
-        self._init()
-        return batch
+    def get_block_parent_hash(self, block: WriterBlock) -> str:  # type: ignore
+        return block['parent_hash']
 
 
-class ParquetWriter:
-    def __init__(self, fs: Fs, chunk_writer: ChunkWriter, with_traces: bool, with_statediffs: bool):
-        self.fs = fs
-        self.chunk_writer = chunk_writer
-        if with_traces or with_statediffs:
-            raise NotImplementedError('traces and statediffs are not implemented for starknet')
-        self.with_traces = with_traces
-        self.with_statediffs = with_statediffs
-
-    def write(self, batch: ArrowDataBatch) -> None:
-        blocks = batch['blocks']
-        block_numbers: pyarrow.ChunkedArray = blocks.column('number') # NOTE: block_number
-        first_block = block_numbers[0].as_py()
-        last_block = block_numbers[-1].as_py()
-        last_hash = short_hash(blocks.column('block_hash')[-1].as_py())
-
-        chunk = self.chunk_writer.next_chunk(first_block, last_block, last_hash)
-        LOG.debug('saving data chunk %s', chunk.path())
-
-        with self.fs.transact(chunk.path()) as loc:
-            write_parquet(loc, batch)
-
-def write_parquet(loc: Fs, batch: ArrowDataBatch) -> None:
+def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
     kwargs = {
         'data_page_size': 128 * 1024,
         'dictionary_pagesize_limit': 2 * 1024 * 1024,
@@ -100,55 +56,61 @@ def write_parquet(loc: Fs, batch: ArrowDataBatch) -> None:
     }
 
     # Handling Starknet transactions
-    transactions = batch['transactions']
+    transactions = tables['transactions']
+    transactions = transactions.sort_by([
+        ('block_number', 'ascending'),
+        ('transaction_index', 'ascending'),
+    ])
     transactions = add_size_column(transactions, 'calldata')
     transactions = add_size_column(transactions, 'signature')
+    transactions = add_size_column(transactions, 'constructor_calldata')
     transactions = add_index_column(transactions)
 
     loc.write_parquet(
         'transactions.parquet',
         transactions,
-        use_dictionary=['contract_address', 'entry_point_selector'],
+        use_dictionary=['contract_address', 'transaction_hash', 'sender_address'],
         row_group_size=10000,
-        write_statistics=['_idx', 'block_number'],
+        write_statistics=['_idx', 'block_number', 'transaction_index'],
         **kwargs
     )
 
     LOG.debug('wrote %s', loc.abs('transactions.parquet'))
 
-    # Handling Starknet logs(events)
-    logs = batch['logs']
-    logs = logs.sort_by([
-        ('from_address', 'ascending'),
-        ('block_number', 'ascending')
+    # Handling Starknet events
+    events = tables['events']
+    events = events.sort_by([
+        ('block_number', 'ascending'),
+        ('transaction_index', 'ascending'),
+        ('event_index', 'ascending'),
     ])
-    # TODO: maybe add size columns for data and keys arrays
-    logs = add_index_column(logs)
-    logs = add_size_column(logs, 'keys')
-    logs = add_size_column(logs, 'data')
+    events = add_size_column(events, 'keys')
+    events = add_size_column(events, 'data')
+    events = add_index_column(events)
 
     loc.write_parquet(
-        'logs.parquet',
-        logs,
-        use_dictionary=['from_address'],
+        'events.parquet',
+        events,
+        use_dictionary=['from_address', 'transaction_hash'],
         row_group_size=10000,
-        write_statistics=['_idx', 'from_address', 'block_number'],
+        write_statistics=['_idx', 'block_number', 'transaction_index', 'event_index'],
         **kwargs
     )
 
-    LOG.debug('wrote %s', loc.abs('logs.parquet'))
+    LOG.debug('wrote %s', loc.abs('events.parquet'))
 
     # Handling Starknet blocks
-    blocks = batch['blocks']
+    blocks = tables['blocks']
 
     loc.write_parquet(
         'blocks.parquet',
         blocks,
-        write_statistics=['number'], # NOTE: block_number
+        use_dictionary=['hash'],
+        write_statistics=['number'],
         row_group_size=2000,
         **kwargs
     )
 
     LOG.debug('wrote %s', loc.abs('blocks.parquet'))
 
-    # TODO: Add processing for logs, traces, and state diffs
+    # TODO: Add processing for traces, and state diffs

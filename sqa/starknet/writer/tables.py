@@ -35,7 +35,7 @@ class BlockTableBuilder(TableBuilder):
 
 class TxTableBuilder(TableBuilder):
     def __init__(self):
-        self.transaction_index = Column(pyarrow.int64())
+        self.transaction_index = Column(pyarrow.int32())
         self.transaction_hash = Column(pyarrow.string())
         self.block_number = Column(pyarrow.int32())
 
@@ -51,7 +51,7 @@ class TxTableBuilder(TableBuilder):
         self.class_hash = Column(pyarrow.string())
         self.compiled_class_hash = Column(pyarrow.string())
         self.contract_address_salt = Column(pyarrow.string())
-        self.constructor_calldata = Column(pyarrow.string())
+        self.constructor_calldata = Column(pyarrow.list_(pyarrow.string()))
         # TODO: 6 Fields that havent been received left unmatched for a moment
 
     def append(self, tx: WriterTransaction):
@@ -80,7 +80,7 @@ class EventTableBuilder(TableBuilder):
     def __init__(self):
         self.block_number = Column(pyarrow.int32())
         self.block_hash = Column(pyarrow.string())
-        self.transaction_index = Column(pyarrow.int64())
+        self.transaction_index = Column(pyarrow.int32())
         self.transaction_hash = Column(pyarrow.string())
         self.event_index = Column(pyarrow.int32())
 

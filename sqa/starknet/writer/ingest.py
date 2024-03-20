@@ -14,25 +14,19 @@ class IngestStarknet:
     def __init__(
         self,
         rpc: RpcClient,
-        finality_confirmation: int,
-        genesis_block: int = 0,
         from_block: int = 0,
         to_block: Optional[int] = None,
         with_receipts: bool = False,
         with_traces: bool = False,
         with_statediffs: bool = False,
-        validate_tx_root: bool = False,
-        validate_tx_type: bool = False
+        validate_tx_root: bool = False
     ):
         self._rpc = rpc
-        self._finality_confirmation = finality_confirmation
         self._with_receipts = with_receipts
         self._with_traces = with_traces
         self._with_statediffs = with_statediffs
         self._validate_tx_root = validate_tx_root
-        self._validate_tx_type = validate_tx_type
         self._height = from_block - 1
-        self._genesis = genesis_block
         self._end = to_block
         self._chain_height = 0
         self._strides: list[asyncio.Task] = []
@@ -89,6 +83,10 @@ class IngestStarknet:
             task = asyncio.create_task(self._fetch_starknet_stride(from_block, to_block))
             self._strides.append(task)
             self._height = to_block
+
+    def _dist(self) -> int:
+        return self._chain_height - self._height
+
 
     async def _fetch_starknet_stride(self, from_block: int, to_block: int) -> list[WriterBlock]:
         extra = {'first_block': from_block, 'last_block': to_block}
@@ -171,14 +169,13 @@ class IngestStarknet:
 
     async def _get_chain_height(self) -> int:
         height = (await self._rpc.call('starknet_blockNumber'))
-        return max(height - self._finality_confirmation, 0)
+        return max(height, 0)
     
     @staticmethod
     def make_writer_ready_blocks(blocks: list[Block]) -> list[WriterBlock]:
         # NOTE: care for efficiency function modify existing list as well as returning it with different typing
         stride: list[WriterBlock] = cast(list[WriterBlock], blocks)  # cast ahead for less mypy problems
         # NOTE: This function transform exact RPC node objects to Writer object with all extra fields for writing to table
-        transaction_index = 0
         transaction_hash_to_index = {}
         event_index = {}
         for block in stride:
@@ -186,6 +183,7 @@ class IngestStarknet:
             block['hash'] = block['block_hash']
             
             block['writer_txs'] = cast(list[WriterTransaction], block['transactions'])
+            transaction_index = 0
             for tx in block['writer_txs']:
                 tx['transaction_index'] = transaction_index
                 transaction_index += 1

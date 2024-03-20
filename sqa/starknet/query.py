@@ -9,35 +9,39 @@ from sqa.query.util import field_gte, field_in, field_lte, get_selected_fields, 
 
 
 class StarknetBlockFieldSelection(TypedDict, total=False):
-    status: bool
-    blockHash: bool
-    parentHash: bool
     number: bool
+    hash: bool
+    parentHash: bool
+
+    status: bool
     newRoot: bool
     timestamp: bool
     sequencerAddress: bool
 
 class StarknetTxFieldSelection(TypedDict, total=False):
+    transactionIndex: bool
     transactionHash: bool
+
     contractAddress: bool
     entryPointSelector: bool
     calldata: bool
     maxFee: bool
+    type: bool
+    senderAddress: bool
     version: bool
     signature: bool
     nonce: bool
-    type: bool
-    senderAddress: bool
     classHash: bool
     compiledClassHash: bool
     contractAddressSalt: bool
     constructorCalldata: bool
 
-class StarknetLogFieldSelection(TypedDict, total=False):
+class StarknetEventFieldSelection(TypedDict, total=False):
+    eventIndex: bool
+
     fromAddress: bool
     keys: bool
     data: bool
-    transactionHash: bool
 
 class TxRequest(TypedDict, total=False):
     contractAddress: list[str]
@@ -45,13 +49,13 @@ class TxRequest(TypedDict, total=False):
     firstNonce: int
     lastNonce: int
 
-class LogRequest(TypedDict, total=False):
+class EventRequest(TypedDict, total=False):
     fromAddress: list[str]
 
 class _FieldSelectionSchema(mm.Schema):
     block = field_map_schema(StarknetBlockFieldSelection)
     transaction = field_map_schema(StarknetTxFieldSelection)
-    log = field_map_schema(StarknetLogFieldSelection)
+    event = field_map_schema(StarknetEventFieldSelection)
 
 
 class _StarknetTxRequestSchema(mm.Schema):
@@ -66,18 +70,17 @@ class _StarknetTxRequestSchema(mm.Schema):
         strict=True,
         validate=mm.validate.Range(min=0, min_inclusive=True)
     )
-    # TODO: is it needed? logs = mm.fields.Boolean()
     # TODO: traces = mm.fields.Boolean()
     #stateDiffs = mm.fields.Boolean()
 
-class _StarknetLogRequestSchema(mm.Schema):
+class _StarknetEventRequestSchema(mm.Schema):
     fromAddress = mm.fields.List(mm.fields.Str())
 
 
 class _QuerySchema(BaseQuerySchema):
     fields = mm.fields.Nested(_FieldSelectionSchema())
     transactions = mm.fields.List(mm.fields.Nested(_StarknetTxRequestSchema()))
-    logs = mm.fields.List(mm.fields.Nested(_StarknetLogRequestSchema()))
+    events = mm.fields.List(mm.fields.Nested(_StarknetEventRequestSchema()))
 
 
 QUERY_SCHEMA = _QuerySchema()
@@ -94,8 +97,8 @@ _tx_table = Table(
     primary_key=['transaction_index'],
 )
 
-_logs_table = Table(
-    name='logs',
+_events_table = Table(
+    name='events',
     primary_key=['transaction_index', 'event_index'],
 )
 
@@ -108,7 +111,7 @@ class _BlockItem(Item):
         return 'blocks'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('block'), ['number', 'block_hash', 'parent_hash'])
+        return get_selected_fields(fields.get('block'), ['number', 'hash', 'parentHash'])
 
     def project(self, fields: FieldSelection) -> str:
         def rewrite_timestamp(f: str):
@@ -144,47 +147,47 @@ class _TxItem(Item):
         return 'transactions'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('transaction'), ['_idx'])
+        return get_selected_fields(fields.get('transaction'), ['_idx', 'transactionIndex'])
 
 
-class _LogScan(Scan):
+class _EventScan(Scan):
     def table(self) -> Table:
-        return _logs_table
+        return _events_table
 
     def request_name(self) -> str:
-        return 'logs'
+        return 'events'
 
-    def where(self, req: LogRequest) -> Iterable[Expression | None]:
+    def where(self, req: EventRequest) -> Iterable[Expression | None]:
         yield field_in('from_address', req.get('fromAddress'))
 
 
-class _LogItem(Item):
+class _EventItem(Item):
     def table(self) -> Table:
-        return _logs_table
+        return _events_table
 
     def name(self) -> str:
-        return 'logs'
+        return 'events'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('log'), ['_idx', 'transactionHash'])
+        return get_selected_fields(fields.get('event'), ['_idx', 'transactionIndex', 'eventIndex'])
 
 
 def _build_model() -> Model:
     tx_scan = _TxScan()
-    log_scan = _LogScan()
+    event_scan = _EventScan()
 
     block_item = _BlockItem()
     tx_item = _TxItem()
-    log_item = _LogItem()
+    event_item = _EventItem()
     # TODO: tracescan
     # TODO: receipts
 
-    log_item.sources.extend([
-        log_scan,
+    event_item.sources.extend([
+        event_scan,
         JoinRel(
             scan=tx_scan,
-            include_flag_name='logs',
-            query='SELECT * FROM logs i, s WHERE '
+            include_flag_name='events',
+            query='SELECT * FROM events i, s WHERE '
                   'i.block_number = s.block_number AND '
                   'i.transaction_hash = s.transaction_hash'
         )
@@ -193,13 +196,13 @@ def _build_model() -> Model:
     tx_item.sources.extend([
         tx_scan,
         RefRel(
-            scan=log_scan,
-            include_flag_name='transaction',
+            scan=event_scan,
+            include_flag_name='transactions',
             scan_columns=['transaction_hash']
         ),
         # TODO: RefRel for traces and statediffs
     ])
 
-    return [tx_scan, log_scan, block_item, tx_item, log_item]
+    return [tx_scan, event_scan, block_item, tx_item, event_item]
 
 MODEL = _build_model()

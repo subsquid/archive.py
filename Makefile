@@ -54,11 +54,8 @@ ingest-kusama:
 		--chunk-size 256
 
 ingest-starknet:
-	@python3 -m sqa.starknet.writer --dest data/worker/c3RhcmtuZXQ \
+	@python3 -m sqa.starknet.writer data/worker/c3RhcmtuZXQ \
 		-e ${STARKNET_NODE} \
-		-c 10 \
-		-r 200 \
-		--batch-limit 300 \
 		--first-block 0
 
 router:
