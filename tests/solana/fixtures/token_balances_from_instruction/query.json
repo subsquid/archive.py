@@ -14,7 +14,7 @@
       "data": true
     },
     "tokenBalance": {
-      "owner": true,
+      "postOwner": true,
       "mint": true,
       "pre": true,
       "post": true
