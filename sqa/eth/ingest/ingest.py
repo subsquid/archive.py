@@ -347,6 +347,7 @@ class Ingest:
         traces: list[DebugFrameResult | DebugFrame] = await self._rpc.call('debug_traceBlockByHash', [
             block['hash'],
             {
+                'timeout': '120s',
                 'tracer': 'callTracer',
                 'tracerConfig': {
                     'onlyTopCall': False,

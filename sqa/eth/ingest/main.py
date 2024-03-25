@@ -250,8 +250,9 @@ async def run(args):
 
     write_service = WriteService(write_options)
 
-    if write_service.next_block() > write_service.last_block():
-        return
+    # if write_service.next_block() > write_service.last_block():
+    #     print('da')
+    #     return
 
     # init RPC client
     endpoints = [RpcEndpoint(**e) for e in args.endpoints]
@@ -482,7 +483,7 @@ class WriteService:
                                         print('found invalid trace', tx['hash'])
                                         batch_is_broken = True
                                         await self.ingest._fetch_debug_call_trace(block)
-                                        assert trace['result'].get('error') != 'execution timeout'
+                                        assert tx.get('debugFrame_')['result'].get('error') != 'execution timeout'
 
                             line = json.dumps(block).encode('utf-8')
                             out.write(line)
