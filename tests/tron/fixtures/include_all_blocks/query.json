@@ -1,0 +1,15 @@
+{
+  "type": "tron",
+  "fromBlock": 11322942,
+  "toBlock": 11322950,
+  "fields": {
+    "log": {
+      "address": true,
+      "data": true
+    }
+  },
+  "includeAllBlocks": true,
+  "logs": [
+    {"address": ["5ee4096bad59e4656447af5420e09ef35f1e94ec"]}
+  ]
+}

@@ -64,6 +64,7 @@ def main():
     run_test_suite('tests/ethereum')
     run_test_suite('tests/moonbeam')
     run_test_suite('tests/solana')
+    run_test_suite('tests/tron')
 
 
 if __name__ == '__main__':
