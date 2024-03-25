@@ -1,9 +1,9 @@
-.DS_Store
+**/.DS_Store
 /.git
 /.idea
 
-__pycache__
-*.temp.*
+**/__pycache__
+**/*.temp.*
 
 /.envrc
 /.venv

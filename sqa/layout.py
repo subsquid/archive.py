@@ -132,8 +132,11 @@ class ChunkWriter:
             fs: Fs,
             chunk_check: Callable[[list[str]], bool],
             first_block: int = 0,
-            last_block: Optional[int] = None
+            last_block: Optional[int] = None,
+            top_dir_size: int = 500
     ):
+        self.top_dir_size = top_dir_size
+
         last_block = math.inf if last_block is None else last_block
         assert last_block >= first_block
 
@@ -187,7 +190,7 @@ class ChunkWriter:
     def next_chunk(self, first_block: int, last_block: int, last_hash: str) -> DataChunk:
         assert self.next_block <= first_block <= last_block <= self.last_block
 
-        if len(self._ranges) < 500 or self.last_block == last_block:
+        if len(self._ranges) < self.top_dir_size or self.last_block == last_block:
             top = self._top
         else:
             top = first_block

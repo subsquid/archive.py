@@ -6,7 +6,10 @@
       "slot": true
     },
     "tokenBalance": {
+      "mint": true,
       "decimals": true,
+      "preOwner": true,
+      "postOwner": true,
       "pre": true,
       "post": true
     },

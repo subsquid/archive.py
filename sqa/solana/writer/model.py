@@ -40,6 +40,7 @@ class Transaction(TypedDict):
     computeUnitsConsumed: NotRequired[int]
     fee: JsBigInt
     loadedAddresses: LoadedAddresses
+    hasDroppedLogMessages: bool
 
 
 class Instruction(TypedDict):
@@ -48,7 +49,10 @@ class Instruction(TypedDict):
     programId: Base58Bytes
     accounts: list[Base58Bytes]
     data: Base58Bytes
+    computeUnitsConsumed: NotRequired[JsBigInt]
     error: NotRequired[str]
+    isCommitted: bool
+    hasDroppedLogMessages: bool
 
 
 class LogMessage(TypedDict):
@@ -71,11 +75,12 @@ class TokenBalance(TypedDict):
     transactionIndex: int
     account: Base58Bytes
     mint: Base58Bytes
-    owner: NotRequired[Base58Bytes]
-    programId: NotRequired[Base58Bytes]
     decimals: int
-    pre: JsBigInt
-    post: JsBigInt
+    programId: NotRequired[Base58Bytes]
+    preOwner: NotRequired[Base58Bytes]
+    postOwner: NotRequired[Base58Bytes]
+    pre: NotRequired[JsBigInt]
+    post: NotRequired[JsBigInt]
 
 
 class Reward(TypedDict):

@@ -17,6 +17,9 @@ class CLI:
     def get_default_chunk_size(self) -> int:
         return 1024
 
+    def get_default_top_dir_size(self) -> int:
+        return 500
+
     @cache
     def _arguments(self):
         program = argparse.ArgumentParser(
@@ -58,6 +61,14 @@ class CLI:
             type=int,
             default=self.get_default_chunk_size(),
             help='data chunk size in roughly estimated megabytes'
+        )
+
+        program.add_argument(
+            '--top-dir-size',
+            metavar='MB',
+            type=int,
+            default=self.get_default_top_dir_size(),
+            help='number of chunks in top-level dir'
         )
 
         program.add_argument(
