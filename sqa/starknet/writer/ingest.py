@@ -8,6 +8,8 @@ from sqa.util.rpc.client import RpcClient
 LOG = logging.getLogger(__name__)
 
 LOGS_CHUNK_SIZE = 200  # TODO: think about
+STARKNET_FINALITY = 10  # NOTE: https://book.starknet.io/ch03-01-01-transactions-lifecycle.html
+
 
 class IngestStarknet:
 
@@ -22,6 +24,7 @@ class IngestStarknet:
         validate_tx_root: bool = False
     ):
         self._rpc = rpc
+        self._finality_confirmation = STARKNET_FINALITY
         self._with_receipts = with_receipts
         self._with_traces = with_traces
         self._with_statediffs = with_statediffs
@@ -168,8 +171,8 @@ class IngestStarknet:
         return blocks
 
     async def _get_chain_height(self) -> int:
-        height = (await self._rpc.call('starknet_blockNumber'))
-        return max(height, 0)
+        height = await self._rpc.call('starknet_blockNumber')
+        return max(height - self._finality_confirmation, 0)
     
     @staticmethod
     def make_writer_ready_blocks(blocks: list[Block]) -> list[WriterBlock]:
