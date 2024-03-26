@@ -1,9 +1,11 @@
 import asyncio
 import logging
 from typing import AsyncIterator, Optional, cast
-from sqa.starknet.writer.model import EventPage, Block, Event, WriterBlock, WriterEvent, WriterTransaction
+
 from sqa.eth.ingest.ingest import _run_subtasks
+from sqa.starknet.writer.model import EventPage, Block, Event, WriterBlock, WriterEvent, WriterTransaction
 from sqa.util.rpc.client import RpcClient
+
 
 LOG = logging.getLogger(__name__)
 
@@ -12,7 +14,6 @@ STARKNET_FINALITY = 10  # NOTE: https://book.starknet.io/ch03-01-01-transactions
 
 
 class IngestStarknet:
-
     def __init__(
         self,
         rpc: RpcClient,
@@ -90,7 +91,6 @@ class IngestStarknet:
     def _dist(self) -> int:
         return self._chain_height - self._height
 
-
     async def _fetch_starknet_stride(self, from_block: int, to_block: int) -> list[WriterBlock]:
         extra = {'first_block': from_block, 'last_block': to_block}
 
@@ -128,7 +128,7 @@ class IngestStarknet:
             priority=priority
         )
         pages = [first_page]
-        
+
         # NOTE: get rest of the pages
         while pages[-1].get('continuation_token'):
             pages.append(await self._rpc.call(
@@ -147,7 +147,7 @@ class IngestStarknet:
             for event in page['events']:
                 block_logs = logs_by_hash.setdefault(event['block_hash'], [])
                 block_logs.append(event)
-        
+
         for block in blocks:
             block['events'] = logs_by_hash.get(block['block_hash'], [])
 
@@ -173,7 +173,7 @@ class IngestStarknet:
     async def _get_chain_height(self) -> int:
         height = await self._rpc.call('starknet_blockNumber')
         return max(height - self._finality_confirmation, 0)
-    
+
     @staticmethod
     def make_writer_ready_blocks(blocks: list[Block]) -> list[WriterBlock]:
         # NOTE: care for efficiency function modify existing list as well as returning it with different typing
@@ -184,7 +184,7 @@ class IngestStarknet:
         for block in stride:
             block['number'] = block['block_number']
             block['hash'] = block['block_hash']
-            
+
             block['writer_txs'] = cast(list[WriterTransaction], block['transactions'])
             transaction_index = 0
             for tx in block['writer_txs']:

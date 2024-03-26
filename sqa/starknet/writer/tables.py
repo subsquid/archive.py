@@ -23,7 +23,6 @@ class BlockTableBuilder(TableBuilder):
         self.number.append(block['number'])
         self.hash.append(block['hash'])
         self.parent_hash.append(block['parent_hash'])
-
         self.status.append(block['status'])
         self.new_root.append(block['new_root'])
         self.timestamp.append(block['timestamp'])
@@ -35,10 +34,9 @@ class BlockTableBuilder(TableBuilder):
 
 class TxTableBuilder(TableBuilder):
     def __init__(self):
+        self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
         self.transaction_hash = Column(pyarrow.string())
-        self.block_number = Column(pyarrow.int32())
-
         self.contract_address = Column(pyarrow.string())
         self.entry_point_selector = Column(pyarrow.string())
         self.calldata = Column(pyarrow.list_(pyarrow.string()))
@@ -55,10 +53,9 @@ class TxTableBuilder(TableBuilder):
         # TODO: 6 Fields that havent been received left unmatched for a moment
 
     def append(self, tx: WriterTransaction):
+        self.block_number.append(tx['block_number'])
         self.transaction_index.append(tx['transaction_index'])
         self.transaction_hash.append(tx['transaction_hash'])
-        self.block_number.append(tx['block_number'])
-
         self.contract_address.append(tx.get('contract_address'))
         self.entry_point_selector.append(tx.get('entry_point_selector'))
         self.calldata.append(tx.get('calldata'))
@@ -79,22 +76,31 @@ class TxTableBuilder(TableBuilder):
 class EventTableBuilder(TableBuilder):
     def __init__(self):
         self.block_number = Column(pyarrow.int32())
-        self.block_hash = Column(pyarrow.string())
         self.transaction_index = Column(pyarrow.int32())
-        self.transaction_hash = Column(pyarrow.string())
         self.event_index = Column(pyarrow.int32())
-
         self.from_address = Column(pyarrow.string())
-        self.keys = Column(pyarrow.list_(pyarrow.string()))
+        self.key0 = Column(pyarrow.string())
+        self.key1 = Column(pyarrow.string())
+        self.key2 = Column(pyarrow.string())
+        self.key3 = Column(pyarrow.string())
+        self.rest_keys = Column(pyarrow.list_(pyarrow.string()))
         self.data = Column(pyarrow.list_(pyarrow.string()))
+        self.keys_size = Column(pyarrow.int64())
 
     def append(self, event: WriterEvent):
         self.block_number.append(event['block_number'])
-        self.block_hash.append(event['block_hash'])
         self.transaction_index.append(event['transaction_index'])
-        self.transaction_hash.append(event['transaction_hash'])
         self.event_index.append(event['event_index'])
-
         self.from_address.append(event['from_address'])
-        self.keys.append(event['keys'])
+        self._append_keys(event['keys'])
         self.data.append(event['data'])
+
+    def _append_keys(self, keys: list[str]) -> None:
+        for i in range(4):
+            col = getattr(self, f'key{i}')
+            col.append(keys[i] if i < len(keys) else None)
+        if len(keys) > 4:
+            self.rest_keys.append(keys[4:])
+        else:
+            self.rest_keys.append(None)
+        self.keys_size.append(sum(len(k) for k in keys))

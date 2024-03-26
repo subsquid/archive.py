@@ -1,18 +1,15 @@
 import logging
-from typing import TypedDict, NotRequired
 
 import pyarrow
 
-from sqa.starknet.writer.model import Block, WriterBlock
-from sqa.starknet.writer.tables import BlockTableBuilder, EventTableBuilder, TxTableBuilder
-from sqa.eth.ingest.util import short_hash
 from sqa.fs import Fs
-from sqa.layout import ChunkWriter
+from sqa.starknet.writer.model import WriterBlock
+from sqa.starknet.writer.tables import BlockTableBuilder, EventTableBuilder, TxTableBuilder
 from sqa.writer.parquet import BaseParquetWriter, add_size_column, add_index_column
 
 
 LOG = logging.getLogger(__name__)
-    
+
 
 class ParquetWriter(BaseParquetWriter):
     def __init__(self):
@@ -21,7 +18,6 @@ class ParquetWriter(BaseParquetWriter):
         self.events = EventTableBuilder()
 
     def push(self, block: WriterBlock) -> None:
-        # TODO: add functionality from eth writer
         self.blocks.append(block)
 
         for tx in block['transactions']:
@@ -49,7 +45,7 @@ class ParquetWriter(BaseParquetWriter):
 def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
     kwargs = {
         'data_page_size': 128 * 1024,
-        'dictionary_pagesize_limit': 2 * 1024 * 1024,
+        'dictionary_pagesize_limit': 256 * 1024,
         'compression': 'zstd',
         'write_page_index': True,
         'write_batch_size': 100
@@ -58,6 +54,8 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
     # Handling Starknet transactions
     transactions = tables['transactions']
     transactions = transactions.sort_by([
+        ('contract_address', 'ascending'),
+        ('sender_address', 'ascending'),
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
     ])
@@ -69,9 +67,15 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
     loc.write_parquet(
         'transactions.parquet',
         transactions,
-        use_dictionary=['contract_address', 'transaction_hash', 'sender_address'],
-        row_group_size=10000,
-        write_statistics=['_idx', 'block_number', 'transaction_index'],
+        use_dictionary=['contract_address', 'type', 'version'],
+        row_group_size=50000,
+        write_statistics=[
+            '_idx',
+            'contract_address',
+            'sender_address',
+            'block_number',
+            'transaction_index'
+        ],
         **kwargs
     )
 
@@ -80,20 +84,28 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
     # Handling Starknet events
     events = tables['events']
     events = events.sort_by([
+        ('key0', 'ascending'),
+        ('from_address', 'ascending'),
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
         ('event_index', 'ascending'),
     ])
-    events = add_size_column(events, 'keys')
     events = add_size_column(events, 'data')
     events = add_index_column(events)
 
     loc.write_parquet(
         'events.parquet',
         events,
-        use_dictionary=['from_address', 'transaction_hash'],
-        row_group_size=10000,
-        write_statistics=['_idx', 'block_number', 'transaction_index', 'event_index'],
+        use_dictionary=['key0'],
+        row_group_size=100_000,
+        write_statistics=[
+            '_idx',
+            'key0',
+            'from_address',
+            'block_number',
+            'transaction_index',
+            'event_index'
+        ],
         **kwargs
     )
 
@@ -101,13 +113,19 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
 
     # Handling Starknet blocks
     blocks = tables['blocks']
+    blocks = blocks.sort_by([
+        ('number', 'ascending')
+    ])
 
     loc.write_parquet(
         'blocks.parquet',
         blocks,
-        use_dictionary=['hash'],
+        use_dictionary=[
+            'status',
+            'sequencer_address',
+            'starknet_version'
+        ],
         write_statistics=['number'],
-        row_group_size=2000,
         **kwargs
     )
 

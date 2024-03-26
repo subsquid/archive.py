@@ -1,29 +1,25 @@
 import argparse
 import asyncio
-from functools import cache, cached_property
 import logging
-import os
-import concurrent.futures
-import time
-from typing import AsyncIterator, Iterable, NamedTuple, Optional
-from sqa.eth.ingest.main import EndpointAction, WriteTask, parse_cli_arguments
-from sqa.eth.ingest.metrics import Metrics
-from sqa.fs import Fs, create_fs
-from sqa.layout import ChunkWriter
+import threading
+from functools import cache
+from queue import Queue
+from typing import AsyncIterator, Iterable
+
+from sqa.eth.ingest.main import EndpointAction
 from sqa.starknet.writer.ingest import IngestStarknet
-from sqa.starknet.writer.model import Block, WriterBlock
+from sqa.starknet.writer.model import WriterBlock
 from sqa.starknet.writer.writer import ParquetWriter
-from sqa.util.asyncio import run_async_program
-from sqa.util.counters.progress import Progress
 from sqa.util.rpc.client import RpcClient
 from sqa.util.rpc.connection import RpcEndpoint
 from sqa.writer import Writer
 from sqa.writer.cli import CLI
 
+
 LOG = logging.getLogger(__name__)
 
 
-async def rpc_ingest(args, rpc: RpcClient, first_block: int, last_block: int | None = None) -> AsyncIterator[list[WriterBlock]]:
+async def rpc_ingest(rpc: RpcClient, first_block: int, last_block: int | None = None) -> AsyncIterator[list[WriterBlock]]:
     LOG.info(f'ingesting data via RPC')
 
     # TODO: ensure starknet finality for finality_confirmation arg
@@ -40,17 +36,31 @@ async def rpc_ingest(args, rpc: RpcClient, first_block: int, last_block: int | N
         ingest.close()
 
 
-def sync_rpc_ingest(args, rpc: RpcClient, first_block: int, last_block: int | None = None) -> Iterable[list[WriterBlock]]:
-    async def gather_blocks() -> list[list[WriterBlock]]:
-        strides = []
-        async for bb in rpc_ingest(args, rpc, first_block, last_block):
-            strides.append(bb)
-        return strides
+def _to_sync_gen(gen):
+    q = Queue(maxsize=5)
 
-    return asyncio.run(gather_blocks())
+    async def consume_gen():
+        try:
+            async for it in gen():
+                q.put(it)
+            q.put(None)
+        except Exception as ex:
+            q.put(ex)
+
+    # FIXME: learn how to do that properly
+    threading.Thread(target=lambda: asyncio.run(consume_gen())).start()
+
+    while True:
+        it = q.get()
+        if isinstance(it, Exception):
+            raise it
+        elif it is None:
+            return
+        else:
+            yield it
+
 
 class _CLI(CLI):
-
     @cache
     def _arguments(self):
         program = argparse.ArgumentParser(
@@ -131,9 +141,8 @@ class _CLI(CLI):
             rpc = None
 
         assert rpc, 'no endpoints were specified'
-        strides = sync_rpc_ingest(args, rpc, args.first_block, args.last_block)
 
-        return strides
+        return _to_sync_gen(lambda: rpc_ingest(rpc, args.first_block, args.last_block))
 
     def create_writer(self) -> Writer:
         return ParquetWriter()
