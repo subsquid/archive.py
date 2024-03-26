@@ -453,9 +453,7 @@ class WriteService:
 
             async for t in tasks:
                 if prev_write:
-                    print('try to get result')
                     prev_write.result()
-                    print('got result')
                 prev_write = executor.submit(*t)
 
             if prev_write:
