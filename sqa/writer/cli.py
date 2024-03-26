@@ -113,24 +113,19 @@ class CLI:
     def _ingest(self) -> Iterable[list[Block]]:
         args = self._arguments()
         writer = self._writer()
-        first_block = self._sink().get_next_block()
-        last_block = args.last_block
-
-        if last_block is not None and first_block > last_block:
-            return
 
         if args.src:
             blocks = ingest_from_service(
                 args.src,
                 writer.get_block_height,
-                first_block,
-                last_block
+                args.first_block,
+                args.last_block
             )
         else:
             blocks = ingest_from_stdin(
                 writer.get_block_height,
-                first_block,
-                last_block
+                args.first_block,
+                args.last_block
             )
 
         pack = []

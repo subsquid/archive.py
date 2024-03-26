@@ -4,6 +4,7 @@ __pycache__
 /.venv
 /.envrc
 /build
+.python-version
 
 # temp project directories
 /data
