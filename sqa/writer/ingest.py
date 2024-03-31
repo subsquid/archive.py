@@ -33,7 +33,7 @@ def ingest_from_service(
         try:
             with httpx.stream('POST', service_url, json=data_range, timeout=httpx.Timeout(None)) as res:
                 res.raise_for_status()
-                for line in _iter_lines(res.iter_text()):
+                for line in _iter_lines(res.iter_bytes()):
                     block: Block = json.loads(line)
                     height = get_block_height(block)
                     data_range['from'] = height + 1
@@ -49,17 +49,17 @@ def ingest_from_service(
 def _iter_lines(text_stream: Iterable[str]) -> Iterable[str]:
     buf = []
 
-    def prepend_buf(line: str) -> str:
+    def prepend_buf(line: bytes) -> str:
         if buf:
             buf.append(line)
-            line = ''.join(buf)
+            line = b''.join(buf)
             buf.clear()
             return line
         else:
             return line
 
     for chunk in text_stream:
-        lines = chunk.split('\n')
+        lines = chunk.split(b'\n')
         if len(lines) > 1:
             lines[0] = prepend_buf(lines[0])
             for i in range(len(lines) - 1):
@@ -67,7 +67,7 @@ def _iter_lines(text_stream: Iterable[str]) -> Iterable[str]:
 
         buf.append(lines[-1])
 
-    last_line = prepend_buf('')
+    last_line = prepend_buf(b'')
     if last_line:
         yield last_line
 
