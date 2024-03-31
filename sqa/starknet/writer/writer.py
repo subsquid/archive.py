@@ -1,13 +1,10 @@
 import logging
-from typing import TypedDict, NotRequired
 
 import pyarrow
 
-from sqa.starknet.writer.model import Block, WriterBlock
+from sqa.starknet.writer.model import WriterBlock
 from sqa.starknet.writer.tables import BlockTableBuilder, EventTableBuilder, TxTableBuilder
-from sqa.eth.ingest.util import short_hash
 from sqa.fs import Fs
-from sqa.layout import ChunkWriter
 from sqa.writer.parquet import BaseParquetWriter, add_size_column, add_index_column
 
 

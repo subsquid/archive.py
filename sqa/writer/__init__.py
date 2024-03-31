@@ -166,7 +166,7 @@ class Sink:
                 self._report()
                 last_report = current_time
 
-        if self._writer.buffered_bytes() > 0 and last_block == write_range[1]:
+        if last_block == write_range[1]:
             flush()
 
         self._writer.end()
