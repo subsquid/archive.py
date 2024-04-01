@@ -20,7 +20,7 @@ LOG = logging.getLogger(__name__)
 
 
 async def rpc_ingest(rpc: RpcClient, first_block: int, last_block: int | None = None) -> AsyncIterator[list[WriterBlock]]:
-    LOG.info(f'ingesting data via RPC')
+    LOG.info('Ingesting data via RPC')
 
     # TODO: ensure starknet finality for finality_confirmation arg
     ingest = IngestStarknet(
@@ -142,7 +142,7 @@ class _CLI(CLI):
 
         assert rpc, 'no endpoints were specified'
 
-        return _to_sync_gen(lambda: rpc_ingest(rpc, args.first_block, args.last_block))
+        return _to_sync_gen(lambda: rpc_ingest(rpc, self._sink().get_next_block(), args.last_block))
 
     def create_writer(self) -> Writer:
         return ParquetWriter()
