@@ -142,7 +142,7 @@ class CLI:
         if pack:
             yield pack
 
-    def main(self) -> None:
+    def init_support_services(self):
         self._start_prometheus_metrics()
 
         if os.getenv('SENTRY_DSN'):
@@ -151,5 +151,7 @@ class CLI:
                 traces_sample_rate=1.0
             )
 
+    def main(self) -> None:
+        self.init_support_services()
         sink = self._sink()
         sink.write(self._ingest())

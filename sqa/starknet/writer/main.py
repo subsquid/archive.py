@@ -4,7 +4,7 @@ import logging
 import threading
 from functools import cache
 from queue import Queue
-from typing import AsyncIterator, Iterable
+from typing import AsyncIterator, Iterable, Generator
 
 from sqa.eth.ingest.main import EndpointAction
 from sqa.starknet.writer.ingest import IngestStarknet
@@ -36,12 +36,12 @@ async def rpc_ingest(rpc: RpcClient, first_block: int, last_block: int | None = 
         ingest.close()
 
 
-def _to_sync_gen(gen):
+def _to_sync_gen(gen: AsyncIterator) -> Generator:
     q = Queue(maxsize=5)
 
     async def consume_gen():
         try:
-            async for it in gen():
+            async for it in gen:
                 q.put(it)
             q.put(None)
         except Exception as ex:
@@ -81,6 +81,13 @@ class _CLI(CLI):
             required=True,
             default=[],
             help='rpc api url of an ethereum node to fetch data from'
+        )
+
+        program.add_argument(
+            '-s', '--src',
+            type=str,
+            metavar='URL',
+            help='URL of the data ingestion service'
         )
 
         program.add_argument(
@@ -127,10 +134,26 @@ class _CLI(CLI):
             help='port to use for built-in prometheus metrics server'
         )
 
+        program.add_argument(
+            '--raw',
+            action='store_true',
+            help='use raw .jsonl.gz format'
+        )
+
+        program.add_argument(
+            '--raw-src',
+            action='store_true',
+            help='archive with raw, pre-fetched .jsonl.gz data'
+        )
+
         return program.parse_args()
 
     def _ingest(self) -> Iterable[list[WriterBlock]]:  # type: ignore  # NOTE: incopatible block type with dict type
         args = self._arguments()
+
+        if args.raw_src: # use raw ingester from sqa.writer
+            yield from super()._ingest()  # type: ignore  # NOTE: block is block
+
         endpoints = [RpcEndpoint(**e) for e in args.endpoints]
         if endpoints:
             rpc = RpcClient(
@@ -142,10 +165,19 @@ class _CLI(CLI):
 
         assert rpc, 'no endpoints were specified'
 
-        return _to_sync_gen(lambda: rpc_ingest(rpc, self._sink().get_next_block(), args.last_block))
+        yield from _to_sync_gen(rpc_ingest(rpc, self._sink().get_next_block(), args.last_block))
 
     def create_writer(self) -> Writer:
         return ParquetWriter()
+
+    def main(self):
+        args = self._arguments()
+        if args.raw:
+            self.init_support_services()
+            sink = self._sink()
+            sink._raw_writer(self._ingest())
+        else:
+            super().main()
 
 
 def main(module_name: str) -> None:
