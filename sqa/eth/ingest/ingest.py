@@ -6,7 +6,8 @@ from typing import Optional, AsyncIterator, Literal, Iterable, Coroutine
 from sqa.eth.ingest.model import Block, Log, Receipt, DebugFrame, DebugFrameResult, \
     DebugStateDiffResult, TraceTransactionReplay, Transaction
 from sqa.util.rpc import RpcClient
-from sqa.eth.ingest.util import qty2int, get_tx_status_from_traces, logs_bloom, transactions_root
+from sqa.eth.ingest.util import qty2int, get_tx_status_from_traces, logs_bloom, \
+    transactions_root, get_polygon_bor_tx_hash
 from sqa.eth.ingest.moonbase import fix_and_exclude_invalid_moonbase_blocks, is_moonbase_traceless
 
 
@@ -212,8 +213,9 @@ class Ingest:
 
         if self._validate_tx_root:
             for block in blocks:
-                assert block['transactionsRoot'] == transactions_root(block['transactions'])
-
+                state_sync_tx_hash = get_polygon_bor_tx_hash(qty2int(block['number']), block['hash'])
+                txs = filter(lambda x: x['hash'] != state_sync_tx_hash, block['transactions'])
+                assert block['transactionsRoot'] == transactions_root(txs)
         return blocks
 
     async def _fetch_logs(self, blocks: list[Block]) -> None:

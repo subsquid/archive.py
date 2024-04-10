@@ -247,3 +247,7 @@ def transactions_root(transactions: list[Transaction]) -> str:
         else:
             raise Exception(f'Unknown tx type {tx["type"]}')
     return encode_hex(trie.root_hash)
+
+def get_polygon_bor_tx_hash(block_num: int, block_hash: str):
+    tx_receipt_key = b'matic-bor-receipt-' + block_num.to_bytes(8) + decode_hex(block_hash)
+    return encode_hex(keccak256(tx_receipt_key))
