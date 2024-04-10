@@ -38,6 +38,11 @@ RUN /app/env/bin/python -m sqa.substrate.writer --help > /dev/null # win a littl
 ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.substrate.writer"]
 
 
+FROM writer-base AS starknet-writer
+RUN /app/env/bin/python -m sqa.starknet.writer --help > /dev/null # win a little bit of startup time
+ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.starknet.writer"]
+
+
 FROM builder AS worker-builder
 RUN pdm sync -G http-worker --no-editable --prod
 
