@@ -6,7 +6,8 @@ from typing import Optional, AsyncIterator, Literal, Iterable, Coroutine
 from sqa.eth.ingest.model import Block, Log, Receipt, DebugFrame, DebugFrameResult, \
     DebugStateDiffResult, TraceTransactionReplay, Transaction
 from sqa.util.rpc import RpcClient
-from sqa.eth.ingest.util import qty2int, get_tx_status_from_traces, logs_bloom, transactions_root
+from sqa.eth.ingest.util import qty2int, get_tx_status_from_traces, logs_bloom, \
+    transactions_root, get_polygon_bor_tx_hash
 from sqa.eth.ingest.moonbase import fix_and_exclude_invalid_moonbase_blocks, is_moonbase_traceless
 
 
@@ -29,6 +30,7 @@ class Ingest:
         validate_tx_root: bool = False,
         validate_tx_type: bool = False,
         validate_logs_bloom: bool = False,
+        polygon_based: bool = False,
     ):
         self._rpc = rpc
         self._finality_confirmation = finality_confirmation
@@ -40,6 +42,7 @@ class Ingest:
         self._validate_tx_root = validate_tx_root
         self._validate_tx_type = validate_tx_type
         self._validate_logs_bloom = validate_logs_bloom
+        self._polygon_based = polygon_based
         self._height = from_block - 1
         self._genesis = genesis_block
         self._end = to_block
@@ -212,8 +215,12 @@ class Ingest:
 
         if self._validate_tx_root:
             for block in blocks:
-                assert block['transactionsRoot'] == transactions_root(block['transactions'])
-
+                if self._polygon_based:
+                    state_sync_tx_hash = get_polygon_bor_tx_hash(qty2int(block['number']), block['hash'])
+                    txs = [tx for tx in block['transactions'] if tx['hash'] != state_sync_tx_hash]
+                    assert block['transactionsRoot'] == transactions_root(txs)
+                else:
+                    assert block['transactionsRoot'] == transactions_root(block['transactions'])
         return blocks
 
     async def _fetch_logs(self, blocks: list[Block]) -> None:
@@ -244,7 +251,12 @@ class Ingest:
             block_logs = logs_by_hash.get(block['hash'], [])
 
             if self._validate_logs_bloom:
-                assert block['logsBloom'] == logs_bloom(block_logs)
+                if self._polygon_based:
+                    state_sync_tx_hash = get_polygon_bor_tx_hash(qty2int(block['number']), block['hash'])
+                    logs = [log for log in block_logs if log['transactionHash'] != state_sync_tx_hash]
+                    assert block['logsBloom'] == logs_bloom(logs)
+                else:
+                    assert block['logsBloom'] == logs_bloom(block_logs)
 
             block['logs_'] = block_logs
 
@@ -313,7 +325,12 @@ class Ingest:
             block_logs = logs_by_hash.get(block['hash'], [])
 
             if self._validate_logs_bloom:
-                assert block['logsBloom'] == logs_bloom(block_logs)
+                if self._polygon_based:
+                    state_sync_tx_hash = get_polygon_bor_tx_hash(qty2int(block['number']), block['hash'])
+                    logs = [log for log in block_logs if log['transactionHash'] != state_sync_tx_hash]
+                    assert block['logsBloom'] == logs_bloom(logs)
+                else:
+                    assert block['logsBloom'] == logs_bloom(block_logs)
 
             for tx in block['transactions']:
                 if self._is_arbitrum_one and tx['hash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800' and block['number'] == hex(4527955):
