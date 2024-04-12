@@ -376,6 +376,11 @@ class Ingest:
             _fix_moonriver_2077600(block)
 
         transactions = block['transactions']
+        if self._polygon_based:
+            transactions = [
+                tx for tx in transactions
+                if tx['hash'] != get_polygon_bor_tx_hash(block_number, block['hash'])
+            ]
         if self._is_polygon or self._is_polygon_testnet:
             transactions = [tx for tx in transactions if not _is_polygon_precompiled(tx)]
         if self._is_moonbase:
@@ -406,6 +411,11 @@ class Ingest:
         ], priority=block_number, validate_result=_validate_debug_statediffs)
 
         transactions = block['transactions']
+        if self._polygon_based:
+            transactions = [
+                tx for tx in transactions
+                if tx['hash'] != get_polygon_bor_tx_hash(block_number, block['hash'])
+            ]
         assert len(transactions) == len(diffs)
         for tx, diff in zip(transactions, diffs):
             assert 'result' in diff
