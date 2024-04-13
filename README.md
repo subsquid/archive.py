@@ -1,6 +1,6 @@
 # archive.py
 
-ArrowSquid archive tools for ethereum compatible chains.
+ArrowSquid archive tools.
 
 ## Disclaimer
 
