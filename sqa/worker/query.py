@@ -11,6 +11,7 @@ import psutil
 import sqa.eth.query
 import sqa.substrate.query
 import sqa.solana.query
+import sqa.starknet.query
 from sqa.fs import LocalFs
 from sqa.layout import get_chunks, get_filelist, Partition
 from sqa.query.model import Model
@@ -34,6 +35,8 @@ def validate_query(q) -> ArchiveQuery:
         q = _validate_shape(q, sqa.eth.query.QUERY_SCHEMA)
     elif query_type == 'substrate':
         q = _validate_shape(q, sqa.substrate.query.QUERY_SCHEMA)
+    elif query_type == 'starknet':
+        q = _validate_shape(q, sqa.starknet.query.QUERY_SCHEMA)
     elif query_type == 'solana':
         q = _validate_shape(q, sqa.solana.query.QUERY_SCHEMA)
     else:
@@ -71,6 +74,8 @@ def _get_model(q: dict) -> Model:
         return sqa.eth.query.MODEL
     elif query_type == 'substrate':
         return sqa.substrate.query.MODEL
+    elif query_type == 'starknet':
+        return sqa.starknet.query.MODEL
     elif query_type == 'solana':
         return sqa.solana.query.MODEL
     else:

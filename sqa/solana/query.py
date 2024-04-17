@@ -30,6 +30,7 @@ class TransactionFieldSelection(TypedDict, total=False):
     computeUnitsConsumed: bool
     loadedAddresses: bool
     feePayer: bool
+    hasDroppedLogMessages: bool
 
 
 class InstructionFieldSelection(TypedDict, total=False):
@@ -43,6 +44,7 @@ class InstructionFieldSelection(TypedDict, total=False):
     error: bool
     computeUnitsConsumed: bool
     isCommitted: bool
+    hasDroppedLogMessages: bool
 
 
 class LogFieldSelection(TypedDict, total=False):
@@ -58,12 +60,16 @@ class BalanceFieldSelection(TypedDict, total=False):
 
 
 class TokenBalanceFieldSelection(TypedDict, total=False):
-    mint: bool
-    owner: bool
-    programId: bool
-    decimals: bool
-    pre: bool
-    post: bool
+    preMint: bool
+    postMint: bool
+    preDecimals: bool
+    postDecimals: bool
+    preProgramId: bool
+    postProgramId: bool
+    preOwner: bool
+    postOwner: bool
+    preAmount: bool
+    postAmount: bool
 
 
 class RewardFieldSelection(TypedDict, total=False):
@@ -121,6 +127,12 @@ class InstructionRequest(TypedDict, total=False):
     a7: list[Base58Bytes]
     a8: list[Base58Bytes]
     a9: list[Base58Bytes]
+    a10: list[Base58Bytes]
+    a11: list[Base58Bytes]
+    a12: list[Base58Bytes]
+    a13: list[Base58Bytes]
+    a14: list[Base58Bytes]
+    a15: list[Base58Bytes]
     isCommitted: bool
     transaction: bool
     transactionTokenBalances: bool
@@ -144,6 +156,12 @@ class _InstructionRequestSchema(mm.Schema):
     a7 = mm.fields.List(mm.fields.Str())
     a8 = mm.fields.List(mm.fields.Str())
     a9 = mm.fields.List(mm.fields.Str())
+    a10 = mm.fields.List(mm.fields.Str())
+    a11 = mm.fields.List(mm.fields.Str())
+    a12 = mm.fields.List(mm.fields.Str())
+    a13 = mm.fields.List(mm.fields.Str())
+    a14 = mm.fields.List(mm.fields.Str())
+    a15 = mm.fields.List(mm.fields.Str())
     isCommitted = mm.fields.Boolean()
     transaction = mm.fields.Boolean()
     transactionTokenBalances = mm.fields.Boolean()
@@ -179,18 +197,24 @@ class _BalanceRequestSchema(mm.Schema):
 
 class TokenBalanceRequest(TypedDict, total=False):
     account: list[Base58Bytes]
-    mint: list[Base58Bytes]
-    owner: list[Base58Bytes]
-    programId: list[Base58Bytes]
+    preMint: list[Base58Bytes]
+    postMint: list[Base58Bytes]
+    preProgramId: list[Base58Bytes]
+    postProgramId: list[Base58Bytes]
+    preOwner: list[Base58Bytes]
+    postOwner: list[Base58Bytes]
     transaction: bool
     transactionInstructions: bool
 
 
 class _TokenBalanceRequestSchema(mm.Schema):
     account = mm.fields.List(mm.fields.Str())
-    mint = mm.fields.List(mm.fields.Str())
-    owner = mm.fields.List(mm.fields.Str())
-    programId = mm.fields.List(mm.fields.Str())
+    preMint = mm.fields.List(mm.fields.Str())
+    postMint = mm.fields.List(mm.fields.Str())
+    preProgramId = mm.fields.List(mm.fields.Str())
+    postProgramId = mm.fields.List(mm.fields.Str())
+    preOwner = mm.fields.List(mm.fields.Str())
+    postOwner = mm.fields.List(mm.fields.Str())
     transaction = mm.fields.Boolean()
     transactionInstructions = mm.fields.Boolean()
 
@@ -295,6 +319,12 @@ _instructions_table = Table(
         'a7': 0,
         'a8': 0,
         'a9': 0,
+        'a10': 0,
+        'a11': 0,
+        'a12': 0,
+        'a13': 0,
+        'a14': 0,
+        'a15': 0,
         'rest_accounts': 0,
     }
 )
@@ -323,6 +353,12 @@ class _InstructionScan(Scan):
         yield field_in('a7', req.get('a7'))
         yield field_in('a8', req.get('a8'))
         yield field_in('a9', req.get('a9'))
+        yield field_in('a10', req.get('a10'))
+        yield field_in('a11', req.get('a11'))
+        yield field_in('a12', req.get('a12'))
+        yield field_in('a13', req.get('a13'))
+        yield field_in('a14', req.get('a14'))
+        yield field_in('a15', req.get('a15'))
         yield field_eq('is_committed', req.get('isCommitted'))
 
 
@@ -350,6 +386,12 @@ class _InstructionItem(Item):
                 columns.append('a7')
                 columns.append('a8')
                 columns.append('a9')
+                columns.append('a10')
+                columns.append('a11')
+                columns.append('a12')
+                columns.append('a13')
+                columns.append('a14')
+                columns.append('a15')
                 columns.append('rest_accounts')
             else:
                 columns.append(to_snake_case(name))
@@ -358,7 +400,9 @@ class _InstructionItem(Item):
     def project(self, fields: FieldSelection) -> str:
         return json_project(self.get_selected_fields(fields), rewrite={
             'accounts': f'list_concat('
-                        f'[a for a in list_value(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9) if a is not null], '
+                        f'[a for a in list_value('
+                        f'a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15'
+                        f') if a is not null], '
                         f'rest_accounts)'
         })
 
@@ -446,9 +490,12 @@ class _TokenBalanceScan(Scan):
 
     def where(self, req: TokenBalanceRequest) -> Iterable[pyarrow.dataset.Expression | None]:
         yield field_in('account', req.get('account'))
-        yield field_in('mint', req.get('mint'))
-        yield field_in('owner', req.get('owner'))
-        yield field_in('programId', req.get('programId'))
+        yield field_in('preMint', req.get('preMint'))
+        yield field_in('postMint', req.get('postMint'))
+        yield field_in('preOwner', req.get('preOwner'))
+        yield field_in('postOwner', req.get('postOwner'))
+        yield field_in('preProgramId', req.get('preProgramId'))
+        yield field_in('postProgramId', req.get('postProgramId'))
 
 
 class _TokenBalanceItem(Item):
@@ -463,8 +510,8 @@ class _TokenBalanceItem(Item):
 
     def project(self, fields: FieldSelection) -> str:
         return json_project(self.get_selected_fields(fields), rewrite={
-            'pre': 'pre::text',
-            'post': 'post::text'
+            'preAmount': 'pre_amount::text',
+            'postAmount': 'post_amount::text'
         })
 
 

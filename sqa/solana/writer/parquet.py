@@ -65,6 +65,7 @@ class TransactionTable(TableBuilder):
             ('readonly', pyarrow.list_(base58_bytes())),
             ('writable', pyarrow.list_(base58_bytes()))
         ]))
+        self.has_dropped_log_messages = Column(pyarrow.bool_())
         # index
         self.fee_payer = Column(base58_bytes())
         # sizes
@@ -110,6 +111,8 @@ class TransactionTable(TableBuilder):
             _list_size(loaded_addresses['writable']) + _list_size(loaded_addresses['readonly'])
         )
 
+        self.has_dropped_log_messages.append(tx['hasDroppedLogMessages'])
+
         self.fee_payer.append(tx['accountKeys'][0])
 
 
@@ -129,6 +132,12 @@ class InstructionTable(TableBuilder):
         self.a7 = Column(base58_bytes())
         self.a8 = Column(base58_bytes())
         self.a9 = Column(base58_bytes())
+        self.a10 = Column(base58_bytes())
+        self.a11 = Column(base58_bytes())
+        self.a12 = Column(base58_bytes())
+        self.a13 = Column(base58_bytes())
+        self.a14 = Column(base58_bytes())
+        self.a15 = Column(base58_bytes())
         self.rest_accounts = Column(pyarrow.list_(base58_bytes()))
         self.data = Column(base58_bytes())
 
@@ -136,6 +145,7 @@ class InstructionTable(TableBuilder):
         self.compute_units_consumed = Column(pyarrow.uint64())
         self.error = Column(pyarrow.string())
         self.is_committed = Column(pyarrow.bool_())
+        self.has_dropped_log_messages = Column(pyarrow.bool_())
 
         # discriminators
         self.d1 = Column(pyarrow.string())
@@ -153,9 +163,10 @@ class InstructionTable(TableBuilder):
         self._set_accounts(i['accounts'])
         self.data.append(i['data'])
 
-        self.is_committed.append(i['isCommitted'])
         self.compute_units_consumed.append(_to_int(i.get('computeUnitsConsumed')))
         self.error.append(i.get('error'))
+        self.is_committed.append(i['isCommitted'])
+        self.has_dropped_log_messages.append(i['hasDroppedLogMessages'])
 
         data = base58.b58decode(i['data'])
         self.d1.append(f'0x{data[:1].hex()}')
@@ -164,11 +175,11 @@ class InstructionTable(TableBuilder):
         self.d8.append(f'0x{data[:8].hex()}')
 
     def _set_accounts(self, accounts: list[str]) -> None:
-        for i in range(10):
+        for i in range(16):
             col = getattr(self, f'a{i}')
             col.append(accounts[i] if i < len(accounts) else None)
-        if len(accounts) > 10:
-            self.rest_accounts.append(accounts[10:])
+        if len(accounts) > 16:
+            self.rest_accounts.append(accounts[16:])
         else:
             self.rest_accounts.append(None)
         self.accounts_size.append(_list_size(accounts))
@@ -215,23 +226,31 @@ class TokenBalanceTable(TableBuilder):
         self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
         self.account = Column(base58_bytes())
-        self.mint = Column(base58_bytes())
-        self.owner = Column(base58_bytes())
-        self.program_id = Column(base58_bytes())
-        self.decimals = Column(pyarrow.uint16())
-        self.pre = Column(pyarrow.uint64())
-        self.post = Column(pyarrow.uint64())
+        self.pre_mint = Column(base58_bytes())
+        self.post_mint = Column(base58_bytes())
+        self.pre_decimals = Column(pyarrow.uint16())
+        self.post_decimals = Column(pyarrow.uint16())
+        self.pre_program_id = Column(base58_bytes())
+        self.post_program_id = Column(base58_bytes())
+        self.pre_owner = Column(base58_bytes())
+        self.post_owner = Column(base58_bytes())
+        self.pre_amount = Column(pyarrow.uint64())
+        self.post_amount = Column(pyarrow.uint64())
 
     def append(self, block_number: int, b: TokenBalance) -> None:
         self.block_number.append(block_number)
         self.transaction_index.append(b['transactionIndex'])
         self.account.append(b['account'])
-        self.mint.append(b['mint'])
-        self.owner.append(b.get('owner'))
-        self.program_id.append(b.get('programId'))
-        self.decimals.append(b['decimals'])
-        self.pre.append(int(b['pre']))
-        self.post.append(int(b['post']))
+        self.pre_program_id.append(b.get('preProgramId'))
+        self.post_program_id.append(b.get('postProgramId'))
+        self.pre_mint.append(b.get('preMint'))
+        self.post_mint.append(b.get('postMint'))
+        self.pre_decimals.append(b.get('preDecimals'))
+        self.post_decimals.append(b.get('postDecimals'))
+        self.pre_owner.append(b.get('preOwner'))
+        self.post_owner.append(b.get('postOwner'))
+        self.pre_amount.append(_to_int(b.get('preAmount')))
+        self.post_amount.append(_to_int(b.get('postAmount')))
 
 
 class RewardTable(TableBuilder):
@@ -330,6 +349,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
             'fee_payer',
             'block_number',
             'transaction_index',
+            'has_dropped_log_messages'
         ],
         row_group_size=5_000,
         **kwargs
@@ -351,7 +371,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         instructions,
         use_dictionary=[
             'program_id',
-            'a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9',
+            'a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9', 'a10', 'a11', 'a12', 'a13', 'a14', 'a15',
             'rest_accounts.list.element',
             'd1'
         ],
@@ -360,8 +380,9 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
             'block_number',
             'transaction_index',
             'program_id',
-            'a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9',
-            'd1', 'd2', 'd4', 'd8'
+            'a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9', 'a10', 'a11', 'a12', 'a13', 'a14', 'a15',
+            'd1', 'd2', 'd4', 'd8',
+            'has_dropped_log_messages'
         ],
         row_group_size=20_000,
         **kwargs
@@ -412,9 +433,8 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
 
     token_balances = tables['token_balances']
     token_balances = token_balances.sort_by([
-        ('program_id', 'ascending'),
-        ('mint', 'ascending'),
-        ('owner', 'ascending'),
+        ('post_program_id', 'ascending'),
+        ('post_mint', 'ascending'),
         ('account', 'ascending'),
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
@@ -426,16 +446,22 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         token_balances,
         use_dictionary=[
             'account',
-            'mint',
-            'owner',
-            'program_id'
+            'pre_mint',
+            'post_mint',
+            'pre_owner',
+            'post_owner',
+            'pre_program_id',
+            'post_program_id'
         ],
         write_statistics=[
             '_idx',
             'account',
-            'mint',
-            'owner',
-            'program_id',
+            'pre_mint',
+            'post_mint',
+            'pre_owner',
+            'post_owner',
+            'pre_program_id',
+            'post_program_id',
             'block_number',
             'transaction_index'
         ],

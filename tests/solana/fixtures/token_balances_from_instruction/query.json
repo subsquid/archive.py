@@ -14,10 +14,10 @@
       "data": true
     },
     "tokenBalance": {
-      "owner": true,
-      "mint": true,
-      "pre": true,
-      "post": true
+      "postOwner": true,
+      "postMint": true,
+      "preAmount": true,
+      "postAmount": true
     }
   },
   "instructions": [

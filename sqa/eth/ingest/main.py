@@ -195,6 +195,12 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
+        '--polygon-based',
+        action='store_true',
+        help='enable features related to polygon based networks',
+    )
+
+    program.add_argument(
         '--write-chunk-size',
         metavar='MB',
         type=int,
@@ -302,6 +308,7 @@ async def rpc_ingest(args, rpc: RpcClient, first_block: int, last_block: int | N
         validate_tx_root=args.validate_tx_root,
         validate_tx_type=args.validate_tx_type,
         validate_logs_bloom=args.validate_logs_bloom,
+        polygon_based=args.polygon_based,
     )
 
     try:
@@ -447,6 +454,9 @@ class WriteService:
         else:
             tasks = self._parquet_writer(batches)
 
+        await self.submit_write_tasks(tasks)
+
+    async def submit_write_tasks(self, tasks: AsyncIterator[WriteTask]):
         with concurrent.futures.ThreadPoolExecutor(
                 max_workers=1,
                 thread_name_prefix='block_writer'

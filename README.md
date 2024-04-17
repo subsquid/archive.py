@@ -1,6 +1,6 @@
 # archive.py
 
-ArrowSquid archive tools for ethereum compatible chains.
+ArrowSquid archive tools.
 
 ## Disclaimer
 
@@ -24,3 +24,7 @@ pdm sync -G:all
 ```
 
 Use `.env/bin/python3` to run executables and set it up as a python interpreter for your IDE.
+
+## License
+
+This project is licensed under the AGPL v3.0 license - see the [LICENSE](LICENSE.txt) file for details. 
