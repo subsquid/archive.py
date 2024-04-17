@@ -6,12 +6,14 @@
       "slot": true
     },
     "tokenBalance": {
-      "mint": true,
-      "decimals": true,
+      "preMint": true,
+      "postMint": true,
+      "preDecimals": true,
+      "postDecimals": true,
       "preOwner": true,
       "postOwner": true,
-      "pre": true,
-      "post": true
+      "preAmount": true,
+      "postAmount": true
     },
     "transaction": {
       "signatures": true,

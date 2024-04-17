@@ -226,25 +226,31 @@ class TokenBalanceTable(TableBuilder):
         self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
         self.account = Column(base58_bytes())
-        self.mint = Column(base58_bytes())
-        self.decimals = Column(pyarrow.uint16())
-        self.program_id = Column(base58_bytes())
+        self.pre_mint = Column(base58_bytes())
+        self.post_mint = Column(base58_bytes())
+        self.pre_decimals = Column(pyarrow.uint16())
+        self.post_decimals = Column(pyarrow.uint16())
+        self.pre_program_id = Column(base58_bytes())
+        self.post_program_id = Column(base58_bytes())
         self.pre_owner = Column(base58_bytes())
         self.post_owner = Column(base58_bytes())
-        self.pre = Column(pyarrow.uint64())
-        self.post = Column(pyarrow.uint64())
+        self.pre_amount = Column(pyarrow.uint64())
+        self.post_amount = Column(pyarrow.uint64())
 
     def append(self, block_number: int, b: TokenBalance) -> None:
         self.block_number.append(block_number)
         self.transaction_index.append(b['transactionIndex'])
         self.account.append(b['account'])
-        self.mint.append(b['mint'])
-        self.decimals.append(b['decimals'])
-        self.program_id.append(b.get('programId'))
+        self.pre_program_id.append(b.get('preProgramId'))
+        self.post_program_id.append(b.get('postProgramId'))
+        self.pre_mint.append(b.get('preMint'))
+        self.post_mint.append(b.get('postMint'))
+        self.pre_decimals.append(b.get('preDecimals'))
+        self.post_decimals.append(b.get('postDecimals'))
         self.pre_owner.append(b.get('preOwner'))
         self.post_owner.append(b.get('postOwner'))
-        self.pre.append(_to_int(b.get('pre')))
-        self.post.append(_to_int(b.get('post')))
+        self.pre_amount.append(_to_int(b.get('preAmount')))
+        self.post_amount.append(_to_int(b.get('postAmount')))
 
 
 class RewardTable(TableBuilder):
@@ -427,8 +433,8 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
 
     token_balances = tables['token_balances']
     token_balances = token_balances.sort_by([
-        ('program_id', 'ascending'),
-        ('mint', 'ascending'),
+        ('post_program_id', 'ascending'),
+        ('post_mint', 'ascending'),
         ('account', 'ascending'),
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
@@ -440,18 +446,22 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         token_balances,
         use_dictionary=[
             'account',
-            'mint',
+            'pre_mint',
+            'post_mint',
             'pre_owner',
             'post_owner',
-            'program_id'
+            'pre_program_id',
+            'post_program_id'
         ],
         write_statistics=[
             '_idx',
             'account',
-            'mint',
+            'pre_mint',
+            'post_mint',
             'pre_owner',
             'post_owner',
-            'program_id',
+            'pre_program_id',
+            'post_program_id',
             'block_number',
             'transaction_index'
         ],

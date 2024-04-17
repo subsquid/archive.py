@@ -74,13 +74,16 @@ class Balance(TypedDict):
 class TokenBalance(TypedDict):
     transactionIndex: int
     account: Base58Bytes
-    mint: Base58Bytes
-    decimals: int
-    programId: NotRequired[Base58Bytes]
+    preMint: NotRequired[Base58Bytes]
+    postMint: NotRequired[Base58Bytes]
+    preDecimals: NotRequired[int]
+    postDecimals: NotRequired[int]
+    preProgramId: NotRequired[Base58Bytes]
+    postProgramId: NotRequired[Base58Bytes]
     preOwner: NotRequired[Base58Bytes]
     postOwner: NotRequired[Base58Bytes]
-    pre: NotRequired[JsBigInt]
-    post: NotRequired[JsBigInt]
+    preAmount: NotRequired[JsBigInt]
+    postAmount: NotRequired[JsBigInt]
 
 
 class Reward(TypedDict):

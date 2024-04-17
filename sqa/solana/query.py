@@ -60,13 +60,16 @@ class BalanceFieldSelection(TypedDict, total=False):
 
 
 class TokenBalanceFieldSelection(TypedDict, total=False):
-    mint: bool
-    decimals: bool
-    programId: bool
+    preMint: bool
+    postMint: bool
+    preDecimals: bool
+    postDecimals: bool
+    preProgramId: bool
+    postProgramId: bool
     preOwner: bool
     postOwner: bool
-    pre: bool
-    post: bool
+    preAmount: bool
+    postAmount: bool
 
 
 class RewardFieldSelection(TypedDict, total=False):
@@ -194,8 +197,10 @@ class _BalanceRequestSchema(mm.Schema):
 
 class TokenBalanceRequest(TypedDict, total=False):
     account: list[Base58Bytes]
-    mint: list[Base58Bytes]
-    programId: list[Base58Bytes]
+    preMint: list[Base58Bytes]
+    postMint: list[Base58Bytes]
+    preProgramId: list[Base58Bytes]
+    postProgramId: list[Base58Bytes]
     preOwner: list[Base58Bytes]
     postOwner: list[Base58Bytes]
     transaction: bool
@@ -204,8 +209,10 @@ class TokenBalanceRequest(TypedDict, total=False):
 
 class _TokenBalanceRequestSchema(mm.Schema):
     account = mm.fields.List(mm.fields.Str())
-    mint = mm.fields.List(mm.fields.Str())
-    programId = mm.fields.List(mm.fields.Str())
+    preMint = mm.fields.List(mm.fields.Str())
+    postMint = mm.fields.List(mm.fields.Str())
+    preProgramId = mm.fields.List(mm.fields.Str())
+    postProgramId = mm.fields.List(mm.fields.Str())
     preOwner = mm.fields.List(mm.fields.Str())
     postOwner = mm.fields.List(mm.fields.Str())
     transaction = mm.fields.Boolean()
@@ -483,10 +490,12 @@ class _TokenBalanceScan(Scan):
 
     def where(self, req: TokenBalanceRequest) -> Iterable[pyarrow.dataset.Expression | None]:
         yield field_in('account', req.get('account'))
-        yield field_in('mint', req.get('mint'))
+        yield field_in('preMint', req.get('preMint'))
+        yield field_in('postMint', req.get('postMint'))
         yield field_in('preOwner', req.get('preOwner'))
         yield field_in('postOwner', req.get('postOwner'))
-        yield field_in('programId', req.get('programId'))
+        yield field_in('preProgramId', req.get('preProgramId'))
+        yield field_in('postProgramId', req.get('postProgramId'))
 
 
 class _TokenBalanceItem(Item):
@@ -501,8 +510,8 @@ class _TokenBalanceItem(Item):
 
     def project(self, fields: FieldSelection) -> str:
         return json_project(self.get_selected_fields(fields), rewrite={
-            'pre': 'pre::text',
-            'post': 'post::text'
+            'preAmount': 'pre_amount::text',
+            'postAmount': 'post_amount::text'
         })
 
 

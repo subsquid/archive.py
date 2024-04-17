@@ -15,9 +15,9 @@
     },
     "tokenBalance": {
       "postOwner": true,
-      "mint": true,
-      "pre": true,
-      "post": true
+      "postMint": true,
+      "preAmount": true,
+      "postAmount": true
     }
   },
   "instructions": [
