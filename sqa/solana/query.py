@@ -258,7 +258,7 @@ class _BlockItem(Item):
 
     def project(self, fields: FieldSelection) -> str:
         return json_project(self.get_selected_fields(fields), rewrite={
-            'timestamp': 'epoch_ms(timestamp)'
+            'timestamp': 'epoch(timestamp)::int8'
         })
 
 
