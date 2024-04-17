@@ -6,7 +6,7 @@ JsBigInt = str
 
 
 class BlockHeader(TypedDict):
-    id: Bytes
+    hash: Bytes
     height: int
     daHeight: JsBigInt
     transactionsRoot: Bytes
@@ -16,7 +16,6 @@ class BlockHeader(TypedDict):
     prevRoot: Bytes
     time: JsBigInt
     applicationHash: Bytes
-
 
 
 class Policies(TypedDict):
@@ -89,6 +88,7 @@ class Transaction(TypedDict):
     isScript: bool
     isCreate: bool
     isMint: bool
+    type: Literal['Script', 'Create', 'Mint']
     outputContract: NotRequired[OutputContract]
     witnesses: NotRequired[list[Bytes]]
     receiptsRoot: NotRequired[Bytes]
@@ -116,6 +116,7 @@ class InputCoin(TypedDict):
     predicateGasUsed: JsBigInt
     predicate: Bytes
     predicateData: Bytes
+    _predicateRoot: NotRequired[Bytes]
 
 
 class InputContract(TypedDict):
@@ -142,6 +143,7 @@ class InputMessage(TypedDict):
     data: Bytes
     predicate: Bytes
     predicateData: Bytes
+    _predicateRoot: NotRequired[Bytes]
 
 
 TransactionInput = InputCoin | InputContract | InputMessage

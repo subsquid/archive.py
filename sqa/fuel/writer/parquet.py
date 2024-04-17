@@ -8,14 +8,26 @@ from .model import BlockHeader, Transaction, TransactionInput, TransactionOutput
 class BlockTable(TableBuilder):
     def __init__(self):
         self.number = Column(pyarrow.int32())
-        # self.hash = Column(base58_bytes())
-        # self.parent_hash = Column(base58_bytes())
+        self.hash = Column(pyarrow.string())
+        self.da_height = Column(pyarrow.int32())
+        self.transactions_root = Column(pyarrow.string())
+        self.transactions_count = Column(pyarrow.uint64())
+        self.message_receipt_root = Column(pyarrow.string())
+        self.message_receipt_count = Column(pyarrow.uint64())
+        self.prev_root = Column(pyarrow.string())
+        self.application_hash = Column(pyarrow.string())
         self.time = Column(pyarrow.uint64())
 
     def append(self, block: BlockHeader) -> None:
         self.number.append(block['height'])
-        # self.hash.append(block['hash'])
-        # self.parent_hash.append(block['parentHash'])
+        self.hash.append(block['hash'])
+        self.da_height.append(block['daHeight'])
+        self.transactions_root.append(block['transactionsRoot'])
+        self.transactions_count.append(int(block['transactionsCount']))
+        self.message_receipt_root.append(block['messageReceiptRoot'])
+        self.message_receipt_count.append(int(block['messageReceiptCount']))
+        self.prev_root.append(block['prevRoot'])
+        self.application_hash.append(block['applicationHash'])
         self.time.append(block['time'])
 
 
@@ -71,13 +83,33 @@ class TransactionTable(TableBuilder):
         self.policies_witness_limit = Column(pyarrow.uint64())
         self.policies_maturity = Column(pyarrow.uint32())
         self.policies_max_fee = Column(pyarrow.uint64())
+        # sizes
+        self.input_asset_ids_size = Column(pyarrow.int64())
+        self.input_contracts_size = Column(pyarrow.int64())
+        self.witnesses_size = Column(pyarrow.int64())
+        self.storage_slots_size = Column(pyarrow.int64())
 
     def append(self, block_number: int, tx: Transaction) -> None:
         self.block_number.append(block_number)
         self.transaction_index.append(tx['index'])
         self.hash.append(tx['hash'])
-        self.input_asset_ids.append(tx.get('inputAssetIds'))
-        self.input_contracts.append(tx.get('inputContracts'))
+
+        input_asset_ids = tx.get('inputAssetIds')
+        self.input_asset_ids.append(input_asset_ids)
+        self.input_asset_ids_size.append(_list_size(input_asset_ids))
+
+        input_contracts = tx.get('inputContracts')
+        self.input_contracts.append(input_contracts)
+        self.input_contracts_size.append(_list_size(input_contracts))
+
+        witnesses = tx.get('witnesses')
+        self.witnesses.append(witnesses)
+        self.witnesses_size.append(_list_size(witnesses))
+
+        storage_slots =  tx.get('storageSlots')
+        self.storage_slots.append(storage_slots)
+        self.storage_slots_size.append(_list_size(storage_slots))
+
         self.gas_price.append(_to_int(tx.get('gasPrice')))
         self.script_gas_limit.append(_to_int(tx.get('scriptGasLimit')))
         self.maturity.append(tx.get('maturity'))
@@ -87,14 +119,12 @@ class TransactionTable(TableBuilder):
         self.is_script.append(tx['isScript'])
         self.is_create.append(tx['isCreate'])
         self.is_mint.append(tx['isMint'])
-        self.witnesses.append(tx.get('witnesses'))
         self.receipts_root.append(tx.get('receiptsRoot'))
         self.script.append(tx.get('script'))
         self.script_data.append(tx.get('scriptData'))
         self.bytecode_witness_index.append(tx.get('bytecodeWitnessIndex'))
         self.bytecode_length.append(_to_int(tx.get('bytecodeLength')))
         self.salt.append(tx.get('salt'))
-        self.storage_slots.append(tx.get('storageSlots'))
         self.raw_payload.append(tx.get('rawPayload'))
 
         status_type = tx['status']['type']
@@ -174,6 +204,7 @@ class InputTable(TableBuilder):
         self.coin_predicate_gas_used = Column(pyarrow.uint64())
         self.coin_predicate = Column(pyarrow.string())
         self.coin_predicate_data = Column(pyarrow.string())
+        self._coin_predicate_root = Column(pyarrow.string())
         # contract input
         self.contract_utxo_id = Column(pyarrow.string())
         self.contract_balance_root = Column(pyarrow.string())
@@ -190,6 +221,7 @@ class InputTable(TableBuilder):
         self.message_data = Column(pyarrow.string())
         self.message_predicate = Column(pyarrow.string())
         self.message_predicate_data = Column(pyarrow.string())
+        self._message_predicate_root = Column(pyarrow.string())
 
     def append(self, block_number: int, input: TransactionInput) -> None:
         self.block_number.append(block_number)
@@ -208,6 +240,7 @@ class InputTable(TableBuilder):
             self.coin_predicate_gas_used.append(int(input['predicateGasUsed']))
             self.coin_predicate.append(input['predicate'])
             self.coin_predicate_data.append(input['predicateData'])
+            self._coin_predicate_root.append(input.get('_predicateRoot'))
         elif input['type'] == 'InputContract':
             self.contract_utxo_id.append(input['utxoId'])
             self.contract_balance_root.append(input['balanceRoot'])
@@ -224,6 +257,7 @@ class InputTable(TableBuilder):
             self.message_data.append(input['data'])
             self.message_predicate.append(input['predicate'])
             self.message_predicate_data.append(input['predicateData'])
+            self._message_predicate_root.append(input.get('_predicateRoot'))
         else:
             raise Exception(f'unhandled input type - {input["type"]}')
 
@@ -404,6 +438,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
 
     transactions = tables['transactions']
     transactions = transactions.sort_by([
+        ('type', 'ascending'),
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
     ])
@@ -415,12 +450,14 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         'transactions.parquet',
         transactions,
         use_dictionary=[
+            'type',
             'status',
             'success_status_program_state_return_type',
             'failure_status_program_state_return_type'
         ],
         write_statistics=[
             '_idx',
+            'type',
             'block_number',
             'transaction_index',
         ],
@@ -430,6 +467,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
 
     inputs = tables['inputs']
     inputs = inputs.sort_by([
+        ('type', 'ascending'),
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
         ('index', 'ascending')
@@ -444,6 +482,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         use_dictionary=['type'],
         write_statistics=[
             '_idx',
+            'type',
             'block_number',
             'transaction_index',
             'index'
@@ -454,6 +493,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
 
     outputs = tables['outputs']
     outputs = outputs.sort_by([
+        ('type', 'ascending'),
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
         ('index', 'ascending')
@@ -467,6 +507,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         use_dictionary=['type'],
         write_statistics=[
             '_idx',
+            'type',
             'block_number',
             'transaction_index',
             'index'
@@ -477,17 +518,26 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
 
     receipts = tables['receipts']
     receipts = receipts.sort_by([
+        ('type', 'ascending'),
+        ('contract', 'ascending'),
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
         ('index', 'ascending')
     ])
+    receipts = add_size_column(receipts, 'data')
     receipts = add_index_column(receipts)
 
     fs.write_parquet(
         'receipts.parquet',
         receipts,
-        use_dictionary=['receiptType'],
-        write_statistics=['_idx', 'block_number', 'transaction_index', 'index'],
+        use_dictionary=['receipt_type'],
+        write_statistics=[
+            '_idx',
+            'receipt_type',
+            'block_number',
+            'transaction_index',
+            'index'
+        ],
         row_group_size=5_000,
         **kwargs
     )
@@ -499,6 +549,10 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         blocks,
         **kwargs
     )
+
+
+def _list_size(ls: list[str] | None) -> int:
+    return 0 if ls is None else sum(len(i) for i in ls)
 
 
 def _to_int(val: str | None) -> int | None:
