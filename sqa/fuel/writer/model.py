@@ -116,7 +116,6 @@ class InputCoin(TypedDict):
     predicateGasUsed: JsBigInt
     predicate: Bytes
     predicateData: Bytes
-    _predicateRoot: NotRequired[Bytes]
 
 
 class InputContract(TypedDict):
@@ -143,7 +142,6 @@ class InputMessage(TypedDict):
     data: Bytes
     predicate: Bytes
     predicateData: Bytes
-    _predicateRoot: NotRequired[Bytes]
 
 
 TransactionInput = InputCoin | InputContract | InputMessage

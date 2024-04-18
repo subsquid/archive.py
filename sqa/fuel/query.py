@@ -202,11 +202,9 @@ class InputRequest(TypedDict, total=False):
     type: list[Literal['InputCoin', 'InputContract', 'InputMessage']]
     coinOwner: list[str]
     coinAssetId: list[str]
-    coinPredicateRoot: list[str]
     contractContract: list[str]
     messageSender: list[str]
     messageRecipient: list[str]
-    messagePredicateRoot: list[str]
     transaction: bool
 
 
@@ -382,11 +380,9 @@ class _InputScan(Scan):
         yield field_in('type', req.get('type'))
         yield field_in('coin_owner', req.get('coinOwner'))
         yield field_in('coin_asset_id', req.get('coinAssetId'))
-        yield field_in('_coin_predicate_root', req.get('coinPredicateRoot'))
         yield field_in('contract_contract', req.get('contractContract'))
         yield field_in('message_sender', req.get('messageSender'))
         yield field_in('message_recipient', req.get('messageRecipient'))
-        yield field_in('_message_predicate_root', req.get('messagePredicateRoot'))
 
 
 class _InputItem(Item):

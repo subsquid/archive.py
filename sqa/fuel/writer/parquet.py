@@ -221,7 +221,6 @@ class InputTable(TableBuilder):
         self.coin_predicate_gas_used = Column(pyarrow.uint64())
         self.coin_predicate = Column(pyarrow.string())
         self.coin_predicate_data = Column(pyarrow.string())
-        self._coin_predicate_root = Column(pyarrow.string())
         # contract input
         self.contract_utxo_id = Column(pyarrow.string())
         self.contract_balance_root = Column(pyarrow.string())
@@ -238,7 +237,6 @@ class InputTable(TableBuilder):
         self.message_data = Column(pyarrow.string())
         self.message_predicate = Column(pyarrow.string())
         self.message_predicate_data = Column(pyarrow.string())
-        self._message_predicate_root = Column(pyarrow.string())
 
     def append(self, block_number: int, input: TransactionInput) -> None:
         self.block_number.append(block_number)
@@ -259,7 +257,6 @@ class InputTable(TableBuilder):
             self.coin_predicate_gas_used.append(int(input['predicateGasUsed']))
             self.coin_predicate.append(input['predicate'])
             self.coin_predicate_data.append(input['predicateData'])
-            self._coin_predicate_root.append(input.get('_predicateRoot'))
         else:
             self.coin_utxo_id.append(None)
             self.coin_owner.append(None)
@@ -271,7 +268,6 @@ class InputTable(TableBuilder):
             self.coin_predicate_gas_used.append(None)
             self.coin_predicate.append(None)
             self.coin_predicate_data.append(None)
-            self._coin_predicate_root.append(None)
 
         if input['type'] == 'InputContract':
             self.contract_utxo_id.append(input['utxoId'])
@@ -296,7 +292,6 @@ class InputTable(TableBuilder):
             self.message_data.append(input['data'])
             self.message_predicate.append(input['predicate'])
             self.message_predicate_data.append(input['predicateData'])
-            self._message_predicate_root.append(input.get('_predicateRoot'))
         else:
             self.message_sender.append(None)
             self.message_recipient.append(None)
@@ -307,7 +302,6 @@ class InputTable(TableBuilder):
             self.message_data.append(None)
             self.message_predicate.append(None)
             self.message_predicate_data.append(None)
-            self._message_predicate_root.append(None)
 
 
 class OutputTable(TableBuilder):
