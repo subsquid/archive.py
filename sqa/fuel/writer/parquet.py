@@ -21,14 +21,14 @@ class BlockTable(TableBuilder):
     def append(self, block: BlockHeader) -> None:
         self.number.append(block['height'])
         self.hash.append(block['hash'])
-        self.da_height.append(block['daHeight'])
+        self.da_height.append(int(block['daHeight']))
         self.transactions_root.append(block['transactionsRoot'])
         self.transactions_count.append(int(block['transactionsCount']))
         self.message_receipt_root.append(block['messageReceiptRoot'])
         self.message_receipt_count.append(int(block['messageReceiptCount']))
         self.prev_root.append(block['prevRoot'])
         self.application_hash.append(block['applicationHash'])
-        self.time.append(block['time'])
+        self.time.append(int(block['time']))
 
 
 class TransactionTable(TableBuilder):
@@ -47,6 +47,7 @@ class TransactionTable(TableBuilder):
         self.is_script = Column(pyarrow.bool_())
         self.is_create = Column(pyarrow.bool_())
         self.is_mint = Column(pyarrow.bool_())
+        self.type = Column(pyarrow.string())
         self.witnesses = Column(pyarrow.list_(pyarrow.string()))
         self.receipts_root = Column(pyarrow.string())
         self.script = Column(pyarrow.string())
@@ -59,7 +60,7 @@ class TransactionTable(TableBuilder):
         # status
         self.status = Column(pyarrow.string())
         self.success_status_transaction_id = Column(pyarrow.string())
-        self.success_status_time = Column(pyarrow.uint64)
+        self.success_status_time = Column(pyarrow.uint64())
         self.success_status_program_state_return_type = Column(pyarrow.string())
         self.success_status_program_state_data = Column(pyarrow.string())
         self.squeezed_out_status_reason = Column(pyarrow.string())
@@ -119,6 +120,7 @@ class TransactionTable(TableBuilder):
         self.is_script.append(tx['isScript'])
         self.is_create.append(tx['isCreate'])
         self.is_mint.append(tx['isMint'])
+        self.type.append(tx['type'])
         self.receipts_root.append(tx.get('receiptsRoot'))
         self.script.append(tx.get('script'))
         self.script_data.append(tx.get('scriptData'))
@@ -128,30 +130,45 @@ class TransactionTable(TableBuilder):
         self.raw_payload.append(tx.get('rawPayload'))
 
         status_type = tx['status']['type']
+        assert status_type in ('SuccessStatus', 'FailureStatus', 'SqueezedOutStatus')
         self.status.append(status_type)
+
         if status_type == 'SuccessStatus':
             self.success_status_transaction_id.append(tx['status'].get('transactionId'))
             self.success_status_time.append(int(tx['status']['time']))
-            if program_state := tx['status']['programState']:
+            if program_state := tx['status'].get('programState'):
                 self.success_status_program_state_return_type.append(program_state['returnType'])
                 self.success_status_program_state_data.append(program_state['data'])
             else:
                 self.success_status_program_state_return_type.append(None)
                 self.success_status_program_state_data.append(None)
-        elif status_type == 'FailureStatus':
+        else:
+            self.success_status_transaction_id.append(None)
+            self.success_status_time.append(None)
+            self.success_status_program_state_return_type.append(None)
+            self.success_status_program_state_data.append(None)
+
+        if status_type == 'FailureStatus':
             self.squeezed_out_status_reason.append(tx['status']['reason'])
-        elif status_type == 'SqueezedOutStatus':
+        else:
+            self.squeezed_out_status_reason.append(None)
+
+        if status_type == 'SqueezedOutStatus':
             self.failure_status_transaction_id.append(tx['status']['transactionId'])
             self.failure_status_time.append(int(tx['status']['time']))
             self.failure_status_reason.append(tx['status']['reason'])
-            if program_state := tx['status']['programState']:
+            if program_state := tx['status'].get('programState'):
                 self.failure_status_program_state_return_type.append(program_state['returnType'])
                 self.failure_status_program_state_data.append(program_state['data'])
             else:
                 self.failure_status_program_state_return_type.append(None)
                 self.failure_status_program_state_data.append(None)
         else:
-            raise Exception(f'unhandled status type - {status_type}')
+            self.failure_status_transaction_id.append(None)
+            self.failure_status_time.append(None)
+            self.failure_status_reason.append(None)
+            self.failure_status_program_state_return_type.append(None)
+            self.failure_status_program_state_data.append(None)
 
         if input_contract := tx.get('inputContract'):
             self.input_contract_utxo_id.append(input_contract['utxoId'])
@@ -192,7 +209,7 @@ class InputTable(TableBuilder):
         self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
         self.index = Column(pyarrow.int32())
-        self.type = Column(pyarrow.int32())
+        self.type = Column(pyarrow.string())
         # coin input
         self.coin_utxo_id = Column(pyarrow.string())
         self.coin_owner = Column(pyarrow.string())
@@ -227,6 +244,8 @@ class InputTable(TableBuilder):
         self.block_number.append(block_number)
         self.transaction_index.append(input['transactionIndex'])
         self.index.append(input['index'])
+
+        assert input['type'] in ('InputCoin', 'InputContract', 'InputMessage')
         self.type.append(input['type'])
 
         if input['type'] == 'InputCoin':
@@ -241,13 +260,33 @@ class InputTable(TableBuilder):
             self.coin_predicate.append(input['predicate'])
             self.coin_predicate_data.append(input['predicateData'])
             self._coin_predicate_root.append(input.get('_predicateRoot'))
-        elif input['type'] == 'InputContract':
+        else:
+            self.coin_utxo_id.append(None)
+            self.coin_owner.append(None)
+            self.coin_amount.append(None)
+            self.coin_asset_id.append(None)
+            self.coin_tx_pointer.append(None)
+            self.coin_witness_index.append(None)
+            self.coin_maturity.append(None)
+            self.coin_predicate_gas_used.append(None)
+            self.coin_predicate.append(None)
+            self.coin_predicate_data.append(None)
+            self._coin_predicate_root.append(None)
+
+        if input['type'] == 'InputContract':
             self.contract_utxo_id.append(input['utxoId'])
             self.contract_balance_root.append(input['balanceRoot'])
             self.contract_state_root.append(input['stateRoot'])
             self.contract_tx_pointer.append(input['txPointer'])
             self.contract_contract.append(input['contract'])
-        elif input['type'] == 'InputMessage':
+        else:
+            self.contract_utxo_id.append(None)
+            self.contract_balance_root.append(None)
+            self.contract_state_root.append(None)
+            self.contract_tx_pointer.append(None)
+            self.contract_contract.append(None)
+
+        if input['type'] == 'InputMessage':
             self.message_sender.append(input['sender'])
             self.message_recipient.append(input['recipient'])
             self.message_amount.append(int(input['amount']))
@@ -259,7 +298,16 @@ class InputTable(TableBuilder):
             self.message_predicate_data.append(input['predicateData'])
             self._message_predicate_root.append(input.get('_predicateRoot'))
         else:
-            raise Exception(f'unhandled input type - {input["type"]}')
+            self.message_sender.append(None)
+            self.message_recipient.append(None)
+            self.message_amount.append(None)
+            self.message_nonce.append(None)
+            self.message_witness_index.append(None)
+            self.message_predicate_gas_used.append(None)
+            self.message_data.append(None)
+            self.message_predicate.append(None)
+            self.message_predicate_data.append(None)
+            self._message_predicate_root.append(None)
 
 
 class OutputTable(TableBuilder):
@@ -267,7 +315,7 @@ class OutputTable(TableBuilder):
         self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
         self.index = Column(pyarrow.int32())
-        self.type = Column(pyarrow.int32())
+        self.type = Column(pyarrow.string())
         # coin output
         self.coin_to = Column(pyarrow.string())
         self.coin_amount = Column(pyarrow.uint64())
@@ -294,31 +342,56 @@ class OutputTable(TableBuilder):
         self.block_number.append(block_number)
         self.transaction_index.append(output['transactionIndex'])
         self.index.append(output['index'])
+
+        assert output['type'] in ('CoinOutput', 'ContractOutput', 'ChangeOutput', 'VariableOutput', 'ContractCreated')
         self.type.append(output['type'])
 
         if output['type'] == 'CoinOutput':
             self.coin_to.append(output['to'])
             self.coin_amount.append(int(output['amount']))
             self.coin_asset_id.append(output['assetId'])
-        elif output['type'] == 'ContractOutput':
+        else:
+            self.coin_to.append(None)
+            self.coin_amount.append(None)
+            self.coin_asset_id.append(None)
+
+        if output['type'] == 'ContractOutput':
             self.contract_input_index.append(output['inputIndex'])
             self.contract_balance_root.append(output['balanceRoot'])
             self.contract_state_root.append(output['stateRoot'])
-        elif output['type'] == 'ChangeOutput':
+        else:
+            self.contract_input_index.append(None)
+            self.contract_balance_root.append(None)
+            self.contract_state_root.append(None)
+
+        if output['type'] == 'ChangeOutput':
             self.change_to.append(output['to'])
             self.change_amount.append(int(output['amount']))
             self.change_asset_id.append(output['assetId'])
-        elif output['type'] == 'VariableOutput':
+        else:
+            self.change_to.append(None)
+            self.change_amount.append(None)
+            self.change_asset_id.append(None)
+
+        if output['type'] == 'VariableOutput':
             self.variable_to.append(output['to'])
             self.variable_amount.append(int(output['amount']))
             self.variable_asset_id.append(output['assetId'])
-        elif output['type'] == 'ContractCreated':
+        else:
+            self.variable_to.append(None)
+            self.variable_amount.append(None)
+            self.variable_asset_id.append(None)
+
+        if output['type'] == 'ContractCreated':
             self.contract_created_contract_id.append(output['contract']['id'])
             self.contract_created_contract_bytecode.append(output['contract']['bytecode'])
             self.contract_created_contract_salt.append(output['contract']['salt'])
             self.contract_created_state_root.append(output['stateRoot'])
         else:
-            raise Exception(f'unhandled output type - {output["type"]}')
+            self.contract_created_contract_id.append(None)
+            self.contract_created_contract_bytecode.append(None)
+            self.contract_created_contract_salt.append(None)
+            self.contract_created_state_root.append(None)
 
 
 class ReceiptTable(TableBuilder):
@@ -345,7 +418,7 @@ class ReceiptTable(TableBuilder):
         self.rc = Column(pyarrow.uint64())
         self.rd = Column(pyarrow.uint64())
         self.len = Column(pyarrow.uint64())
-        self.receiptType = Column(pyarrow.string())
+        self.receipt_type = Column(pyarrow.string())
         self.result = Column(pyarrow.uint64())
         self.gas_used = Column(pyarrow.uint64())
         self.data = Column(pyarrow.string())
@@ -378,7 +451,7 @@ class ReceiptTable(TableBuilder):
         self.rc.append(_to_int(receipt.get('rc')))
         self.rd.append(_to_int(receipt.get('rd')))
         self.len.append(_to_int(receipt.get('len')))
-        self.receiptType.append(receipt.get('receiptType'))
+        self.receipt_type.append(receipt.get('receiptType'))
         self.result.append(_to_int(receipt.get('result')))
         self.gas_used.append(_to_int(receipt.get('gas_used')))
         self.data.append(receipt.get('data'))
@@ -406,7 +479,7 @@ class ParquetWriter(BaseParquetWriter):
             self.transactions.append(block_number, tx)
 
         for input in block['inputs']:
-            self.instructions.append(block_number, input)
+            self.inputs.append(block_number, input)
 
         for output in block['outputs']:
             self.outputs.append(block_number, output)
@@ -422,9 +495,6 @@ class ParquetWriter(BaseParquetWriter):
 
     def get_block_hash(self, block: Block) -> str:
         return block['header']['hash']
-
-    def get_block_parent_hash(self, block: Block) -> str:
-        return block['header']['parentHash']
 
 
 def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
@@ -518,7 +588,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
 
     receipts = tables['receipts']
     receipts = receipts.sort_by([
-        ('type', 'ascending'),
+        ('receipt_type', 'ascending'),
         ('contract', 'ascending'),
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),

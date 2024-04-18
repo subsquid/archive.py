@@ -44,11 +44,13 @@ class TransactionFieldSelection(TypedDict, total=False):
     isScript: bool
     isCreate: bool
     isMint: bool
+    type: bool
     outputContractInputIndex: bool
     outputContractBalanceRoot: bool
     outputContractStateRoot: bool
     witnesses: bool
     receiptsRoot: bool
+    status: bool
     successStatusTransactionId: bool
     successStatusTime: bool
     successStatusProgramStateReturnType: bool
@@ -324,7 +326,7 @@ class _ReceiptScan(Scan):
         return 'receipts'
 
     def where(self, req: ReceiptRequest) -> Iterable[pyarrow.dataset.Expression | None]:
-        yield field_in('type', req.get('type'))
+        yield field_in('receipt_type', req.get('type'))
         yield field_in('contract', req.get('contract'))
 
 

@@ -61,6 +61,13 @@ ingest-starknet:
 		--chunk-size 256
 
 
+ingest-fuel:
+	@python3 -m sqa.fuel.writer data/fuel \
+		--src http://localhost:7373 \
+		--first-block 9000000 \
+		--chunk-size 256
+
+
 router:
 	@python3 tests/fake_router.py
 
