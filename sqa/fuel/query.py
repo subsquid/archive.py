@@ -26,15 +26,8 @@ class TransactionFieldSelection(TypedDict, total=False):
     hash: bool
     inputAssetIds: bool
     inputContracts: bool
-    inputContractUtxoId: bool
-    inputContractBalanceRoot: bool
-    inputContractStateRoot: bool
-    inputContractTxPointer: bool
-    inputContractContract: bool
-    policiesGasPrice: bool
-    policiesWitnessLimit: bool
-    policiesMaturity: bool
-    policiesMaxFee: bool
+    inputContract: bool
+    policies: bool
     gasPrice: bool
     scriptGasLimit: bool
     maturity: bool
@@ -45,9 +38,7 @@ class TransactionFieldSelection(TypedDict, total=False):
     isCreate: bool
     isMint: bool
     type: bool
-    outputContractInputIndex: bool
-    outputContractBalanceRoot: bool
-    outputContractStateRoot: bool
+    outputContract: bool
     witnesses: bool
     receiptsRoot: bool
     status: bool

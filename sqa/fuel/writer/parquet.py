@@ -57,6 +57,24 @@ class TransactionTable(TableBuilder):
         self.salt = Column(pyarrow.string())
         self.storage_slots = Column(pyarrow.list_(pyarrow.string()))
         self.raw_payload = Column(pyarrow.string())
+        self.policies = Column(pyarrow.struct([
+            ('gas_price', pyarrow.uint64()),
+            ('witness_limit', pyarrow.uint64()),
+            ('maturity', pyarrow.uint32()),
+            ('max_fee', pyarrow.uint64())
+        ]))
+        self.input_contract = Column(pyarrow.struct[
+            ('utxo_id', pyarrow.string()),
+            ('balance_root', pyarrow.string()),
+            ('state_root', pyarrow.string()),
+            ('tx_pointer', pyarrow.string()),
+            ('contract', pyarrow.string())
+        ])
+        self.output_contract = Column(pyarrow.struct[
+            ('input_index', pyarrow.int32()),
+            ('balance_root', pyarrow.string()),
+            ('state_root', pyarrow.string())
+        ])
         # status
         self.status = Column(pyarrow.string())
         self.success_status_transaction_id = Column(pyarrow.string())
@@ -69,21 +87,6 @@ class TransactionTable(TableBuilder):
         self.failure_status_reason = Column(pyarrow.string())
         self.failure_status_program_state_return_type = Column(pyarrow.string())
         self.failure_status_program_state_data = Column(pyarrow.string())
-        # input contract
-        self.input_contract_utxo_id = Column(pyarrow.string())
-        self.input_contract_balance_root = Column(pyarrow.string())
-        self.input_contract_state_root = Column(pyarrow.string())
-        self.input_contract_tx_pointer = Column(pyarrow.string())
-        self.input_contract_contract = Column(pyarrow.string())
-        # output contract
-        self.output_contract_input_index = Column(pyarrow.int32())
-        self.output_contract_balance_root = Column(pyarrow.string())
-        self.output_contract_state_root = Column(pyarrow.string())
-        # policies
-        self.policies_gas_price = Column(pyarrow.uint64())
-        self.policies_witness_limit = Column(pyarrow.uint64())
-        self.policies_maturity = Column(pyarrow.uint32())
-        self.policies_max_fee = Column(pyarrow.uint64())
         # sizes
         self.input_asset_ids_size = Column(pyarrow.int64())
         self.input_contracts_size = Column(pyarrow.int64())
@@ -128,6 +131,9 @@ class TransactionTable(TableBuilder):
         self.bytecode_length.append(_to_int(tx.get('bytecodeLength')))
         self.salt.append(tx.get('salt'))
         self.raw_payload.append(tx.get('rawPayload'))
+        self.policies.append(tx.get('policies'))
+        self.input_contract.append(tx.get('inputContract'))
+        self.output_contract.append(tx.get('outputContract'))
 
         status_type = tx['status']['type']
         assert status_type in ('SuccessStatus', 'FailureStatus', 'SqueezedOutStatus')
@@ -169,39 +175,6 @@ class TransactionTable(TableBuilder):
             self.failure_status_reason.append(None)
             self.failure_status_program_state_return_type.append(None)
             self.failure_status_program_state_data.append(None)
-
-        if input_contract := tx.get('inputContract'):
-            self.input_contract_utxo_id.append(input_contract['utxoId'])
-            self.input_contract_balance_root.append(input_contract['balanceRoot'])
-            self.input_contract_state_root.append(input_contract['stateRoot'])
-            self.input_contract_tx_pointer.append(input_contract['txPointer'])
-            self.input_contract_contract.append(input_contract['contract'])
-        else:
-            self.input_contract_utxo_id.append(None)
-            self.input_contract_balance_root.append(None)
-            self.input_contract_state_root.append(None)
-            self.input_contract_tx_pointer.append(None)
-            self.input_contract_contract.append(None)
-
-        if output_contract := tx.get('outputContract'):
-            self.output_contract_input_index.append(output_contract['inputIndex'])
-            self.output_contract_balance_root.append(output_contract['balanceRoot'])
-            self.output_contract_state_root.append(output_contract['stateRoot'])
-        else:
-            self.output_contract_input_index.append(None)
-            self.output_contract_balance_root.append(None)
-            self.output_contract_state_root.append(None)
-
-        if policies := tx.get('policies'):
-            self.policies_gas_price.append(_to_int(policies.get('gasPrice')))
-            self.policies_witness_limit.append(_to_int(policies.get('witnessLimit')))
-            self.policies_maturity.append(policies.get('maturity'))
-            self.policies_max_fee.append(_to_int(policies.get('maxFee')))
-        else:
-            self.policies_gas_price.append(None)
-            self.policies_witness_limit.append(None)
-            self.policies_maturity.append(None)
-            self.policies_max_fee.append(None)
 
 
 class InputTable(TableBuilder):
