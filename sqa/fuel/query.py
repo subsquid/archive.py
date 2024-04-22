@@ -292,10 +292,43 @@ class _TransactionItem(Item):
             'bytecodeLength': 'bytecode_length::text',
             'successStatusTime': 'success_status_time::text',
             'failureStatusTime': 'failure_status_time::text',
-            'policiesGasPrice': 'policies_gas_price::text',
-            'policiesWitnessLimit': 'policies_witness_limit::text',
-            'policiesMaxFee': 'policies_max_fee::text',
+            'policies': _POLICIES_PROJECTION,
+            'inputContract': _INPUT_CONTRACT_PROJECTION,
+            'outputContract': _OUTPUT_CONTRACT
         })
+
+
+_POLICIES_PROJECTION = '''
+    CASE WHEN policies is null THEN null
+    ELSE json_object(
+        'gasPrice', (policies -> 'gas_price')::text,
+        'witnessLimit', (policies -> 'witness_limit')::text,
+        'maturity', policies -> 'maturity',
+        'maxFee', (policies -> 'max_fee')::text
+    ) END
+'''
+
+
+_INPUT_CONTRACT_PROJECTION = '''
+    CASE WHEN input_contract is null THEN null
+    ELSE json_object(
+        'utxoId': input_contract -> 'utxo_id',
+        'balanceRoot': input_contract -> 'balance_root',
+        'stateRoot': input_contract -> 'state_root',
+        'txPointer': input_contract -> 'tx_pointer',
+        'contract': input_contract -> 'contract'
+    ) END
+'''
+
+
+_OUTPUT_CONTRACT = '''
+    CASE WHEN output_contract is null THEN null
+    ELSE json_object(
+        'inputIndex': output_contract -> 'input_index',
+        'balanceRoot': output_contract -> 'balance_root',
+        'stateRoot': output_contract -> 'state_root'
+    ) END
+'''
 
 
 _receipts_table = Table(

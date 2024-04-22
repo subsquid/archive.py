@@ -2,7 +2,8 @@ import pyarrow
 
 from sqa.fs import Fs
 from sqa.writer.parquet import TableBuilder, Column, BaseParquetWriter, add_index_column, add_size_column
-from .model import BlockHeader, Transaction, TransactionInput, TransactionOutput, Block, Receipt
+from .model import BlockHeader, Transaction, TransactionInput, TransactionOutput, Block, Receipt, \
+    Policies, TransactionInputContract, OutputContract
 
 
 class BlockTable(TableBuilder):
@@ -63,18 +64,18 @@ class TransactionTable(TableBuilder):
             ('maturity', pyarrow.uint32()),
             ('max_fee', pyarrow.uint64())
         ]))
-        self.input_contract = Column(pyarrow.struct[
+        self.input_contract = Column(pyarrow.struct([
             ('utxo_id', pyarrow.string()),
             ('balance_root', pyarrow.string()),
             ('state_root', pyarrow.string()),
             ('tx_pointer', pyarrow.string()),
             ('contract', pyarrow.string())
-        ])
-        self.output_contract = Column(pyarrow.struct[
+        ]))
+        self.output_contract = Column(pyarrow.struct([
             ('input_index', pyarrow.int32()),
             ('balance_root', pyarrow.string()),
             ('state_root', pyarrow.string())
-        ])
+        ]))
         # status
         self.status = Column(pyarrow.string())
         self.success_status_transaction_id = Column(pyarrow.string())
@@ -131,9 +132,9 @@ class TransactionTable(TableBuilder):
         self.bytecode_length.append(_to_int(tx.get('bytecodeLength')))
         self.salt.append(tx.get('salt'))
         self.raw_payload.append(tx.get('rawPayload'))
-        self.policies.append(tx.get('policies'))
-        self.input_contract.append(tx.get('inputContract'))
-        self.output_contract.append(tx.get('outputContract'))
+        self._set_policies(tx.get('policies'))
+        self._set_input_contract(tx.get('inputContract'))
+        self._set_output_contract(tx.get('outputContract'))
 
         status_type = tx['status']['type']
         assert status_type in ('SuccessStatus', 'FailureStatus', 'SqueezedOutStatus')
@@ -175,6 +176,39 @@ class TransactionTable(TableBuilder):
             self.failure_status_reason.append(None)
             self.failure_status_program_state_return_type.append(None)
             self.failure_status_program_state_data.append(None)
+
+    def _set_policies(self, policies: Policies | None):
+        if policies is None:
+            self.policies.append(None)
+        else:
+            self.policies.append({
+                'gas_price': _to_int(policies.get('gasPrice')),
+                'witness_limit': _to_int(policies.get('witnessLimit')),
+                'maturity': policies.get('maturity'),
+                'max_fee': _to_int(policies.get('maxFee'))
+            })
+
+    def _set_input_contract(self, input_contract: TransactionInputContract):
+        if input_contract is None:
+            self.input_contract.append(None)
+        else:
+            self.input_contract.append({
+                'utxo_id': input_contract['utxoId'],
+                'balance_root': input_contract['balanceRoot'],
+                'state_root': input_contract['stateRoot'],
+                'tx_pointer': input_contract['txPointer'],
+                'contract': input_contract['contract']
+            })
+
+    def _set_output_contract(self, output_contract: OutputContract):
+        if output_contract is None:
+            self.output_contract.append(None)
+        else:
+            self.output_contract.append({
+                'input_index': output_contract['inputIndex'],
+                'balance_root': output_contract['balanceRoot'],
+                'state_root': output_contract['stateRoot']
+            })
 
 
 class InputTable(TableBuilder):
