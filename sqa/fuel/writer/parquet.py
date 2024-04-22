@@ -1,9 +1,15 @@
+import json
+
 import pyarrow
 
 from sqa.fs import Fs
 from sqa.writer.parquet import TableBuilder, Column, BaseParquetWriter, add_index_column, add_size_column
 from .model import BlockHeader, Transaction, TransactionInput, TransactionOutput, Block, Receipt, \
     Policies, TransactionInputContract, OutputContract
+
+
+def JSON():
+    return pyarrow.string()
 
 
 class BlockTable(TableBuilder):
@@ -76,18 +82,7 @@ class TransactionTable(TableBuilder):
             ('balance_root', pyarrow.string()),
             ('state_root', pyarrow.string())
         ]))
-        # status
-        self.status = Column(pyarrow.string())
-        self.success_status_transaction_id = Column(pyarrow.string())
-        self.success_status_time = Column(pyarrow.uint64())
-        self.success_status_program_state_return_type = Column(pyarrow.string())
-        self.success_status_program_state_data = Column(pyarrow.string())
-        self.squeezed_out_status_reason = Column(pyarrow.string())
-        self.failure_status_transaction_id = Column(pyarrow.string())
-        self.failure_status_time = Column(pyarrow.uint64())
-        self.failure_status_reason = Column(pyarrow.string())
-        self.failure_status_program_state_return_type = Column(pyarrow.string())
-        self.failure_status_program_state_data = Column(pyarrow.string())
+        self.status = Column(JSON())
         # sizes
         self.input_asset_ids_size = Column(pyarrow.int64())
         self.input_contracts_size = Column(pyarrow.int64())
@@ -98,23 +93,6 @@ class TransactionTable(TableBuilder):
         self.block_number.append(block_number)
         self.transaction_index.append(tx['index'])
         self.hash.append(tx['hash'])
-
-        input_asset_ids = tx.get('inputAssetIds')
-        self.input_asset_ids.append(input_asset_ids)
-        self.input_asset_ids_size.append(_list_size(input_asset_ids))
-
-        input_contracts = tx.get('inputContracts')
-        self.input_contracts.append(input_contracts)
-        self.input_contracts_size.append(_list_size(input_contracts))
-
-        witnesses = tx.get('witnesses')
-        self.witnesses.append(witnesses)
-        self.witnesses_size.append(_list_size(witnesses))
-
-        storage_slots =  tx.get('storageSlots')
-        self.storage_slots.append(storage_slots)
-        self.storage_slots_size.append(_list_size(storage_slots))
-
         self.gas_price.append(_to_int(tx.get('gasPrice')))
         self.script_gas_limit.append(_to_int(tx.get('scriptGasLimit')))
         self.maturity.append(tx.get('maturity'))
@@ -132,50 +110,26 @@ class TransactionTable(TableBuilder):
         self.bytecode_length.append(_to_int(tx.get('bytecodeLength')))
         self.salt.append(tx.get('salt'))
         self.raw_payload.append(tx.get('rawPayload'))
+        self.status.append(json.dumps(tx['status']))
         self._set_policies(tx.get('policies'))
         self._set_input_contract(tx.get('inputContract'))
         self._set_output_contract(tx.get('outputContract'))
 
-        status_type = tx['status']['type']
-        assert status_type in ('SuccessStatus', 'FailureStatus', 'SqueezedOutStatus')
-        self.status.append(status_type)
+        input_asset_ids = tx.get('inputAssetIds')
+        self.input_asset_ids.append(input_asset_ids)
+        self.input_asset_ids_size.append(_list_size(input_asset_ids))
 
-        if status_type == 'SuccessStatus':
-            self.success_status_transaction_id.append(tx['status'].get('transactionId'))
-            self.success_status_time.append(int(tx['status']['time']))
-            if program_state := tx['status'].get('programState'):
-                self.success_status_program_state_return_type.append(program_state['returnType'])
-                self.success_status_program_state_data.append(program_state['data'])
-            else:
-                self.success_status_program_state_return_type.append(None)
-                self.success_status_program_state_data.append(None)
-        else:
-            self.success_status_transaction_id.append(None)
-            self.success_status_time.append(None)
-            self.success_status_program_state_return_type.append(None)
-            self.success_status_program_state_data.append(None)
+        input_contracts = tx.get('inputContracts')
+        self.input_contracts.append(input_contracts)
+        self.input_contracts_size.append(_list_size(input_contracts))
 
-        if status_type == 'FailureStatus':
-            self.squeezed_out_status_reason.append(tx['status']['reason'])
-        else:
-            self.squeezed_out_status_reason.append(None)
+        witnesses = tx.get('witnesses')
+        self.witnesses.append(witnesses)
+        self.witnesses_size.append(_list_size(witnesses))
 
-        if status_type == 'SqueezedOutStatus':
-            self.failure_status_transaction_id.append(tx['status']['transactionId'])
-            self.failure_status_time.append(int(tx['status']['time']))
-            self.failure_status_reason.append(tx['status']['reason'])
-            if program_state := tx['status'].get('programState'):
-                self.failure_status_program_state_return_type.append(program_state['returnType'])
-                self.failure_status_program_state_data.append(program_state['data'])
-            else:
-                self.failure_status_program_state_return_type.append(None)
-                self.failure_status_program_state_data.append(None)
-        else:
-            self.failure_status_transaction_id.append(None)
-            self.failure_status_time.append(None)
-            self.failure_status_reason.append(None)
-            self.failure_status_program_state_return_type.append(None)
-            self.failure_status_program_state_data.append(None)
+        storage_slots =  tx.get('storageSlots')
+        self.storage_slots.append(storage_slots)
+        self.storage_slots_size.append(_list_size(storage_slots))
 
     def _set_policies(self, policies: Policies | None):
         if policies is None:

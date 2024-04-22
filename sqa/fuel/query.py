@@ -42,16 +42,6 @@ class TransactionFieldSelection(TypedDict, total=False):
     witnesses: bool
     receiptsRoot: bool
     status: bool
-    successStatusTransactionId: bool
-    successStatusTime: bool
-    successStatusProgramStateReturnType: bool
-    successStatusProgramStateData: bool
-    squeezedOutStatusReason: bool
-    failureStatusTransactionId: bool
-    failureStatusTime: bool
-    failureStatusReason: bool
-    failureStatusProgramStateReturnType: bool
-    failureStatusProgramStateData: bool
     script: bool
     scriptData: bool
     bytecodeWitnessIndex: bool
@@ -290,8 +280,6 @@ class _TransactionItem(Item):
             'scriptGasLimit': 'script_gas_limit::text',
             'mintAmount': 'mint_amount::text',
             'bytecodeLength': 'bytecode_length::text',
-            'successStatusTime': 'success_status_time::text',
-            'failureStatusTime': 'failure_status_time::text',
             'policies': _POLICIES_PROJECTION,
             'inputContract': _INPUT_CONTRACT_PROJECTION,
             'outputContract': _OUTPUT_CONTRACT
