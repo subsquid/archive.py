@@ -5,7 +5,7 @@ import pyarrow
 
 from sqa.query.model import Table, Item, Scan, ReqName, JoinRel, RefRel
 from sqa.query.schema import field_map_schema, BaseQuerySchema
-from sqa.query.util import get_selected_fields, json_project, field_in
+from sqa.query.util import get_selected_fields, json_project, field_in, remove_camel_prefix, to_snake_case
 
 
 class BlockFieldSelection(TypedDict, total=False):
@@ -408,12 +408,21 @@ class _InputItem(Item):
         return get_selected_fields(fields.get('input'), ['transactionIndex', 'index'])
 
     def project(self, fields: FieldSelection) -> str:
-        return json_project(self.get_selected_fields(fields), rewrite={
-            'coinAmount': 'coin_amount::text',
-            'coinPredicateGasUsed': 'coin_predicate_gas_used::text',
-            'messageAmount': 'message_amount::text',
-            'messagePredicateGasUsed': 'message_predicate_gas_used::text',
-        })
+        selected = self.get_selected_fields(fields)
+        proj_fields = []
+
+        for field in selected:
+            proj_fields.append(field)
+            for prefix in ('coin', 'contract', 'message'):
+                if field.startswith(prefix):
+                    alias = remove_camel_prefix(field, prefix)
+                    exp = to_snake_case(field)
+                    if alias in ('amount', 'predicateGasUsed'):
+                        exp += '::text'
+                    proj_fields[-1] = (alias, exp)
+                    break
+
+        return json_project(proj_fields)
 
 
 _output_table = Table(
@@ -447,11 +456,21 @@ class _OutputItem(Item):
         return get_selected_fields(fields.get('output'), ['transactionIndex', 'index'])
 
     def project(self, fields: FieldSelection) -> str:
-        return json_project(self.get_selected_fields(fields), rewrite={
-            'coinAmount': 'coin_amount::text',
-            'changeAmount': 'change_amount::text',
-            'variableAmount': 'variable_amount::text',
-        })
+        selected = self.get_selected_fields(fields)
+        proj_fields = []
+
+        for field in selected:
+            proj_fields.append(field)
+            for prefix in ('coin', 'contract', 'change', 'variable', 'contractCreated'):
+                if field.startswith(prefix):
+                    alias = remove_camel_prefix(field, prefix)
+                    exp = to_snake_case(field)
+                    if alias == 'amount':
+                        exp += '::text'
+                    proj_fields[-1] = (alias, exp)
+                    break
+
+        return json_project(proj_fields)
 
 
 def _build_model():
