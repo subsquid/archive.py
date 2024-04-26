@@ -307,6 +307,8 @@ class Ingest:
                 continue
 
             for log in r['logs']:
+                tx = tx_by_index[log['transactionIndex']]
+                assert log['transactionHash'] == tx['hash']
                 block_logs.append(log)
 
         for block in blocks:
