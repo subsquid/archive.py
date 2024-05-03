@@ -131,9 +131,7 @@ class OutputFieldSelection(TypedDict, total=False):
     variableTo: bool
     variableAmount: bool
     variableAssetId: bool
-    contractCreatedContractId: bool
-    contractCreatedContractBytecode: bool
-    contractCreatedContractSalt: bool
+    contractCreatedContract: bool
     contractCreatedStateRoot: bool
 
 
@@ -427,10 +425,7 @@ class _InputItem(Item):
 
 _output_table = Table(
     name='outputs',
-    primary_key=['transaction_index', 'index'],
-    column_weights={
-        'contractCreatedContractBytecode': 'contract_created_contract_bytecode_size'
-    }
+    primary_key=['transaction_index', 'index']
 )
 
 

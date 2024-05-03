@@ -288,9 +288,11 @@ class OutputTable(TableBuilder):
         self.variable_amount = Column(pyarrow.uint64())
         self.variable_asset_id = Column(pyarrow.string())
         # contract created
-        self.contract_created_contract_id = Column(pyarrow.string())
-        self.contract_created_contract_bytecode = Column(pyarrow.string())
-        self.contract_created_contract_salt = Column(pyarrow.string())
+        self.contract_created_contract = Column(pyarrow.struct([
+            ('id', pyarrow.string()),
+            ('bytecode', pyarrow.string()),
+            ('salt', pyarrow.string()),
+        ]))
         self.contract_created_state_root = Column(pyarrow.string())
 
     def append(self, block_number: int, output: TransactionOutput) -> None:
@@ -338,9 +340,7 @@ class OutputTable(TableBuilder):
             self.variable_asset_id.append(None)
 
         if output['type'] == 'ContractCreated':
-            self.contract_created_contract_id.append(output['contract']['id'])
-            self.contract_created_contract_bytecode.append(output['contract']['bytecode'])
-            self.contract_created_contract_salt.append(output['contract']['salt'])
+            self.contract_created_contract.append(output['contract'])
             self.contract_created_state_root.append(output['stateRoot'])
         else:
             self.contract_created_contract_id.append(None)
