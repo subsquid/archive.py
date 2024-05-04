@@ -343,9 +343,7 @@ class OutputTable(TableBuilder):
             self.contract_created_contract.append(output['contract'])
             self.contract_created_state_root.append(output['stateRoot'])
         else:
-            self.contract_created_contract_id.append(None)
-            self.contract_created_contract_bytecode.append(None)
-            self.contract_created_contract_salt.append(None)
+            self.contract_created_contract.append(None)
             self.contract_created_state_root.append(None)
 
 
@@ -474,19 +472,14 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     fs.write_parquet(
         'transactions.parquet',
         transactions,
-        use_dictionary=[
-            'type',
-            'status',
-            'success_status_program_state_return_type',
-            'failure_status_program_state_return_type'
-        ],
+        use_dictionary=['type'],
         write_statistics=[
             '_idx',
             'type',
             'block_number',
             'transaction_index',
         ],
-        row_group_size=5_000,
+        row_group_size=10_000,
         **kwargs
     )
 
@@ -512,7 +505,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
             'transaction_index',
             'index'
         ],
-        row_group_size=5_000,
+        row_group_size=15_000,
         **kwargs
     )
 
@@ -523,7 +516,6 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         ('transaction_index', 'ascending'),
         ('index', 'ascending')
     ])
-    outputs = add_size_column(outputs, 'contract_created_contract_bytecode')
     outputs = add_index_column(outputs)
 
     fs.write_parquet(
@@ -537,7 +529,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
             'transaction_index',
             'index'
         ],
-        row_group_size=5_000,
+        row_group_size=15_000,
         **kwargs
     )
 
@@ -563,7 +555,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
             'transaction_index',
             'index'
         ],
-        row_group_size=5_000,
+        row_group_size=20_000,
         **kwargs
     )
 
