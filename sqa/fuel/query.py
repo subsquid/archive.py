@@ -236,6 +236,14 @@ class _BlockItem(Item):
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
         return get_selected_fields(fields.get('block'), ['number', 'hash'])
 
+    def project(self, fields: FieldSelection) -> str:
+        return json_project(self.get_selected_fields(fields), rewrite={
+            'daHeight': 'da_height::text',
+            'transactionsCount': 'transactions_count::text',
+            'messageReceiptCount': 'message_receipt_count::text',
+            'time': 'time::text'
+        })
+
 
 _transactions_table = Table(
     name='transactions',
