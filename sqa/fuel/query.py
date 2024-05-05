@@ -280,7 +280,8 @@ class _TransactionItem(Item):
             'bytecodeLength': 'bytecode_length::text',
             'policies': _POLICIES_PROJECTION,
             'inputContract': _INPUT_CONTRACT_PROJECTION,
-            'outputContract': _OUTPUT_CONTRACT
+            'outputContract': _OUTPUT_CONTRACT,
+            'status': 'status::json'
         })
 
 

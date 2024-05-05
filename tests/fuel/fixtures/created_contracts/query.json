@@ -9,8 +9,7 @@
     },
     "output": {
       "type": true,
-      "contractCreatedContractId": true,
-      "contractCreatedContractSalt": true,
+      "contractCreatedContract": true,
       "contractCreatedStateRoot": true
     }
   },
