@@ -43,6 +43,11 @@ RUN /app/env/bin/python -m sqa.starknet.writer --help > /dev/null # win a little
 ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.starknet.writer"]
 
 
+FROM writer-base AS fuel-writer
+RUN /app/env/bin/python -m sqa.fuel.writer --help > /dev/null # win a little bit of startup time
+ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.fuel.writer"]
+
+
 FROM builder AS worker-builder
 RUN pdm sync -G http-worker --no-editable --prod
 

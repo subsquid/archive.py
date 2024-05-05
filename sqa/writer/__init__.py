@@ -52,7 +52,8 @@ class Sink:
             first_block: int = 0,
             last_block: int | None = None,
             chunk_size: int = 1024,
-            top_dir_size: int = 500
+            top_dir_size: int = 500,
+            validate_chain_continuity: bool = True
     ):
         self._writer = writer
         self._fs = create_fs(dest)
@@ -63,6 +64,7 @@ class Sink:
         self._writing = False
         self._last_seen_block = -1
         self._last_flushed_block = 1
+        self._validate_chain_continuity = validate_chain_continuity
 
     @cached_property
     def _chunk_writer(self) -> ChunkWriter:
@@ -139,15 +141,17 @@ class Sink:
             assert write_range[0] <= first_block <= last_block <= write_range[1]
 
             for block in stride:
-                # validate chain continuity
-                block_hash = self._get_hash(block)
-                block_parent_hash = self._get_parent_hash(block)
-                if last_hash and last_hash != block_parent_hash:
-                    raise Exception(
-                        f'broken chain: block {self._get_height(block)}#{block_hash} '
-                        f'is not a direct child of {self._get_height(block) - 1}#{last_hash}'
-                    )
-                last_hash = block_hash
+                if self._validate_chain_continuity:
+                    block_hash = self._get_hash(block)
+                    block_parent_hash = self._get_parent_hash(block)
+                    if last_hash and last_hash != block_parent_hash:
+                        raise Exception(
+                            f'broken chain: block {self._get_height(block)}#{block_hash} '
+                            f'is not a direct child of {self._get_height(block) - 1}#{last_hash}'
+                        )
+                    last_hash = block_hash
+                else:
+                    last_hash = self._get_hash(block)
 
                 # write block
                 self._writer.push(block)

@@ -8,6 +8,8 @@ from .ingest import ingest_from_service, ingest_from_stdin
 
 
 class CLI:
+    validate_chain_continuity = True
+
     def __init__(self, module_name: str):
         self.module_name = module_name
 
@@ -97,7 +99,8 @@ class CLI:
             dest=args.dest,
             first_block=args.first_block,
             last_block=args.last_block,
-            chunk_size=args.chunk_size
+            chunk_size=args.chunk_size,
+            validate_chain_continuity=self.validate_chain_continuity,
         )
 
     def _start_prometheus_metrics(self):
