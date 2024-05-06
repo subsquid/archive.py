@@ -27,6 +27,7 @@ class Ingest:
         with_statediffs: bool = False,
         use_trace_api: bool = False,
         use_debug_api_for_statediffs: bool = False,
+        debug_api_trace_config_timeout: Optional[str] = None,
         validate_tx_root: bool = False,
         validate_tx_type: bool = False,
         validate_logs_bloom: bool = False,
@@ -39,6 +40,7 @@ class Ingest:
         self._with_statediffs = with_statediffs
         self._use_trace_api = use_trace_api
         self._use_debug_api_for_statediffs = use_debug_api_for_statediffs
+        self._debug_api_trace_config_timeout = debug_api_trace_config_timeout
         self._validate_tx_root = validate_tx_root
         self._validate_tx_type = validate_tx_type
         self._validate_logs_bloom = validate_logs_bloom
@@ -370,8 +372,9 @@ class Ingest:
                 'tracerConfig': {
                     'onlyTopCall': False,
                     'withLog': True
-                }
-            }
+                },
+                'timeout': self._debug_api_trace_config_timeout,
+            },
         ], priority=block_number, validate_result=_validate_debug_trace)
 
         if self._is_moonriver and qty2int(block['number']) == 2077600:
@@ -408,7 +411,8 @@ class Ingest:
                 'tracerConfig': {
                     'onlyTopCall': False,  # Incorrect, but required by Alchemy endpoints
                     'diffMode': True
-                }
+                },
+                'timeout': self._debug_api_trace_config_timeout,
             }
         ], priority=block_number, validate_result=_validate_debug_statediffs)
 

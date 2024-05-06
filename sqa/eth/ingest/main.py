@@ -177,6 +177,13 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
+        '--debug-api-trace-config-timeout',
+        type=str,
+        default=None,
+        help='timeout for TraceConfig with a unit suffix (by default null)'
+    )
+
+    program.add_argument(
         '--validate-tx-root',
         action='store_true',
         help='validate block transactions against transactions root'
@@ -305,6 +312,7 @@ async def rpc_ingest(args, rpc: RpcClient, first_block: int, last_block: int | N
         with_statediffs=args.with_statediffs,
         use_trace_api=args.use_trace_api,
         use_debug_api_for_statediffs=args.use_debug_api_for_statediffs,
+        debug_api_trace_config_timeout=args.debug_api_trace_config_timeout,
         validate_tx_root=args.validate_tx_root,
         validate_tx_type=args.validate_tx_type,
         validate_logs_bloom=args.validate_logs_bloom,
