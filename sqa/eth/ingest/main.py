@@ -179,8 +179,8 @@ def parse_cli_arguments():
     program.add_argument(
         '--debug-api-trace-config-timeout',
         type=str,
-        default="5s",
-        help='timeout for TraceConfig with a unit suffix (by default 5s)'
+        default=None,
+        help='timeout for TraceConfig with a unit suffix (by default null)'
     )
 
     program.add_argument(
