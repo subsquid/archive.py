@@ -406,7 +406,7 @@ class ReceiptTable(TableBuilder):
         self.len.append(_to_int(receipt.get('len')))
         self.receipt_type.append(receipt.get('receiptType'))
         self.result.append(_to_int(receipt.get('result')))
-        self.gas_used.append(_to_int(receipt.get('gas_used')))
+        self.gas_used.append(_to_int(receipt.get('gasUsed')))
         self.data.append(receipt.get('data'))
         self.sender.append(receipt.get('sender'))
         self.recipient.append(receipt.get('recipient'))
