@@ -41,7 +41,7 @@ class BlockTable(TableBuilder):
 class TransactionTable(TableBuilder):
     def __init__(self):
         self.block_number = Column(pyarrow.int32())
-        self.transaction_index = Column(pyarrow.int32())
+        self.index = Column(pyarrow.int32())
         self.hash = Column(pyarrow.string())
         self.input_asset_ids = Column(pyarrow.list_(pyarrow.string()))
         self.input_contracts = Column(pyarrow.list_(pyarrow.string()))
@@ -91,7 +91,7 @@ class TransactionTable(TableBuilder):
 
     def append(self, block_number: int, tx: Transaction) -> None:
         self.block_number.append(block_number)
-        self.transaction_index.append(tx['index'])
+        self.index.append(tx['index'])
         self.hash.append(tx['hash'])
         self.gas_price.append(_to_int(tx.get('gasPrice')))
         self.script_gas_limit.append(_to_int(tx.get('scriptGasLimit')))
@@ -463,7 +463,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     transactions = transactions.sort_by([
         ('type', 'ascending'),
         ('block_number', 'ascending'),
-        ('transaction_index', 'ascending'),
+        ('index', 'ascending'),
     ])
     transactions = add_size_column(transactions, 'script_data')
     transactions = add_size_column(transactions, 'raw_payload')
@@ -477,7 +477,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
             '_idx',
             'type',
             'block_number',
-            'transaction_index',
+            'index',
         ],
         row_group_size=10_000,
         **kwargs

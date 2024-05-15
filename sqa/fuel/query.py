@@ -247,7 +247,7 @@ class _BlockItem(Item):
 
 _transactions_table = Table(
     name='transactions',
-    primary_key=['transaction_index'],
+    primary_key=['index'],
     column_weights={
         'input_asset_ids': 'input_asset_ids_size',
         'input_contracts': 'input_contracts_size',
@@ -278,7 +278,7 @@ class _TransactionItem(Item):
         return 'transactions'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('transaction'), ['transactionIndex'])
+        return get_selected_fields(fields.get('transaction'), ['index'])
 
     def project(self, fields: FieldSelection) -> str:
         return json_project(self.get_selected_fields(fields), rewrite={
@@ -360,7 +360,7 @@ class _ReceiptItem(Item):
     def project(self, fields: FieldSelection) -> str:
         return json_project(self.get_selected_fields(fields), rewrite={
             'pc': 'pc::text',
-            'is': 'is::text',
+            'is': '"is"::text',
             'amount': 'amount::text',
             'gas': 'gas::text',
             'param1': 'param1::text',
@@ -526,7 +526,7 @@ def _build_model():
             include_flag_name='inputs',
             query='SELECT * FROM inputs i, s WHERE '
                   'i.block_number = s.block_number AND '
-                  'i.transaction_index = s.transaction_index'
+                  'i.transaction_index = s.index'
         )
     ])
 
@@ -534,10 +534,10 @@ def _build_model():
         output_scan,
         JoinRel(
             scan=tx_scan,
-            include_flag_name='ouputs',
-            query='SELECT * FROM ouputs i, s WHERE '
+            include_flag_name='outputs',
+            query='SELECT * FROM outputs i, s WHERE '
                   'i.block_number = s.block_number AND '
-                  'i.transaction_index = s.transaction_index'
+                  'i.transaction_index = s.index'
         )
     ])
 

@@ -10,7 +10,8 @@
     "receipt": {
       "receiptType": true,
       "contract": true,
-      "data": true
+      "data": true,
+      "is": true
     }
   },
   "receipts": [

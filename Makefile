@@ -65,7 +65,8 @@ ingest-fuel:
 	@python3 -m sqa.fuel.writer data/fuel \
 		--src http://localhost:7373 \
 		--first-block 9000000 \
-		--chunk-size 256
+		--last-block 9025549 \
+		--chunk-size 512
 
 
 router:
