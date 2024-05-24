@@ -14,11 +14,14 @@ class BlockFieldSelection(TypedDict, total=False):
     daHeight: bool
     transactionsRoot: bool
     transactionsCount: bool
-    messageReceiptRoot: bool
     messageReceiptCount: bool
     prevRoot: bool
     time: bool
     applicationHash: bool
+    eventInboxRoot: bool
+    consensusParametersVersion: bool
+    stateTransitionBytecodeVersion: bool
+    messageOutboxRoot: bool
 
 
 class TransactionFieldSelection(TypedDict, total=False):
@@ -28,15 +31,17 @@ class TransactionFieldSelection(TypedDict, total=False):
     inputContracts: bool
     inputContract: bool
     policies: bool
-    gasPrice: bool
     scriptGasLimit: bool
     maturity: bool
     mintAmount: bool
     mintAssetId: bool
+    mintGasPrice: bool
     txPointer: bool
     isScript: bool
     isCreate: bool
     isMint: bool
+    isUpgrade: bool
+    isUpload: bool
     type: bool
     outputContract: bool
     witnesses: bool
@@ -45,10 +50,14 @@ class TransactionFieldSelection(TypedDict, total=False):
     script: bool
     scriptData: bool
     bytecodeWitnessIndex: bool
-    bytecodeLength: bool
+    bytecodeRoot: bool
     salt: bool
     storageSlots: bool
     rawPayload: bool
+    subsectionIndex: bool
+    subsectionsNumber: bool
+    proofSet: bool
+    upgradePurpose: bool
 
 
 ReceiptFieldSelection = TypedDict('ReceiptFieldSelection', {
@@ -95,7 +104,6 @@ class InputFieldSelection(TypedDict, total=False):
     coinAssetId: bool
     coinTxPointer: bool
     coinWitnessIndex: bool
-    coinMaturity: bool
     coinPredicateGasUsed: bool
     coinPredicate: bool
     coinPredicateData: bool
@@ -103,7 +111,7 @@ class InputFieldSelection(TypedDict, total=False):
     contractBalanceRoot: bool
     contractStateRoot: bool
     contractTxPointer: bool
-    contractContract: bool
+    contractContractId: bool
     messageSender: bool
     messageRecipient: bool
     messageAmount: bool
@@ -152,7 +160,7 @@ class _FieldSelectionSchema(mm.Schema):
 
 
 class TransactionRequest(TypedDict, total=False):
-    type: list[Literal['Script', 'Create', 'Mint']]
+    type: list[Literal['Script', 'Create', 'Mint', 'Upgrade', 'Upload']]
     receipts: bool
     inputs: bool
     outputs: bool
@@ -239,8 +247,6 @@ class _BlockItem(Item):
     def project(self, fields: FieldSelection) -> str:
         return json_project(self.get_selected_fields(fields), rewrite={
             'daHeight': 'da_height::text',
-            'transactionsCount': 'transactions_count::text',
-            'messageReceiptCount': 'message_receipt_count::text',
             'time': 'time::text'
         })
 
@@ -253,6 +259,7 @@ _transactions_table = Table(
         'input_contracts': 'input_contracts_size',
         'witnesses': 'witnesses_size',
         'storage_slots': 'storage_slots_size',
+        'proof_set': 'proof_set_size',
         'script_data': 'script_data_size',
         'raw_payload': 'raw_payload_size'
     }
@@ -282,21 +289,21 @@ class _TransactionItem(Item):
 
     def project(self, fields: FieldSelection) -> str:
         return json_project(self.get_selected_fields(fields), rewrite={
-            'gasPrice': 'gas_price::text',
             'scriptGasLimit': 'script_gas_limit::text',
             'mintAmount': 'mint_amount::text',
-            'bytecodeLength': 'bytecode_length::text',
+            'mintGasPrice': 'mint_gas_price::text',
             'policies': _POLICIES_PROJECTION,
             'inputContract': _INPUT_CONTRACT_PROJECTION,
             'outputContract': _OUTPUT_CONTRACT,
-            'status': 'status::json'
+            'status': 'status::json',
+            'upgradePurpose': 'upgrade_purpose::json'
         })
 
 
 _POLICIES_PROJECTION = '''
     CASE WHEN policies is null THEN null
     ELSE json_object(
-        'gasPrice', (policies -> 'gas_price')::text,
+        'tip', (policies -> 'tip')::text,
         'witnessLimit', (policies -> 'witness_limit')::text,
         'maturity', policies -> 'maturity',
         'maxFee', (policies -> 'max_fee')::text
@@ -311,7 +318,7 @@ _INPUT_CONTRACT_PROJECTION = '''
         'balanceRoot': input_contract -> 'balance_root',
         'stateRoot': input_contract -> 'state_root',
         'txPointer': input_contract -> 'tx_pointer',
-        'contract': input_contract -> 'contract'
+        'contractId': input_contract -> 'contract_id'
     ) END
 '''
 

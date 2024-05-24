@@ -10,16 +10,19 @@ class BlockHeader(TypedDict):
     height: int
     daHeight: JsBigInt
     transactionsRoot: Bytes
-    transactionsCount: JsBigInt
-    messageReceiptRoot: Bytes
-    messageReceiptCount: JsBigInt
+    transactionsCount: int
+    messageReceiptCount: int
     prevRoot: Bytes
     time: JsBigInt
     applicationHash: Bytes
+    eventInboxRoot: Bytes
+    consensusParametersVersion: int
+    stateTransitionBytecodeVersion: int
+    messageOutboxRoot: Bytes
 
 
 class Policies(TypedDict):
-    gasPrice: NotRequired[JsBigInt]
+    tip: NotRequired[JsBigInt]
     witnessLimit: NotRequired[JsBigInt]
     maturity: NotRequired[int]
     maxFee: NotRequired[JsBigInt]
@@ -40,6 +43,8 @@ class SuccessStatus(TypedDict):
     transactionId: Bytes
     time: JsBigInt
     programState: NotRequired[ProgramState]
+    totalGas: JsBigInt
+    totalFee: JsBigInt
 
 
 class SqueezedOutStatus(TypedDict):
@@ -53,9 +58,25 @@ class FailureStatus(TypedDict):
     time: JsBigInt
     reason: str
     programState: NotRequired[ProgramState]
+    totalGas: JsBigInt
+    totalFee: JsBigInt
 
 
 Status = SubmittedStatus | SuccessStatus | SqueezedOutStatus | FailureStatus
+
+
+class ConsensusParametersPurpose(TypedDict):
+    type: Literal['ConsensusParametersPurpose']
+    witnessIndex: int
+    checksum: Bytes
+
+
+class StateTransitionPurpose:
+    type: Literal['StateTransitionPurpose']
+    root: Bytes
+
+
+UpgradePurpose = ConsensusParametersPurpose | StateTransitionPurpose
 
 
 class TransactionInputContract(TypedDict):
@@ -63,7 +84,7 @@ class TransactionInputContract(TypedDict):
     balanceRoot: Bytes
     stateRoot: Bytes
     txPointer: str
-    contract: Bytes
+    contractId: Bytes
 
 
 class OutputContract(TypedDict):
@@ -79,15 +100,17 @@ class Transaction(TypedDict):
     inputContracts: NotRequired[list[Bytes]]
     inputContract: NotRequired[TransactionInputContract]
     policies: NotRequired[Policies]
-    gasPrice: NotRequired[JsBigInt]
     scriptGasLimit: NotRequired[JsBigInt]
     maturity: NotRequired[int]
     mintAmount: NotRequired[JsBigInt]
     mintAssetId: NotRequired[Bytes]
+    mintGasPrice: NotRequired[JsBigInt]
     txPointer: NotRequired[str]
     isScript: bool
     isCreate: bool
     isMint: bool
+    isUpgrade: bool
+    isUpload: bool
     type: Literal['Script', 'Create', 'Mint']
     outputContract: NotRequired[OutputContract]
     witnesses: NotRequired[list[Bytes]]
@@ -96,10 +119,14 @@ class Transaction(TypedDict):
     script: NotRequired[Bytes]
     scriptData: NotRequired[Bytes]
     bytecodeWitnessIndex: NotRequired[int]
-    bytecodeLength: NotRequired[JsBigInt]
+    bytecodeRoot: NotRequired[Bytes]
     salt: NotRequired[Bytes]
     storageSlots: NotRequired[list[Bytes]]
     rawPayload: NotRequired[Bytes]
+    subsectionIndex: NotRequired[int]
+    subsectionsNumber: NotRequired[int]
+    proofSet: NotRequired[list[Bytes]]
+    upgradePurpose: NotRequired[UpgradePurpose]
 
 
 class InputCoin(TypedDict):
@@ -112,7 +139,6 @@ class InputCoin(TypedDict):
     assetId: Bytes
     txPointer: str
     witnessIndex: int
-    maturity: int
     predicateGasUsed: JsBigInt
     predicate: Bytes
     predicateData: Bytes
@@ -126,7 +152,7 @@ class InputContract(TypedDict):
     balanceRoot: Bytes
     stateRoot: Bytes
     txPointer: str
-    contract: Bytes
+    contractId: Bytes
 
 
 class InputMessage(TypedDict):
@@ -145,12 +171,6 @@ class InputMessage(TypedDict):
 
 
 TransactionInput = InputCoin | InputContract | InputMessage
-
-
-class Contract(TypedDict):
-    id: Bytes
-    bytecode: Bytes
-    salt: Bytes
 
 
 class CoinOutput(TypedDict):
@@ -193,7 +213,7 @@ class ContractCreated(TypedDict):
     type: Literal['ContractCreated']
     index: int
     transactionIndex: int
-    contract: Contract
+    contract: Bytes
     stateRoot: Bytes
 
 

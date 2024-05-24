@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 import pyarrow
 
@@ -18,24 +19,30 @@ class BlockTable(TableBuilder):
         self.hash = Column(pyarrow.string())
         self.da_height = Column(pyarrow.int32())
         self.transactions_root = Column(pyarrow.string())
-        self.transactions_count = Column(pyarrow.uint64())
-        self.message_receipt_root = Column(pyarrow.string())
-        self.message_receipt_count = Column(pyarrow.uint64())
+        self.transactions_count = Column(pyarrow.uint16())
+        self.message_receipt_count = Column(pyarrow.uint32())
         self.prev_root = Column(pyarrow.string())
         self.application_hash = Column(pyarrow.string())
         self.time = Column(pyarrow.uint64())
+        self.event_inbox_root = Column(pyarrow.string())
+        self.consensus_parameters_version = Column(pyarrow.uint32())
+        self.state_transition_bytecode_version = Column(pyarrow.uint32())
+        self.message_outbox_root = Column(pyarrow.string())
 
     def append(self, block: BlockHeader) -> None:
         self.number.append(block['height'])
         self.hash.append(block['hash'])
         self.da_height.append(int(block['daHeight']))
         self.transactions_root.append(block['transactionsRoot'])
-        self.transactions_count.append(int(block['transactionsCount']))
-        self.message_receipt_root.append(block['messageReceiptRoot'])
-        self.message_receipt_count.append(int(block['messageReceiptCount']))
+        self.transactions_count.append(block['transactionsCount'])
+        self.message_receipt_count.append(block['messageReceiptCount'])
         self.prev_root.append(block['prevRoot'])
         self.application_hash.append(block['applicationHash'])
         self.time.append(int(block['time']))
+        self.event_inbox_root.append(block['eventInboxRoot'])
+        self.consensus_parameters_version.append(block['consensusParametersVersion'])
+        self.state_transition_bytecode_version.append(block['stateTransitionBytecodeVersion'])
+        self.message_outbox_root.append(block['messageOutboxRoot'])
 
 
 class TransactionTable(TableBuilder):
@@ -45,27 +52,33 @@ class TransactionTable(TableBuilder):
         self.hash = Column(pyarrow.string())
         self.input_asset_ids = Column(pyarrow.list_(pyarrow.string()))
         self.input_contracts = Column(pyarrow.list_(pyarrow.string()))
-        self.gas_price = Column(pyarrow.uint64())
         self.script_gas_limit = Column(pyarrow.uint64())
         self.maturity = Column(pyarrow.uint32())
         self.mint_amount = Column(pyarrow.uint64())
         self.mint_asset_id = Column(pyarrow.string())
+        self.mint_gas_price = Column(pyarrow.uint64())
         self.tx_pointer = Column(pyarrow.string())
         self.is_script = Column(pyarrow.bool_())
         self.is_create = Column(pyarrow.bool_())
         self.is_mint = Column(pyarrow.bool_())
+        self.is_upgrade = Column(pyarrow.bool_())
+        self.is_upload = Column(pyarrow.bool_())
         self.type = Column(pyarrow.string())
         self.witnesses = Column(pyarrow.list_(pyarrow.string()))
         self.receipts_root = Column(pyarrow.string())
         self.script = Column(pyarrow.string())
         self.script_data = Column(pyarrow.string())
         self.bytecode_witness_index = Column(pyarrow.int32())
-        self.bytecode_length = Column(pyarrow.uint64())
+        self.bytecode_root = Column(pyarrow.string())
         self.salt = Column(pyarrow.string())
         self.storage_slots = Column(pyarrow.list_(pyarrow.string()))
         self.raw_payload = Column(pyarrow.string())
+        self.subsection_index = Column(pyarrow.uint16())
+        self.subsections_number = Column(pyarrow.uint16())
+        self.proof_set = Column(pyarrow.list_(pyarrow.string()))
+        self.upgrade_purpose = Column(JSON())
         self.policies = Column(pyarrow.struct([
-            ('gas_price', pyarrow.uint64()),
+            ('tip', pyarrow.uint64()),
             ('witness_limit', pyarrow.uint64()),
             ('maturity', pyarrow.uint32()),
             ('max_fee', pyarrow.uint64())
@@ -75,7 +88,7 @@ class TransactionTable(TableBuilder):
             ('balance_root', pyarrow.string()),
             ('state_root', pyarrow.string()),
             ('tx_pointer', pyarrow.string()),
-            ('contract', pyarrow.string())
+            ('contract_id', pyarrow.string())
         ]))
         self.output_contract = Column(pyarrow.struct([
             ('input_index', pyarrow.int32()),
@@ -88,28 +101,34 @@ class TransactionTable(TableBuilder):
         self.input_contracts_size = Column(pyarrow.int64())
         self.witnesses_size = Column(pyarrow.int64())
         self.storage_slots_size = Column(pyarrow.int64())
+        self.proof_set_size = Column(pyarrow.int64())
 
     def append(self, block_number: int, tx: Transaction) -> None:
         self.block_number.append(block_number)
         self.index.append(tx['index'])
         self.hash.append(tx['hash'])
-        self.gas_price.append(_to_int(tx.get('gasPrice')))
         self.script_gas_limit.append(_to_int(tx.get('scriptGasLimit')))
         self.maturity.append(tx.get('maturity'))
         self.mint_amount.append(_to_int(tx.get('mintAmount')))
         self.mint_asset_id.append(tx.get('mintAssetId'))
+        self.mint_gas_price.append(_to_int(tx.get('mintGasPrice')))
         self.tx_pointer.append(tx.get('txPointer'))
         self.is_script.append(tx['isScript'])
         self.is_create.append(tx['isCreate'])
         self.is_mint.append(tx['isMint'])
+        self.is_upgrade.append(tx['isUpgrade'])
+        self.is_upload.append(tx['isUpload'])
         self.type.append(tx['type'])
         self.receipts_root.append(tx.get('receiptsRoot'))
         self.script.append(tx.get('script'))
         self.script_data.append(tx.get('scriptData'))
         self.bytecode_witness_index.append(tx.get('bytecodeWitnessIndex'))
-        self.bytecode_length.append(_to_int(tx.get('bytecodeLength')))
+        self.bytecode_root.append(tx.get('bytecodeRoot'))
         self.salt.append(tx.get('salt'))
         self.raw_payload.append(tx.get('rawPayload'))
+        self.subsection_index.append(tx.get('subsectionIndex'))
+        self.subsections_number.append(tx.get('subsectionsNumber'))
+        self.upgrade_purpose.append(_to_json(tx.get('upgradePurpose')))
         self.status.append(json.dumps(tx['status']))
         self._set_policies(tx.get('policies'))
         self._set_input_contract(tx.get('inputContract'))
@@ -127,16 +146,20 @@ class TransactionTable(TableBuilder):
         self.witnesses.append(witnesses)
         self.witnesses_size.append(_list_size(witnesses))
 
-        storage_slots =  tx.get('storageSlots')
+        storage_slots = tx.get('storageSlots')
         self.storage_slots.append(storage_slots)
         self.storage_slots_size.append(_list_size(storage_slots))
+
+        proof_set = tx.get('proofSet')
+        self.proof_set.append(proof_set)
+        self.proof_set_size.append(_list_size(proof_set))
 
     def _set_policies(self, policies: Policies | None):
         if policies is None:
             self.policies.append(None)
         else:
             self.policies.append({
-                'gas_price': _to_int(policies.get('gasPrice')),
+                'tip': _to_int(policies.get('tip')),
                 'witness_limit': _to_int(policies.get('witnessLimit')),
                 'maturity': policies.get('maturity'),
                 'max_fee': _to_int(policies.get('maxFee'))
@@ -151,7 +174,7 @@ class TransactionTable(TableBuilder):
                 'balance_root': input_contract['balanceRoot'],
                 'state_root': input_contract['stateRoot'],
                 'tx_pointer': input_contract['txPointer'],
-                'contract': input_contract['contract']
+                'contract_id': input_contract['contractId']
             })
 
     def _set_output_contract(self, output_contract: OutputContract):
@@ -178,7 +201,6 @@ class InputTable(TableBuilder):
         self.coin_asset_id = Column(pyarrow.string())
         self.coin_tx_pointer = Column(pyarrow.string())
         self.coin_witness_index = Column(pyarrow.int32())
-        self.coin_maturity = Column(pyarrow.uint32())
         self.coin_predicate_gas_used = Column(pyarrow.uint64())
         self.coin_predicate = Column(pyarrow.string())
         self.coin_predicate_data = Column(pyarrow.string())
@@ -187,7 +209,7 @@ class InputTable(TableBuilder):
         self.contract_balance_root = Column(pyarrow.string())
         self.contract_state_root = Column(pyarrow.string())
         self.contract_tx_pointer = Column(pyarrow.string())
-        self.contract_contract = Column(pyarrow.string())
+        self.contract_contract_id = Column(pyarrow.string())
         # message input
         self.message_sender = Column(pyarrow.string())
         self.message_recipient = Column(pyarrow.string())
@@ -214,7 +236,6 @@ class InputTable(TableBuilder):
             self.coin_asset_id.append(input['assetId'])
             self.coin_tx_pointer.append(input['txPointer'])
             self.coin_witness_index.append(input['witnessIndex'])
-            self.coin_maturity.append(input['maturity'])
             self.coin_predicate_gas_used.append(int(input['predicateGasUsed']))
             self.coin_predicate.append(input['predicate'])
             self.coin_predicate_data.append(input['predicateData'])
@@ -225,7 +246,6 @@ class InputTable(TableBuilder):
             self.coin_asset_id.append(None)
             self.coin_tx_pointer.append(None)
             self.coin_witness_index.append(None)
-            self.coin_maturity.append(None)
             self.coin_predicate_gas_used.append(None)
             self.coin_predicate.append(None)
             self.coin_predicate_data.append(None)
@@ -235,13 +255,13 @@ class InputTable(TableBuilder):
             self.contract_balance_root.append(input['balanceRoot'])
             self.contract_state_root.append(input['stateRoot'])
             self.contract_tx_pointer.append(input['txPointer'])
-            self.contract_contract.append(input['contract'])
+            self.contract_contract_id.append(input['contractId'])
         else:
             self.contract_utxo_id.append(None)
             self.contract_balance_root.append(None)
             self.contract_state_root.append(None)
             self.contract_tx_pointer.append(None)
-            self.contract_contract.append(None)
+            self.contract_contract_id.append(None)
 
         if input['type'] == 'InputMessage':
             self.message_sender.append(input['sender'])
@@ -288,11 +308,7 @@ class OutputTable(TableBuilder):
         self.variable_amount = Column(pyarrow.uint64())
         self.variable_asset_id = Column(pyarrow.string())
         # contract created
-        self.contract_created_contract = Column(pyarrow.struct([
-            ('id', pyarrow.string()),
-            ('bytecode', pyarrow.string()),
-            ('salt', pyarrow.string()),
-        ]))
+        self.contract_created_contract = Column(pyarrow.string())
         self.contract_created_state_root = Column(pyarrow.string())
 
     def append(self, block_number: int, output: TransactionOutput) -> None:
@@ -574,3 +590,7 @@ def _list_size(ls: list[str] | None) -> int:
 
 def _to_int(val: str | None) -> int | None:
     return None if val is None else int(val)
+
+
+def _to_json(val: Any | None) -> int | None:
+    return None if val is None else json.dumps(val)
