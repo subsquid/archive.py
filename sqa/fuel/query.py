@@ -419,7 +419,7 @@ class _InputItem(Item):
         return 'inputs'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('input'), ['transactionIndex', 'index'])
+        return get_selected_fields(fields.get('input'), ['transactionIndex', 'index', 'type'])
 
     def project(self, fields: FieldSelection) -> str:
         selected = self.get_selected_fields(fields)
@@ -464,7 +464,7 @@ class _OutputItem(Item):
         return 'outputs'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('output'), ['transactionIndex', 'index'])
+        return get_selected_fields(fields.get('output'), ['transactionIndex', 'index', 'type'])
 
     def project(self, fields: FieldSelection) -> str:
         selected = self.get_selected_fields(fields)
