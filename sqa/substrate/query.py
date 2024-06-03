@@ -46,6 +46,7 @@ class EventFieldSelection(TypedDict, total=False):
     phase: bool
     extrinsicIndex: bool
     callAddress: bool
+    topics: bool
 
 
 class _FieldSelectionSchema(mm.Schema):

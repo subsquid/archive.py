@@ -51,6 +51,7 @@ class Event(TypedDict):
     phase: Literal['Initialization', 'ApplyExtrinsic', 'Finalization']
     extrinsicIndex: NotRequired[int]
     callAddress: NotRequired[list[int]]
+    topics: list[Bytes]
     _evmLogAddress: NotRequired[Bytes]
     _evmLogTopics: NotRequired[list[Bytes]]
     _contractAddress: NotRequired[Bytes]
