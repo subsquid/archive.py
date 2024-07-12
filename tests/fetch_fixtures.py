@@ -31,6 +31,9 @@ def fetch_suite(suite_dir: str, archive_url: str) -> None:
             q['fromBlock'] = max(chunk.first_block, q['fromBlock'])
             q['toBlock'] = min(chunk.last_block, q.get('toBlock', math.inf))
 
+        with open(query_file, 'w') as f:
+           json.dump(q, f, indent='  ')
+
         res = requests.get(f'{archive_url}/{chunk.first_block}/worker')
         worker_url = res.text
 
