@@ -136,6 +136,7 @@ class InstructionRequest(TypedDict, total=False):
     isCommitted: bool
     transaction: bool
     transactionTokenBalances: bool
+    transactionInstructions: bool
     innerInstructions: bool
     logs: bool
 
@@ -165,6 +166,7 @@ class _InstructionRequestSchema(mm.Schema):
     isCommitted = mm.fields.Boolean()
     transaction = mm.fields.Boolean()
     transactionTokenBalances = mm.fields.Boolean()
+    transactionInstructions = mm.fields.Boolean()
     innerInstructions = mm.fields.Boolean()
     logs = mm.fields.Boolean()
 
@@ -614,7 +616,7 @@ def _build_model():
         )
     ])
 
-    for s in (balance_scan, token_balance_scan):
+    for s in (ins_scan, balance_scan, token_balance_scan):
         ins_item.sources.append(
             JoinRel(
                 scan=s,
