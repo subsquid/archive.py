@@ -64,9 +64,39 @@ ingest-starknet:
 ingest-fuel:
 	@python3 -m sqa.fuel.writer data/fuel \
 		--src http://localhost:7373 \
-		--first-block 9000000 \
-		--last-block 9025549 \
+		--first-block 1000050 \
 		--chunk-size 512
+
+
+ingest-solana:
+	@python3 -m sqa.solana.writer data/solana \
+		--src http://localhost:3000 \
+		--first-block 245012900 \
+		--last-block 245013399 \
+		--chunk-size 8192
+
+
+ingest-fantom:
+	@python3 -m sqa.eth.ingest --dest data/fantom-mainnet \
+		--raw \
+		--endpoint https://fantom-testnet.blastapi.io/1a1c6dd2-8039-4c61-bb73-8f392295e154 \
+		--first-block 25842238 \
+		--with-receipts \
+		--validate-tx-root \
+		--validate-tx-type \
+		--validate-logs-bloom \
+		--write-chunk-size 386
+
+
+ingest-optimism:
+	@python3 -m sqa.eth.ingest --dest data/optimism \
+		--raw \
+		--endpoint https://optimism-mainnet.blastapi.io/a9b69b53-4921-4137-8abb-37425c1e8968 \
+		--first-block 20246600 \
+		--last-block 20276719 \
+		--with-receipts \
+		--with-traces \
+		--write-chunk-size 2048
 
 
 router:
