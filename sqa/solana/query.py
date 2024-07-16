@@ -135,6 +135,7 @@ class InstructionRequest(TypedDict, total=False):
     a15: list[Base58Bytes]
     isCommitted: bool
     transaction: bool
+    transactionBalances: bool
     transactionTokenBalances: bool
     transactionInstructions: bool
     innerInstructions: bool
@@ -165,6 +166,7 @@ class _InstructionRequestSchema(mm.Schema):
     a15 = mm.fields.List(mm.fields.Str())
     isCommitted = mm.fields.Boolean()
     transaction = mm.fields.Boolean()
+    transactionBalances = mm.fields.Boolean()
     transactionTokenBalances = mm.fields.Boolean()
     transactionInstructions = mm.fields.Boolean()
     innerInstructions = mm.fields.Boolean()
@@ -647,7 +649,14 @@ def _build_model():
     ])
 
     balance_item.sources.extend([
-        balance_scan
+        balance_scan,
+        JoinRel(
+            scan=ins_scan,
+            include_flag_name='transactionBalances',
+            query='SELECT * FROM balances i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        )
     ])
 
     token_balance_item.sources.extend([
