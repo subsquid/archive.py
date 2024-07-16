@@ -71,11 +71,13 @@ class _CallRelationsSchema(mm.Schema):
 class CallRequest(_CallRelations):
     name: list[str]
     subcalls: bool
+    siblings: bool
 
 
 class _CallRequestSchema(_CallRelationsSchema):
     name = mm.fields.List(mm.fields.Str())
     subcalls = mm.fields.Boolean()
+    siblings = mm.fields.Boolean()
 
 
 class _EventRelations(TypedDict, total=False):
@@ -422,6 +424,14 @@ def _build_model() -> Model:
                   'i.extrinsic_index = s.extrinsic_index AND '
                   'len(i.address) > len(s.address) AND '
                   'i.address[1:len(s.address)] = s.address'
+        ),
+        JoinRel(
+            scan=call_scan,
+            include_flag_name='siblings',
+            query='SELECT * FROM calls i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.extrinsic_index = s.extrinsic_index AND '
+                  'len(i.address) = len(s.address)'
         )
     ])
 
