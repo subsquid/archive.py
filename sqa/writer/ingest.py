@@ -41,6 +41,9 @@ def ingest_from_service(
         except (httpx.NetworkError, httpx.RemoteProtocolError):
             LOG.exception('data streaming error, will pause for 5 sec and try again')
             time.sleep(5)
+        else:
+            LOG.info('no blocks were found. waiting 5 min for a new try')
+            time.sleep(300)
 
 
 # `res.iter_lines()` uses `str.splitlines()` under the hood, which splits "too much".
