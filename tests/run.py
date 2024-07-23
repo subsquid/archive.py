@@ -64,6 +64,7 @@ def main():
     run_test_suite('tests/ethereum')
     run_test_suite('tests/binance')
     run_test_suite('tests/moonbeam')
+    run_test_suite('tests/kusama')
     run_test_suite('tests/solana')
     run_test_suite('tests/starknet')
     run_test_suite('tests/fuel')
