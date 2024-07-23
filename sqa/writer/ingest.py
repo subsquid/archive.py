@@ -30,6 +30,7 @@ def ingest_from_service(
         data_range['to'] = last_block
 
     while data_range['from'] <= last_block:
+        data_ingested = False
         try:
             with httpx.stream('POST', service_url, json=data_range, timeout=httpx.Timeout(None)) as res:
                 res.raise_for_status()
@@ -38,12 +39,14 @@ def ingest_from_service(
                     height = get_block_height(block)
                     data_range['from'] = height + 1
                     yield block
+                    data_ingested = True
         except (httpx.NetworkError, httpx.RemoteProtocolError):
             LOG.exception('data streaming error, will pause for 5 sec and try again')
             time.sleep(5)
         else:
-            LOG.info('no blocks were found. waiting 5 min for a new try')
-            time.sleep(300)
+            if not data_ingested:
+                LOG.info('no blocks were found. waiting 5 min for a new try')
+                time.sleep(300)
 
 
 # `res.iter_lines()` uses `str.splitlines()` under the hood, which splits "too much".
