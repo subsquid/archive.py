@@ -169,7 +169,7 @@ def transactions_root(transactions: list[Transaction]) -> str:
             ])
         elif tx['type'] == '0x65':
             # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L43
-            pass
+            raise NotImplementedError('cannot encode tx with type 0x65')
             # trie[path] = b'\x65' + rlp.encode([
             #     qty2int(tx['chainId']),
             #     decode_hex(tx['from']),
@@ -182,7 +182,7 @@ def transactions_root(transactions: list[Transaction]) -> str:
             # ])
         elif tx['type'] == '0x66':
             # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L104
-            pass
+            raise NotImplementedError('cannot encode tx with type 0x66')
             # trie[path] = b'\x66' + rlp.encode([
             #     qty2int(tx['chainId']),
             #     decode_hex(tx['requestId']),
