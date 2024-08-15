@@ -494,12 +494,12 @@ class _TokenBalanceScan(Scan):
 
     def where(self, req: TokenBalanceRequest) -> Iterable[pyarrow.dataset.Expression | None]:
         yield field_in('account', req.get('account'))
-        yield field_in('preMint', req.get('preMint'))
-        yield field_in('postMint', req.get('postMint'))
-        yield field_in('preOwner', req.get('preOwner'))
-        yield field_in('postOwner', req.get('postOwner'))
-        yield field_in('preProgramId', req.get('preProgramId'))
-        yield field_in('postProgramId', req.get('postProgramId'))
+        yield field_in('pre_mint', req.get('preMint'))
+        yield field_in('post_mint', req.get('postMint'))
+        yield field_in('pre_owner', req.get('preOwner'))
+        yield field_in('post_owner', req.get('postOwner'))
+        yield field_in('pre_program_id', req.get('preProgramId'))
+        yield field_in('post_program_id', req.get('postProgramId'))
 
 
 class _TokenBalanceItem(Item):
