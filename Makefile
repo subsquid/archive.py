@@ -92,8 +92,8 @@ ingest-optimism:
 	@python3 -m sqa.eth.ingest --dest data/optimism \
 		--raw \
 		--endpoint https://optimism-mainnet.blastapi.io/a9b69b53-4921-4137-8abb-37425c1e8968 \
-		--first-block 20246600 \
-		--last-block 20276719 \
+		--first-block 37762360 \
+		--last-block 42042599 \
 		--with-receipts \
 		--with-traces \
 		--write-chunk-size 2048
