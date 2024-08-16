@@ -3,10 +3,10 @@ from sqa.fs import create_fs
 
 def main():
     fs = create_fs('s3://optimism-raw')
-    chunk = '0037743990-0037762359-bc27caed'
+    chunk = '0041995720-0042042599-bc71e959'
     fs.upload(
-        f'data/optimism/0037743990/{chunk}/blocks.jsonl.gz',
-        f'0030830240/{chunk}/blocks.jsonl.gz'
+        f'data/optimism/0041995720/{chunk}/blocks.jsonl.gz',
+        f'0037762360/{chunk}/blocks.jsonl.gz'
     )
 
 

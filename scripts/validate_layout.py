@@ -35,7 +35,7 @@ def main():
         msg = f'reindex from {expected} to {chunk.first_block - 1}'
         if chunk.first_block != expected:
             invalid.append([expected, chunk.first_block - 1])
-        # assert chunk.first_block == expected, msg
+        assert chunk.first_block == expected, msg
         expected = chunk.last_block + 1
     # print(invalid)
 
