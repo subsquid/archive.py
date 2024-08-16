@@ -118,7 +118,7 @@ class TransactionTable(TableBuilder):
         self.is_mint.append(tx['isMint'])
         self.is_upgrade.append(tx['isUpgrade'])
         self.is_upload.append(tx['isUpload'])
-        self.type.append(tx['type'])
+        self.type.append(tx.get('type'))
         self.receipts_root.append(tx.get('receiptsRoot'))
         self.script.append(tx.get('script'))
         self.script_data.append(tx.get('scriptData'))
