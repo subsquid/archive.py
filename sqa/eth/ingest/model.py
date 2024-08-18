@@ -89,6 +89,10 @@ class Receipt(TypedDict):
     logs: list[Log]
     type: NotRequired[Qty]
     status: NotRequired[Qty]
+    l1Fee: NotRequired[Qty]
+    l1FeeScalar: NotRequired[float]
+    l1GasPrice: NotRequired[Qty]
+    l1GasUsed: NotRequired[Qty]
 
 
 DebugFrame = TypedDict('DebugFrame', {
