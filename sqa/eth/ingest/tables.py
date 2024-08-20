@@ -93,6 +93,9 @@ class TxTableBuilder(TableBuilder):
         self.l1_fee_scalar = Column(bigfloat())
         self.l1_gas_price = Column(qty())
         self.l1_gas_used = Column(qty())
+        self.l1_blob_base_fee = Column(qty())
+        self.l1_blob_base_fee_scalar = Column(pyarrow.uint32())
+        self.l1_base_fee_scalar = Column(pyarrow.uint32())
 
     def append(self, tx: Transaction):
         block_number = qty2int(tx['blockNumber'])
@@ -131,6 +134,9 @@ class TxTableBuilder(TableBuilder):
             self.l1_fee_scalar.append(receipt.get('l1FeeScalar'))
             self.l1_gas_price.append(receipt.get('l1GasPrice'))
             self.l1_gas_used.append(receipt.get('l1GasUsed'))
+            self.l1_blob_base_fee.append(receipt.get('l1BlobBaseFee'))
+            self.l1_blob_base_fee_scalar.append(_qty2int(receipt.get('l1BlobBaseFeeScalar')))
+            self.l1_base_fee_scalar.append(_qty2int(receipt.get('l1BaseFeeScalar')))
         else:
             self.gas_used.append(None)
             self.cumulative_gas_used.append(None)
@@ -147,6 +153,9 @@ class TxTableBuilder(TableBuilder):
             self.l1_fee_scalar.append(None)
             self.l1_gas_price.append(None)
             self.l1_gas_used.append(None)
+            self.l1_blob_base_fee.append(None)
+            self.l1_blob_base_fee_scalar.append(None)
+            self.l1_base_fee_scalar.append(None)
 
 
 class LogTableBuilder(TableBuilder):
@@ -539,3 +548,7 @@ def _to_sighash(tx_input: str) -> str | None:
         return tx_input[:10]
     else:
         return None
+
+
+def _qty2int(v: Qty | None) -> int | None:
+    return None if v is None else qty2int(v)
