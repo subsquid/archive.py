@@ -4,7 +4,7 @@ import logging
 import threading
 from functools import cache
 from queue import Queue
-from typing import AsyncIterator, Iterable
+from typing import AsyncIterator, Generator, Iterable
 
 from sqa.eth.ingest.main import EndpointAction
 from sqa.starknet.writer.ingest import IngestStarknet
@@ -19,14 +19,15 @@ from sqa.writer.cli import CLI
 LOG = logging.getLogger(__name__)
 
 
-async def rpc_ingest(rpc: RpcClient, first_block: int, last_block: int | None = None) -> AsyncIterator[list[WriterBlock]]:
-    LOG.info(f'ingesting data via RPC')
+async def rpc_ingest(rpc: RpcClient, first_block: int, last_block: int | None = None, **ingest_kwargs) -> AsyncIterator[list[WriterBlock]]:
+    LOG.info('Ingesting data via RPC')
 
     # TODO: ensure starknet finality for finality_confirmation arg
     ingest = IngestStarknet(
         rpc=rpc,
         from_block=first_block,
-        to_block=last_block
+        to_block=last_block,
+        **ingest_kwargs
     )
 
     try:
@@ -36,12 +37,12 @@ async def rpc_ingest(rpc: RpcClient, first_block: int, last_block: int | None = 
         ingest.close()
 
 
-def _to_sync_gen(gen):
+def _to_sync_gen(gen: AsyncIterator) -> Generator:
     q = Queue(maxsize=5)
 
     async def consume_gen():
         try:
-            async for it in gen():
+            async for it in gen:
                 q.put(it)
             q.put(None)
         except Exception as ex:
@@ -127,9 +128,15 @@ class _CLI(CLI):
             help='port to use for built-in prometheus metrics server'
         )
 
+        program.add_argument(
+            '--with-traces',
+            action='store_true',
+            help='fetch and write starknet call traces'
+        )
+
         return program.parse_args()
 
-    def _ingest(self) -> Iterable[list[WriterBlock]]:  # type: ignore  # NOTE: incopatible block type with dict type
+    def _ingest(self) -> Generator[list[WriterBlock], None, None]:  # type: ignore  # NOTE: incopatible block type with dict type
         args = self._arguments()
         endpoints = [RpcEndpoint(**e) for e in args.endpoints]
         if endpoints:
@@ -140,9 +147,9 @@ class _CLI(CLI):
         else:
             rpc = None
 
-        assert rpc, 'no endpoints were specified'
+        assert rpc, 'No endpoints were specified'
 
-        return _to_sync_gen(lambda: rpc_ingest(rpc, args.first_block, args.last_block))
+        yield from _to_sync_gen(rpc_ingest(rpc, self._sink().get_next_block(), args.last_block))
 
     def create_writer(self) -> Writer:
         return ParquetWriter()

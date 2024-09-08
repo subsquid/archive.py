@@ -4,7 +4,7 @@ import pyarrow
 
 from sqa.fs import Fs
 from sqa.starknet.writer.model import WriterBlock
-from sqa.starknet.writer.tables import BlockTableBuilder, EventTableBuilder, TxTableBuilder
+from sqa.starknet.writer.tables import BlockTableBuilder, EventTableBuilder, TraceTableBuilder, TxTableBuilder
 from sqa.writer.parquet import BaseParquetWriter, add_size_column, add_index_column
 
 
@@ -16,12 +16,16 @@ class ParquetWriter(BaseParquetWriter):
         self.blocks = BlockTableBuilder()
         self.transactions = TxTableBuilder()
         self.events = EventTableBuilder()
+        self.traces = TraceTableBuilder()
 
     def push(self, block: WriterBlock) -> None:
         self.blocks.append(block)
 
         for tx in block['transactions']:
             self.transactions.append(tx)
+
+        for trace in block.get('traces', tuple()):
+            self.traces.append(trace)
 
         if 'writer_events' in block:
             for event in block['writer_events']:
@@ -110,6 +114,24 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
     )
 
     LOG.debug('wrote %s', loc.abs('events.parquet'))
+
+    # Handling Starknet tx execution traces
+    traces = tables['traces']
+    traces = traces.sort_by([
+        ('block_number', 'ascending'),
+        ('transaction_index', 'ascending')
+    ])
+    traces = add_index_column(traces)
+    # TODO: add size columns
+
+    loc.write_parquet(
+        'traces.parquet',
+        traces,
+        use_dictionary=['block_number', 'transaction_index'],
+        row_group_size=100_000,
+        # TODO: write_statistics
+        **kwargs
+    )
 
     # Handling Starknet blocks
     blocks = tables['blocks']

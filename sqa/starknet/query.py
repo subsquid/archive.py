@@ -40,16 +40,30 @@ class EventFieldSelection(TypedDict, total=False):
     data: bool
 
 
+class TraceFieldSelection(TypedDict, total=False):
+    callerAddress: bool
+    callContractAddress: bool
+    callType: bool
+    callClassHash: bool
+    callEntryPointSelector: bool
+    callEntryPointType: bool
+    callRevertReason: bool
+    calldata: bool
+    callResult: bool
+
+
 class FieldSelection(TypedDict, total=False):
     block: BlockFieldSelection
     transaction: TransactionFieldSelection
     event: EventFieldSelection
+    trace: TraceFieldSelection
 
 
 class _FieldSelectionSchema(mm.Schema):
     block = field_map_schema(BlockFieldSelection)
     transaction = field_map_schema(TransactionFieldSelection)
     event = field_map_schema(EventFieldSelection)
+    trace = field_map_schema(TraceFieldSelection)
 
 
 class TransactionRequest(TypedDict, total=False):
@@ -94,10 +108,27 @@ class _EventRequestSchema(mm.Schema):
     transaction = mm.fields.Boolean()
 
 
+class TraceRequest(TypedDict, total=False):
+    traceType: list[str]
+    callerAddress: list[str]
+    callContractAddress: list[str]
+    callClassHash: list[str]
+    transaction: bool
+
+
+class _TraceRequestSchema(mm.Schema):
+    traceType = mm.fields.List(mm.fields.Str())
+    callerAddress = mm.fields.List(mm.fields.Str())
+    callContractAddress = mm.fields.List(mm.fields.Str())
+    callClassHash = mm.fields.List(mm.fields.Str())
+    transaction = mm.fields.Boolean()
+
+
 class _QuerySchema(BaseQuerySchema):
     fields = mm.fields.Nested(_FieldSelectionSchema())
     transactions = mm.fields.List(mm.fields.Nested(_TransactionRequestSchema()))
     events = mm.fields.List(mm.fields.Nested(_EventRequestSchema()))
+    traces = mm.fields.List(mm.fields.Nested(_TraceRequestSchema()))
 
 
 QUERY_SCHEMA = _QuerySchema()
@@ -131,6 +162,13 @@ _events_table = Table(
         'rest_keys': 0,
         'data': 'data_size'
     }
+)
+
+
+_traces_table = Table(
+    name='traces',
+    primary_key=['transaction_index', 'trace_index'],
+    column_weights={} # TODO: add size columns
 )
 
 
@@ -223,13 +261,40 @@ class _EventItem(Item):
         })
 
 
+class _TraceScan(Scan):
+    def table(self) -> Table:
+        return _traces_table
+
+    def request_name(self) -> str:
+        return 'traces'
+
+    def where(self, req: TraceRequest) -> Iterable[Expression | None]:
+        yield field_in('trace_type', req.get('traceType'))
+        yield field_in('caller_address', req.get('callerAddress'))
+        yield field_in('call_contract_address', req.get('callContractAddress'))
+        yield field_in('call_class_hash', req.get('callClassHash'))
+
+
+class _TraceItem(Item):
+    def table(self) -> Table:
+        return _traces_table
+
+    def name(self) -> str:
+        return 'traces'
+
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('trace'), ['transactionIndex', 'traceIndex'])
+
+
 def _build_model() -> Model:
     tx_scan = _TxScan()
     event_scan = _EventScan()
+    trace_scan = _TraceScan()
 
     block_item = _BlockItem()
     tx_item = _TxItem()
     event_item = _EventItem()
+    trace_item = _TraceItem()
 
     event_item.sources.extend([
         event_scan,
@@ -248,10 +313,26 @@ def _build_model() -> Model:
             scan=event_scan,
             include_flag_name='transaction',
             scan_columns=['transaction_index']
+        ),
+        RefRel(
+            scan=trace_scan,
+            include_flag_name='transaction',
+            scan_columns=['transaction_index']
         )
     ])
 
-    return [tx_scan, event_scan, block_item, tx_item, event_item]
+    trace_item.sources.extend([
+        trace_scan,
+        JoinRel(
+            scan=tx_scan,
+            include_flag_name='traces',
+            query='SELECT * FROM traces i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        )
+    ])
+
+    return [tx_scan, event_scan, trace_scan, block_item, tx_item, event_item, trace_item]
 
 
 MODEL = _build_model()

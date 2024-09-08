@@ -29,6 +29,7 @@ class Block(TypedDict):
 
     # external fields
     events: NotRequired[list['Event']]
+    traces: NotRequired[list['Trace']]
 
 
 class WriterBlock(Block):
@@ -38,6 +39,7 @@ class WriterBlock(Block):
     # external fields
     writer_txs: list['WriterTransaction']
     writer_events: list['WriterEvent']
+    writer_traces: list['WriterTrace']
 
 
 class ResourceBounds(TypedDict):
@@ -145,3 +147,59 @@ class EventPage(TypedDict):
 class WriterEvent(Event):
     transaction_index: int
     event_index: int
+
+
+class CallMessage(TypedDict):
+    """
+    The messages sent by this invocation to L1
+    """
+
+    payload: list[FELT]
+    from_address: FELT  # l2_address in spec
+    to_address: FELT  # l1_address in spec
+    order: int
+
+
+class CallEvent(TypedDict):
+    """
+    The events emitted in this invocation
+    """
+
+    keys: list[FELT]
+    data: list[FELT]
+    order: int
+
+
+class Call(TypedDict):
+    caller_address: FELT
+    contract_address: FELT
+    call_type: str
+    class_hash: FELT
+    entry_point_selector: FELT
+    entry_point_type: str
+    revert_reason: Optional[str]
+    calldata: list[FELT]
+    result: list[FELT]
+    calls: list['Call']
+    events: list[CallEvent]
+    messages: list[CallMessage]
+    execution_resources: ExecutionResources
+
+
+class TraceRoot(TypedDict):
+    type: str
+    execute_invocation: Optional[Call]
+    constructor_invocation: Optional[Call]
+    validate_invocation: Optional[Call]
+    fee_transfer_invocation: Optional[Call]
+
+
+class Trace(TypedDict):
+    trace_root: TraceRoot
+    transaction_hash: FELT
+
+
+class WriterTrace(Trace):
+    block_number: int
+    transaction_index: int
+    trace_index: int

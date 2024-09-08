@@ -1,6 +1,6 @@
 import pyarrow
 
-from sqa.starknet.writer.model import (WriterBlock, WriterEvent,
+from sqa.starknet.writer.model import (WriterBlock, WriterEvent, WriterTrace,
                                        WriterTransaction)
 from sqa.writer.parquet import Column, TableBuilder
 
@@ -104,3 +104,30 @@ class EventTableBuilder(TableBuilder):
         else:
             self.rest_keys.append(None)
         self.keys_size.append(sum(len(k) for k in keys))
+
+
+class TraceTableBuilder(TableBuilder):
+    def __init__(self):
+        # TODO: add necessary trace contents
+        self.block_number = Column(pyarrow.int32())
+        self.transaction_index = Column(pyarrow.int32())
+        self.trace_index = Column(pyarrow.int32())
+        self.trace_type = Column(pyarrow.string())
+
+        # self.caller_address = Column(pyarrow.string())
+        # self.call_contract_address = Column(pyarrow.string())
+        # self.call_type = Column(pyarrow.string())
+        # self.call_class_hash = Column(pyarrow.string())
+        # self.call_entry_point_selector = Column(pyarrow.string())
+        # self.call_entry_point_type = Column(pyarrow.string())
+        # self.call_revert_reason = Column(pyarrow.string())
+        # self.calldata = Column(pyarrow.list_(pyarrow.string()))
+        # self.call_result = Column(pyarrow.list_(pyarrow.string()))
+
+    def append(self, tx_trace: WriterTrace):
+        # TODO: add necessary trace contents
+        # TODO: unwrap trace, write index(execution order) and parent_id(tree structure(mb with root_id))
+        self.block_number.append(tx_trace['block_number'])
+        self.transaction_index.append(tx_trace['transaction_index'])
+        self.trace_index.append(tx_trace['trace_index'])
+        self.trace_type.append(tx_trace['trace_root']['type'])
