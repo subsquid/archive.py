@@ -202,6 +202,12 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
+        '--validate-tx-sender',
+        action='store_true',
+        help='check if transaction sender matches sender recovered from signature'
+    )
+
+    program.add_argument(
         '--polygon-based',
         action='store_true',
         help='enable features related to polygon based networks',
@@ -315,6 +321,7 @@ async def rpc_ingest(args, rpc: RpcClient, first_block: int, last_block: int | N
         debug_api_trace_config_timeout=args.debug_api_trace_config_timeout,
         validate_tx_root=args.validate_tx_root,
         validate_tx_type=args.validate_tx_type,
+        validate_tx_sender=args.validate_tx_sender,
         validate_logs_bloom=args.validate_logs_bloom,
         polygon_based=args.polygon_based,
     )
