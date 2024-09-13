@@ -381,7 +381,7 @@ class Ingest:
             receipt['type'] = '0x0'
         if self._is_bitfinity_mainnet:
             if receipt.get('type') is None:
-                tx: Receipt = await self._rpc.call(
+                tx: Transaction = await self._rpc.call(
                     'eth_getTransactionByHash',
                     [tx['hash']],
                     priority=block_number
