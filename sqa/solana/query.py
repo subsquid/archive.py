@@ -135,7 +135,9 @@ class InstructionRequest(TypedDict, total=False):
     a15: list[Base58Bytes]
     isCommitted: bool
     transaction: bool
+    transactionBalances: bool
     transactionTokenBalances: bool
+    transactionInstructions: bool
     innerInstructions: bool
     logs: bool
 
@@ -164,7 +166,9 @@ class _InstructionRequestSchema(mm.Schema):
     a15 = mm.fields.List(mm.fields.Str())
     isCommitted = mm.fields.Boolean()
     transaction = mm.fields.Boolean()
+    transactionBalances = mm.fields.Boolean()
     transactionTokenBalances = mm.fields.Boolean()
+    transactionInstructions = mm.fields.Boolean()
     innerInstructions = mm.fields.Boolean()
     logs = mm.fields.Boolean()
 
@@ -490,12 +494,12 @@ class _TokenBalanceScan(Scan):
 
     def where(self, req: TokenBalanceRequest) -> Iterable[pyarrow.dataset.Expression | None]:
         yield field_in('account', req.get('account'))
-        yield field_in('preMint', req.get('preMint'))
-        yield field_in('postMint', req.get('postMint'))
-        yield field_in('preOwner', req.get('preOwner'))
-        yield field_in('postOwner', req.get('postOwner'))
-        yield field_in('preProgramId', req.get('preProgramId'))
-        yield field_in('postProgramId', req.get('postProgramId'))
+        yield field_in('pre_mint', req.get('preMint'))
+        yield field_in('post_mint', req.get('postMint'))
+        yield field_in('pre_owner', req.get('preOwner'))
+        yield field_in('post_owner', req.get('postOwner'))
+        yield field_in('pre_program_id', req.get('preProgramId'))
+        yield field_in('post_program_id', req.get('postProgramId'))
 
 
 class _TokenBalanceItem(Item):
@@ -614,7 +618,7 @@ def _build_model():
         )
     ])
 
-    for s in (balance_scan, token_balance_scan):
+    for s in (ins_scan, balance_scan, token_balance_scan):
         ins_item.sources.append(
             JoinRel(
                 scan=s,
@@ -645,7 +649,14 @@ def _build_model():
     ])
 
     balance_item.sources.extend([
-        balance_scan
+        balance_scan,
+        JoinRel(
+            scan=ins_scan,
+            include_flag_name='transactionBalances',
+            query='SELECT * FROM balances i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        )
     ])
 
     token_balance_item.sources.extend([

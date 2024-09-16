@@ -6,4 +6,6 @@ def add_temp_prefix(path: str) -> str:
     ts = round(now.timestamp() * 1000)
     name = os.path.basename(path)
     parent = os.path.dirname(path)
+    if name.startswith('temp-'):
+        return path
     return os.path.join(parent, f'temp-{ts}-{name}')

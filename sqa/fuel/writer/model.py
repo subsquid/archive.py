@@ -111,7 +111,7 @@ class Transaction(TypedDict):
     isMint: bool
     isUpgrade: bool
     isUpload: bool
-    type: Literal['Script', 'Create', 'Mint']
+    type: NotRequired[Literal['Script', 'Create', 'Mint']]
     outputContract: NotRequired[OutputContract]
     witnesses: NotRequired[list[Bytes]]
     receiptsRoot: NotRequired[Bytes]
