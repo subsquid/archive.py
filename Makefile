@@ -12,14 +12,16 @@ image-worker:
 
 ingest-eth:
 	@python3 -m sqa.eth.ingest --dest data/mainnet \
-		-e ${ETH_NODE} \
-		-c 30 \
-		-r 600 \
+		--raw \
+		-e https://eth-mainnet.blastapi.io/bba4814d-ab1b-4911-b08c-2a5db11abd22 \
 		--batch-limit 100 \
+		--with-receipts \
 		--with-traces \
 		--with-statediffs \
-		--write-chunk-size 10 \
-		--first-block 16000000
+		--use-trace-api \
+		--write-chunk-size 6666 \
+		--first-block 18499684 \
+		--last-block 18499891
 
 
 ingest-arb:
