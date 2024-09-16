@@ -1,7 +1,9 @@
+from typing import cast
 import pyarrow
 
-from sqa.starknet.writer.model import (WriterBlock, WriterEvent, WriterTrace,
+from sqa.starknet.writer.model import (WriterBlockStateUpdate, WriterBlock, WriterEvent, WriterTrace,
                                        WriterTransaction)
+from sqa.starknet.writer.model import Call as TraceCall
 from sqa.writer.parquet import Column, TableBuilder
 
 
@@ -36,6 +38,7 @@ class TxTableBuilder(TableBuilder):
     def __init__(self):
         self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
+
         self.transaction_hash = Column(pyarrow.string())
         self.contract_address = Column(pyarrow.string())
         self.entry_point_selector = Column(pyarrow.string())
@@ -78,6 +81,7 @@ class EventTableBuilder(TableBuilder):
         self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
         self.event_index = Column(pyarrow.int32())
+
         self.from_address = Column(pyarrow.string())
         self.key0 = Column(pyarrow.string())
         self.key1 = Column(pyarrow.string())
@@ -108,26 +112,125 @@ class EventTableBuilder(TableBuilder):
 
 class TraceTableBuilder(TableBuilder):
     def __init__(self):
-        # TODO: add necessary trace contents
         self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
-        self.trace_index = Column(pyarrow.int32())
         self.trace_type = Column(pyarrow.string())
 
-        # self.caller_address = Column(pyarrow.string())
-        # self.call_contract_address = Column(pyarrow.string())
-        # self.call_type = Column(pyarrow.string())
-        # self.call_class_hash = Column(pyarrow.string())
-        # self.call_entry_point_selector = Column(pyarrow.string())
-        # self.call_entry_point_type = Column(pyarrow.string())
-        # self.call_revert_reason = Column(pyarrow.string())
-        # self.calldata = Column(pyarrow.list_(pyarrow.string()))
-        # self.call_result = Column(pyarrow.list_(pyarrow.string()))
+        self.invocation_type = Column(pyarrow.string())
+        self.call_index = Column(pyarrow.int32())
+        self.parent_index = Column(pyarrow.int32())
+        self.caller_address = Column(pyarrow.string())
+        self.call_contract_address = Column(pyarrow.string())
+        self.call_type = Column(pyarrow.string())
+        self.call_class_hash = Column(pyarrow.string())
+        self.call_entry_point_selector = Column(pyarrow.string())
+        self.call_entry_point_type = Column(pyarrow.string())
+        self.call_revert_reason = Column(pyarrow.string())
+        self.calldata = Column(pyarrow.list_(pyarrow.string()))
+        self.call_result = Column(pyarrow.list_(pyarrow.string()))
 
-    def append(self, tx_trace: WriterTrace):
-        # TODO: add necessary trace contents
-        # TODO: unwrap trace, write index(execution order) and parent_id(tree structure(mb with root_id))
+        self.call_events_keys = Column(pyarrow.list_(pyarrow.string()))
+        self.call_events_data = Column(pyarrow.list_(pyarrow.string()))
+        self.call_events_order = Column(pyarrow.list_(pyarrow.int32()))
+
+        self.call_messages_payload = Column(pyarrow.list_(pyarrow.string()))
+        self.call_messages_from_address = Column(pyarrow.list_(pyarrow.string()))
+        self.call_messages_to_address = Column(pyarrow.list_(pyarrow.string()))
+        self.call_messages_order = Column(pyarrow.list_(pyarrow.int32()))
+
+    def append_root(self, tx_trace: WriterTrace):
+        trace_root = tx_trace['trace_root']
+        # NOTE: ensure one and only one call trace presented
+        call_index = 0
+        if 'execute_invocation' in trace_root:
+            call_index += self.append_call(tx_trace, trace_root['execute_invocation'], 'execute_invocation', call_index)
+        if 'constructor_invocation' in trace_root:
+            call_index += self.append_call(tx_trace, trace_root['constructor_invocation'], 'constructor_invocation', call_index)
+        if 'validate_invocation' in trace_root:
+            call_index += self.append_call(tx_trace, trace_root['validate_invocation'], 'validate_invocation', call_index)
+        if 'fee_transfer_invocation' in trace_root:
+            call_index += self.append_call(tx_trace, trace_root['fee_transfer_invocation'], 'fee_transfer_invocation', call_index)
+
+    def append_call(self, tx_trace: WriterTrace, trace_call: TraceCall, invocation_type: str, call_index: int, parent_index: int = -1) -> int:
+        # TODO: remake joins for something more vital
+
         self.block_number.append(tx_trace['block_number'])
         self.transaction_index.append(tx_trace['transaction_index'])
-        self.trace_index.append(tx_trace['trace_index'])
         self.trace_type.append(tx_trace['trace_root']['type'])
+        self.invocation_type.append(invocation_type)
+
+        self.parent_index.append(parent_index)
+        self.call_index.append(call_index)
+
+        # NOTE: nothing here for reverted calls so all fields NotRequired
+        self.caller_address.append(trace_call.get('caller_address'))
+        self.call_contract_address.append(trace_call.get('contract_address'))
+        self.call_type.append(trace_call.get('call_type'))
+        self.call_class_hash.append(trace_call.get('class_hash'))
+        self.call_entry_point_selector.append(trace_call.get('entry_point_selector'))
+        self.call_entry_point_type.append(trace_call.get('entry_point_type'))
+        self.call_revert_reason.append(trace_call.get('revert_reason'))
+        self.calldata.append(trace_call.get('calldata'))
+        self.call_result.append(trace_call.get('result'))
+
+        # TODO: should call events have own table?
+        self.call_events_keys.append([';'.join(e['keys']) for e in trace_call.get('events', [])])
+        self.call_events_data.append([';'.join(e['data']) for e in trace_call.get('events', [])])
+        self.call_events_order.append([e['order'] for e in trace_call.get('events', [])])
+
+        self.call_messages_payload.append([';'.join(m['payload']) for m in trace_call.get('messages', [])])
+        self.call_messages_from_address.append([m['from_address'] for m in trace_call.get('messages', [])])
+        self.call_messages_to_address.append([m['to_address'] for m in trace_call.get('messages', [])])
+        self.call_messages_order.append([m['order'] for m in trace_call.get('messages', [])])
+
+        # NOTE: Call execution resources omitted
+
+        node_index = call_index + 1
+        for t in trace_call.get('calls', []):
+            node_index += self.append_call(tx_trace, t, invocation_type, node_index, call_index)
+
+        return node_index - call_index
+
+
+class StateUpdateTableBuilder(TableBuilder):
+    def __init__(self):
+        self.block_number = Column(pyarrow.int32())
+
+        self.block_hash = Column(pyarrow.string())
+        self.new_root = Column(pyarrow.string())
+        self.old_root = Column(pyarrow.string())
+
+        self.storage_diffs_address = Column(pyarrow.list_(pyarrow.string()))
+        self.storage_diffs_keys = Column(pyarrow.list_(pyarrow.string()))
+        self.storage_diffs_values = Column(pyarrow.list_(pyarrow.string()))
+        self.deprecated_declared_classes = Column(pyarrow.list_(pyarrow.string()))
+        self.declared_classes_class_hash = Column(pyarrow.list_(pyarrow.string()))
+        self.declared_classes_compiled_class_hash = Column(pyarrow.list_(pyarrow.string()))
+        self.deployed_contracts_address = Column(pyarrow.list_(pyarrow.string()))
+        self.deployed_contracts_class_hash = Column(pyarrow.list_(pyarrow.string()))
+        self.replaced_classes_contract_address = Column(pyarrow.list_(pyarrow.string()))
+        self.replaced_classes_class_hash = Column(pyarrow.list_(pyarrow.string()))
+        self.nonces_contract_address = Column(pyarrow.list_(pyarrow.string()))
+        self.nonces_nonce = Column(pyarrow.list_(pyarrow.string()))
+
+    def append(self, state_update: WriterBlockStateUpdate):
+        self.block_number.append(state_update['block_number'])
+
+        self.block_hash.append(state_update['block_hash'])
+        self.new_root.append(state_update.get('new_root'))
+        self.old_root.append(state_update.get('old_root'))
+
+        state_diff = state_update['state_diff']
+        self.storage_diffs_address.append([d['address'] for d in state_diff['storage_diffs']])
+        # TODO: probably replace with map array
+        self.storage_diffs_keys.append([';'.join(e['value'] for e in d['storage_entries']) for d in state_diff['storage_diffs']])
+        self.storage_diffs_values.append([';'.join(e['value'] for e in d['storage_entries']) for d in state_diff['storage_diffs']])
+        self.deprecated_declared_classes.append(state_diff['deprecated_declared_classes'])
+        self.declared_classes_class_hash.append([d['class_hash'] for d in state_diff['declared_classes']])
+        self.declared_classes_compiled_class_hash.append([d['compiled_class_hash'] for d in state_diff['declared_classes']])
+        self.deployed_contracts_address.append([d['address'] for d in state_diff['deployed_contracts']])
+        self.deployed_contracts_class_hash.append([d['class_hash'] for d in state_diff['deployed_contracts']])
+        self.replaced_classes_contract_address.append([d['contract_address'] for d in state_diff['replaced_classes']])
+        self.replaced_classes_class_hash.append([d['class_hash'] for d in state_diff['replaced_classes']])
+        self.nonces_contract_address.append([d['contract_address'] for d in state_diff['nonces']])
+        self.nonces_nonce.append([d['nonce'] for d in state_diff['nonces']])

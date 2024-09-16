@@ -41,6 +41,7 @@ class EventFieldSelection(TypedDict, total=False):
 
 
 class TraceFieldSelection(TypedDict, total=False):
+    invocationType: bool
     callerAddress: bool
     callContractAddress: bool
     callType: bool
@@ -50,13 +51,34 @@ class TraceFieldSelection(TypedDict, total=False):
     callRevertReason: bool
     calldata: bool
     callResult: bool
+    parentIndex: bool
+    traceType: bool
 
+
+class StateUpdateFieldSelection(TypedDict, total=False):
+    blockNumber: bool
+    blockHash: bool
+    newRoot: bool
+    oldRoot: bool
+    storageDiffsAddress: bool
+    storageDiffsKeys: bool
+    storageDiffsValues: bool
+    deprecatedDeclaredClasses: bool
+    declaredClassesClassHash: bool
+    declaredClassesCompiledClassHash: bool
+    deployedContractsAddress: bool
+    deployedContractsClassHash: bool
+    replacedClassesContractAddress: bool
+    replacedClassesClassHash: bool
+    noncesContractAddress: bool
+    noncesNonce: bool
 
 class FieldSelection(TypedDict, total=False):
     block: BlockFieldSelection
     transaction: TransactionFieldSelection
     event: EventFieldSelection
     trace: TraceFieldSelection
+    stateUpdate: StateUpdateFieldSelection
 
 
 class _FieldSelectionSchema(mm.Schema):
@@ -64,6 +86,7 @@ class _FieldSelectionSchema(mm.Schema):
     transaction = field_map_schema(TransactionFieldSelection)
     event = field_map_schema(EventFieldSelection)
     trace = field_map_schema(TraceFieldSelection)
+    stateUpdate = field_map_schema(StateUpdateFieldSelection)
 
 
 class TransactionRequest(TypedDict, total=False):
@@ -109,19 +132,40 @@ class _EventRequestSchema(mm.Schema):
 
 
 class TraceRequest(TypedDict, total=False):
-    traceType: list[str]
+    # TODO: potentialy filter by calldata simular to keys of events
+    invocationType: list[str]
     callerAddress: list[str]
     callContractAddress: list[str]
     callClassHash: list[str]
+    callType: list[str]
+    callEntryPointSelector: list[str]
+    callEntryPointType: list[str]
+    traceType: list[str]
     transaction: bool
 
 
 class _TraceRequestSchema(mm.Schema):
-    traceType = mm.fields.List(mm.fields.Str())
+    invocationType: list[str]
     callerAddress = mm.fields.List(mm.fields.Str())
     callContractAddress = mm.fields.List(mm.fields.Str())
     callClassHash = mm.fields.List(mm.fields.Str())
+    callType = mm.fields.List(mm.fields.Str())
+    callEntryPointSelector = mm.fields.List(mm.fields.Str())
+    callEntryPointType = mm.fields.List(mm.fields.Str())
+    traceType = mm.fields.List(mm.fields.Str())
     transaction = mm.fields.Boolean()
+
+
+class StateUpdateRequest(TypedDict, total=False):
+    blockHash: list[str]
+    newRoot: list[str]
+    oldRoot: list[str]
+
+
+class _StateUpdateRequestSchema(mm.Schema):
+    blockHash = mm.fields.List(mm.fields.Str())
+    newRoot = mm.fields.List(mm.fields.Str())
+    oldRoot = mm.fields.List(mm.fields.Str())
 
 
 class _QuerySchema(BaseQuerySchema):
@@ -129,6 +173,7 @@ class _QuerySchema(BaseQuerySchema):
     transactions = mm.fields.List(mm.fields.Nested(_TransactionRequestSchema()))
     events = mm.fields.List(mm.fields.Nested(_EventRequestSchema()))
     traces = mm.fields.List(mm.fields.Nested(_TraceRequestSchema()))
+    stateUpdates = mm.fields.List(mm.fields.Nested(_StateUpdateRequestSchema()))
 
 
 QUERY_SCHEMA = _QuerySchema()
@@ -167,8 +212,38 @@ _events_table = Table(
 
 _traces_table = Table(
     name='traces',
-    primary_key=['transaction_index', 'trace_index'],
-    column_weights={} # TODO: add size columns
+    primary_key=['block_number', 'transaction_index', 'call_index'],
+    column_weights={
+        'calldata': 'calldata_size',
+        'call_result': 'call_result_size',
+        'call_events_keys': 'call_events_keys_size',
+        'call_events_data': 'call_events_data_size',
+        'call_events_order': 'call_events_order_size',
+        'call_messages_payload': 'call_messages_payload_size',
+        'call_messages_from_address': 'call_messages_from_address_size',
+        'call_messages_to_address': 'call_messages_to_address_size',
+        'call_messages_order': 'call_messages_order_size',
+    }
+)
+
+
+_state_updates_table = Table(
+    name='state_updates',
+    primary_key=['block_number'],
+    column_weights={
+        'storage_diffs_address': 'storage_diffs_address_size',
+        'storage_diffs_keys': 'storage_diffs_keys_size',
+        'storage_diffs_values': 'storage_diffs_values_size',
+        'deprecated_declared_classes': 'deprecated_declared_classes_size',
+        'declared_classes_class_hash': 'declared_classes_class_hash_size',
+        'declared_classes_compiled_class_hash': 'declared_classes_compiled_class_hash_size',
+        'deployed_contracts_address': 'deployed_contracts_address_size',
+        'deployed_contracts_class_hash': 'deployed_contracts_class_hash_size',
+        'replaced_classes_contract_address': 'replaced_classes_contract_address_size',
+        'replaced_classes_class_hash': 'replaced_classes_class_hash_size',
+        'nonces_contract_address': 'nonces_contract_address_size',
+        'nonces_nonce': 'nonces_nonce_size',
+    }
 )
 
 
@@ -269,10 +344,14 @@ class _TraceScan(Scan):
         return 'traces'
 
     def where(self, req: TraceRequest) -> Iterable[Expression | None]:
-        yield field_in('trace_type', req.get('traceType'))
         yield field_in('caller_address', req.get('callerAddress'))
         yield field_in('call_contract_address', req.get('callContractAddress'))
+        yield field_in('call_type', req.get('callType'))
         yield field_in('call_class_hash', req.get('callClassHash'))
+        yield field_in('call_entry_point_selector', req.get('callEntryPointSelector'))
+        yield field_in('call_entry_point_type', req.get('callEntryPointType'))
+        yield field_in('trace_type', req.get('traceType'))
+        yield field_in('invocation_type', req.get('invocationType'))
 
 
 class _TraceItem(Item):
@@ -283,18 +362,48 @@ class _TraceItem(Item):
         return 'traces'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('trace'), ['transactionIndex', 'traceIndex'])
+        return get_selected_fields(fields.get('trace'), [
+            'transaction_index',
+            'call_index'
+        ])
+
+
+class _StateUpdateScan(Scan):
+    def table(self) -> Table:
+        return _state_updates_table
+
+    def request_name(self) -> str:
+        return 'stateUpdates'
+
+    def where(self, req: StateUpdateRequest) -> Iterable[Expression | None]:
+        yield field_in('block_number', req.get('blockNumber'))
+        yield field_in('block_hash', req.get('blockHash'))
+        yield field_in('new_root', req.get('newRoot'))
+        yield field_in('old_root', req.get('oldRoot'))
+
+
+class _StateUpdateItem(Item):
+    def table(self) -> Table:
+        return _state_updates_table
+
+    def name(self) -> str:
+        return 'state_updates'
+
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('stateUpdate'))
 
 
 def _build_model() -> Model:
     tx_scan = _TxScan()
     event_scan = _EventScan()
     trace_scan = _TraceScan()
+    state_update_scan = _StateUpdateScan()
 
     block_item = _BlockItem()
     tx_item = _TxItem()
     event_item = _EventItem()
     trace_item = _TraceItem()
+    state_update_item = _StateUpdateItem()
 
     event_item.sources.extend([
         event_scan,
@@ -332,7 +441,7 @@ def _build_model() -> Model:
         )
     ])
 
-    return [tx_scan, event_scan, trace_scan, block_item, tx_item, event_item, trace_item]
+    return [tx_scan, event_scan, trace_scan, state_update_scan, block_item, tx_item, event_item, trace_item, state_update_item]
 
 
 MODEL = _build_model()

@@ -171,7 +171,8 @@ class Sink:
                 last_report = current_time
 
         # NOTE: In case no chunks were made we still need to save data we received
-        flush()
+        if self._last_seen_block != self._last_flushed_block:
+            flush()
 
         self._writer.end()
 

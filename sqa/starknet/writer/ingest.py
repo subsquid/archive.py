@@ -4,7 +4,7 @@ import logging
 from typing import AsyncIterator, Optional, cast
 
 from sqa.eth.ingest.ingest import _run_subtasks
-from sqa.starknet.writer.model import EventPage, Block, Event, Trace, WriterBlock, WriterEvent, WriterTrace, WriterTransaction
+from sqa.starknet.writer.model import BlockStateUpdate, EventPage, Block, Event, Trace, WriterBlock, WriterBlockStateUpdate, WriterEvent, WriterTrace, WriterTransaction
 from sqa.util.rpc.client import RpcClient
 
 
@@ -116,6 +116,9 @@ class IngestStarknet:
 
         if self._with_traces:
             yield self._fetch_starknet_traces(blocks)
+        
+        if self._with_statediffs:
+            yield self._fetch_starknet_state_updates(blocks)
 
     async def _fetch_starknet_logs(self, blocks: list[Block]) -> None:
         priority = blocks[0]['block_number']
@@ -162,10 +165,22 @@ class IngestStarknet:
 
             traces: list[Trace] = await self._rpc.call(
                 'starknet_traceBlockTransactions',
-                params=[{"block_id": {"block_number": num}}],
+                params=[{"block_number": num}],
                 priority=num
             )
             block['traces'] = traces
+
+    async def _fetch_starknet_state_updates(self, blocks: list[Block]) -> None:
+        for block in blocks:
+            num = block['block_number']
+
+            state_update: BlockStateUpdate = await self._rpc.call(
+                'starknet_getStateUpdate',
+                params=[{"block_number": num}],
+                priority=num
+            )
+
+            block['state_update'] = state_update
 
     async def _detect_special_chains(self) -> None:
         self._is_starknet = True
@@ -206,16 +221,15 @@ class IngestStarknet:
 
                 transaction_hash_to_index[tx['transaction_hash']] = tx['transaction_index']
 
-        event_index: dict[str, int] = defaultdict(lambda: 0)
         # could be done with one dict, but i thought its nicer with two
         for block in stride:
+            event_index: dict[str, int] = defaultdict(lambda: 0)
             block['writer_events'] = cast(list[WriterEvent], block['events'])
             for event in block['writer_events']:
                 event['transaction_index'] = transaction_hash_to_index[event['transaction_hash']]
                 event['event_index'] = event_index[event['transaction_hash']]
                 event_index[event['transaction_hash']] += 1
 
-        trace_index: dict[str, int] = defaultdict(lambda: 0)
         for block in stride:
             if 'traces' not in block:
                 continue
@@ -223,7 +237,11 @@ class IngestStarknet:
             for trace in block['writer_traces']:
                 trace['transaction_index'] = transaction_hash_to_index[trace['transaction_hash']]
                 trace['block_number'] = block['block_number']
-                trace['trace_index'] = trace_index[trace['transaction_hash']]
-                trace_index[trace['transaction_hash']] += 1
-            
+
+        for block in stride:
+            if 'state_update' not in block:
+                continue
+            block['writer_state_update'] = cast(list[WriterBlockStateUpdate], block['state_update'])
+            block['writer_state_update']['block_number'] = block['block_number']
+
         return stride

@@ -134,6 +134,12 @@ class _CLI(CLI):
             help='fetch and write starknet call traces'
         )
 
+        program.add_argument(
+            '--with-statediffs',
+            action='store_true',
+            help='fetch and write starknet state updates(diffs)'
+        )
+
         return program.parse_args()
 
     def _ingest(self) -> Generator[list[WriterBlock], None, None]:  # type: ignore  # NOTE: incopatible block type with dict type
@@ -149,7 +155,7 @@ class _CLI(CLI):
 
         assert rpc, 'No endpoints were specified'
 
-        yield from _to_sync_gen(rpc_ingest(rpc, self._sink().get_next_block(), args.last_block))
+        yield from _to_sync_gen(rpc_ingest(rpc, self._sink().get_next_block(), args.last_block, with_traces=args.with_traces, with_statediffs=args.with_statediffs))
 
     def create_writer(self) -> Writer:
         return ParquetWriter()
