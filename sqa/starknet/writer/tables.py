@@ -152,8 +152,6 @@ class TraceTableBuilder(TableBuilder):
             call_index += self.append_call(tx_trace, trace_root['fee_transfer_invocation'], 'fee_transfer_invocation', call_index)
 
     def append_call(self, tx_trace: WriterTrace, trace_call: TraceCall, invocation_type: str, call_index: int, parent_index: int = -1) -> int:
-        # TODO: remake joins for something more vital
-
         self.block_number.append(tx_trace['block_number'])
         self.transaction_index.append(tx_trace['transaction_index'])
         self.trace_type.append(tx_trace['trace_root']['type'])
@@ -162,7 +160,7 @@ class TraceTableBuilder(TableBuilder):
         self.parent_index.append(parent_index)
         self.call_index.append(call_index)
 
-        # NOTE: nothing here for reverted calls so all fields NotRequired
+        # NOTE: fields below are empty for reverted calls
         self.caller_address.append(trace_call.get('caller_address'))
         self.call_contract_address.append(trace_call.get('contract_address'))
         self.call_type.append(trace_call.get('call_type'))
@@ -178,6 +176,7 @@ class TraceTableBuilder(TableBuilder):
         self.call_events_data.append([';'.join(e['data']) for e in trace_call.get('events', [])])
         self.call_events_order.append([e['order'] for e in trace_call.get('events', [])])
 
+        # TODO: should join be replaced with another nested array?
         self.call_messages_payload.append([';'.join(m['payload']) for m in trace_call.get('messages', [])])
         self.call_messages_from_address.append([m['from_address'] for m in trace_call.get('messages', [])])
         self.call_messages_to_address.append([m['to_address'] for m in trace_call.get('messages', [])])
@@ -222,7 +221,7 @@ class StateUpdateTableBuilder(TableBuilder):
 
         state_diff = state_update['state_diff']
         self.storage_diffs_address.append([d['address'] for d in state_diff['storage_diffs']])
-        # TODO: probably replace with map array
+        # TODO: probably replace with map array or move to separate table
         self.storage_diffs_keys.append([';'.join(e['value'] for e in d['storage_entries']) for d in state_diff['storage_diffs']])
         self.storage_diffs_values.append([';'.join(e['value'] for e in d['storage_entries']) for d in state_diff['storage_diffs']])
         self.deprecated_declared_classes.append(state_diff['deprecated_declared_classes'])

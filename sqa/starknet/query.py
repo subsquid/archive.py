@@ -157,13 +157,11 @@ class _TraceRequestSchema(mm.Schema):
 
 
 class StateUpdateRequest(TypedDict, total=False):
-    blockHash: list[str]
     newRoot: list[str]
     oldRoot: list[str]
 
 
 class _StateUpdateRequestSchema(mm.Schema):
-    blockHash = mm.fields.List(mm.fields.Str())
     newRoot = mm.fields.List(mm.fields.Str())
     oldRoot = mm.fields.List(mm.fields.Str())
 
@@ -212,7 +210,7 @@ _events_table = Table(
 
 _traces_table = Table(
     name='traces',
-    primary_key=['block_number', 'transaction_index', 'call_index'],
+    primary_key=['transaction_index', 'call_index'],
     column_weights={
         'calldata': 'calldata_size',
         'call_result': 'call_result_size',
@@ -229,7 +227,7 @@ _traces_table = Table(
 
 _state_updates_table = Table(
     name='state_updates',
-    primary_key=['block_number'],
+    primary_key=[],
     column_weights={
         'storage_diffs_address': 'storage_diffs_address_size',
         'storage_diffs_keys': 'storage_diffs_keys_size',
@@ -376,8 +374,6 @@ class _StateUpdateScan(Scan):
         return 'stateUpdates'
 
     def where(self, req: StateUpdateRequest) -> Iterable[Expression | None]:
-        yield field_in('block_number', req.get('blockNumber'))
-        yield field_in('block_hash', req.get('blockHash'))
         yield field_in('new_root', req.get('newRoot'))
         yield field_in('old_root', req.get('oldRoot'))
 
@@ -440,6 +436,8 @@ def _build_model() -> Model:
                   'i.transaction_index = s.transaction_index'
         )
     ])
+
+    state_update_item.sources.extend([state_update_scan])
 
     return [tx_scan, event_scan, trace_scan, state_update_scan, block_item, tx_item, event_item, trace_item, state_update_item]
 

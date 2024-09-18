@@ -101,8 +101,6 @@ class IngestStarknet:
 
         await _run_subtasks(self._starknet_stride_subtasks(blocks))
 
-        # TODO: if self._with_traces and not self._with_receipts:_txs_with_missing_status
-
         # NOTE: This code moved here to separate retrieving raw data as it is in node from preparing data to comply with archive format
         strides: list[WriterBlock] = self.make_writer_ready_blocks(blocks)
         LOG.debug('stride is ready', extra=extra)
@@ -193,8 +191,6 @@ class IngestStarknet:
             ],
             priority=from_block
         )
-
-        # TODO: validate tx root?
 
         return blocks
 
