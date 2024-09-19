@@ -114,7 +114,7 @@ class ParquetWriter:
 
 def write_parquet(loc: Fs, batch: ArrowDataBatch) -> None:
     kwargs = {
-        'data_page_size': 128 * 1024,
+        'data_page_size': 32 * 1024,
         'dictionary_pagesize_limit': 128 * 1024,
         'compression': 'zstd',
         # 'compression_level': 12,
@@ -124,8 +124,9 @@ def write_parquet(loc: Fs, batch: ArrowDataBatch) -> None:
 
     transactions = batch['transactions']
     transactions = transactions.sort_by([
-        ('to', 'ascending'),
         ('sighash', 'ascending'),
+        ('to', 'ascending'),
+        ('from', 'ascending'),
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending')
     ])
@@ -135,9 +136,9 @@ def write_parquet(loc: Fs, batch: ArrowDataBatch) -> None:
     loc.write_parquet(
         'transactions.parquet',
         transactions,
-        use_dictionary=['to', 'sighash'],
+        use_dictionary=['from', 'to', 'sighash'],
         row_group_size=10000,
-        write_statistics=['_idx', 'to', 'sighash', 'block_number'],
+        write_statistics=['_idx', 'from', 'to', 'sighash', 'block_number', 'transaction_index'],
         **kwargs
     )
 
@@ -145,8 +146,8 @@ def write_parquet(loc: Fs, batch: ArrowDataBatch) -> None:
 
     logs = batch['logs']
     logs = logs.sort_by([
-        ('address', 'ascending'),
         ('topic0', 'ascending'),
+        ('address', 'ascending'),
         ('block_number', 'ascending'),
         ('log_index', 'ascending')
     ])
@@ -158,7 +159,7 @@ def write_parquet(loc: Fs, batch: ArrowDataBatch) -> None:
         logs,
         use_dictionary=['address', 'topic0'],
         row_group_size=10000,
-        write_statistics=['_idx', 'address', 'topic0', 'block_number'],
+        write_statistics=['_idx', 'address', 'topic0', 'block_number', 'transaction_index', 'log_index'],
         **kwargs
     )
 
@@ -166,6 +167,15 @@ def write_parquet(loc: Fs, batch: ArrowDataBatch) -> None:
 
     if 'traces' in batch:
         traces = batch['traces']
+        traces = traces.sort_by([
+            ('type', 'ascending'),
+            ('create_from', 'ascending'),
+            ('call_sighash', 'ascending'),
+            ('call_to', 'ascending'),
+            ('call_from', 'ascending'),
+            ('block_number', 'ascending'),
+            ('transaction_index', 'ascending')
+        ])
         traces = add_size_column(traces, 'create_init')
         traces = add_size_column(traces, 'create_result_code')
         traces = add_size_column(traces, 'call_input')
@@ -182,7 +192,15 @@ def write_parquet(loc: Fs, batch: ArrowDataBatch) -> None:
                 'call_type',
                 'call_sighash'
             ],
-            write_statistics=['_idx', 'type', 'call_from', 'call_to', 'call_sighash', 'block_number'],
+            write_statistics=[
+                '_idx',
+                'type',
+                'call_from',
+                'call_to',
+                'call_sighash',
+                'block_number',
+                'transaction_index'
+            ],
             row_group_size=10000,
             **kwargs
         )

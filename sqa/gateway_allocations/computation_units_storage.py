@@ -30,8 +30,6 @@ CREATE TABLE IF NOT EXISTS gateways(
 );
 """
 
-CHECK_ALLOCATION = "SELECT COUNT(*) FROM gateways WHERE gateway_id = ?1"
-
 SPEND_CUS = """
 UPDATE operators
 SET spent_cus = spent_cus + ?2
@@ -44,6 +42,7 @@ CLEAN_OLD_ALLOCATIONS = "DELETE FROM operators WHERE epoch < ?1"
 UPDATE_ALLOCATION = """
 INSERT INTO operators (address, allocated_cus, spent_cus, epoch)
 VALUES (?1, ?2, 0, ?3)
+ON CONFLICT(address) DO UPDATE SET allocated_cus=excluded.allocated_cus, epoch=excluded.epoch
 """
 
 ADD_GATEWAY = "INSERT OR REPLACE INTO gateways (gateway_id, operator_addr) VALUES (?1, ?2)"
@@ -81,19 +80,15 @@ class ComputationUnitsStorage:
     def _assert_initialized(self):
         assert self._own_id is not None, "GatewayStorage uninitialized"
 
-    def update_epoch(self, current_epoch: int) -> None:
+    def update_epoch(self, current_epoch: int) -> bool:
         self._assert_initialized()
         if current_epoch > self._epoch:
             LOG.info(f"New epoch started: {current_epoch}")
             with self._db_conn:
                 self._db_conn.execute(CLEAN_OLD_ALLOCATIONS, (current_epoch,))
             self._epoch = current_epoch
-
-    def has_allocation(self, gateway_id: str) -> bool:
-        self._assert_initialized()
-        LOG.debug(f"Checking if gateway {gateway_id} has allocation")
-        with self._db_conn:
-            return self._db_conn.execute(CHECK_ALLOCATION, (gateway_id,)).fetchone()[0]
+            return True
+        return False
 
     def try_spend_cus(self, gateway_id: str, used_units: int) -> bool:
         self._assert_initialized()
@@ -101,13 +96,14 @@ class ComputationUnitsStorage:
         with self._db_conn:
             return self._db_conn.execute(SPEND_CUS, (gateway_id, used_units)).rowcount > 0
 
-    def update_allocation(self, cluster: GatewayCluster, allocated_cus: int) -> None:
+    def update_allocations(self, clusters: list[GatewayCluster]) -> None:
         self._assert_initialized()
-        LOG.debug(f"Operator {cluster.operator_addr} allocated {allocated_cus}")
         with self._db_conn:
-            self._db_conn.execute(
-                UPDATE_ALLOCATION,
-                (cluster.operator_addr, allocated_cus, self._epoch)
-            )
-            for gateway_id in cluster.gateway_ids:
-                self._db_conn.execute(ADD_GATEWAY, (gateway_id, cluster.operator_addr))
+            for cluster in clusters:
+                LOG.debug(f"Operator {cluster.operator_addr} allocated {cluster.allocated_cus}")
+                self._db_conn.execute(
+                    UPDATE_ALLOCATION,
+                    (cluster.operator_addr, cluster.allocated_cus, self._epoch)
+                )
+                for gateway_id in cluster.gateway_ids:
+                    self._db_conn.execute(ADD_GATEWAY, (gateway_id, cluster.operator_addr))

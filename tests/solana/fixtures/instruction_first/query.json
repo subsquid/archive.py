@@ -12,7 +12,8 @@
       "programId": true,
       "accounts": true,
       "data": true,
-      "error": true
+      "error": true,
+      "hasDroppedLogMessages": true
     },
     "transaction": {
       "signatures": true,

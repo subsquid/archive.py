@@ -127,6 +127,7 @@ class EventTable(TableBuilder):
         self.phase = Column(pyarrow.string())
         self.extrinsic_index = Column(pyarrow.int32())
         self.call_address = Column(address())
+        self.topics = Column(pyarrow.list_(binary()))
         self._evm_log_address = Column(binary())
         self._evm_log_topic0 = Column(binary())
         self._evm_log_topic1 = Column(binary())
@@ -143,6 +144,7 @@ class EventTable(TableBuilder):
         self.phase.append(event['phase'])
         self.extrinsic_index.append(event.get('extrinsicIndex'))
         self.call_address.append(event.get('callAddress'))
+        self.topics.append(event['topics'])
         self._evm_log_address.append(event.get('_evmLogAddress'))
 
         topics = iter(event.get('_evmLogTopics', ()))

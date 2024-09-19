@@ -21,12 +21,16 @@ RUN pdm sync -G writer --no-editable --prod
 FROM base AS writer-base
 COPY --from=writer-builder /project/.venv /app/env/
 COPY --from=writer-builder /project/sqa /app/sqa/
-ADD rewrite_archive.py /app/rewrite_archive.py
 
 
 FROM writer-base AS eth-ingest
 RUN /app/env/bin/python -m sqa.eth.ingest --help > /dev/null # win a little bit of startup time
 ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.eth.ingest"]
+
+
+FROM writer-base AS solana-writer
+RUN /app/env/bin/python -m sqa.solana.writer --help > /dev/null # win a little bit of startup time
+ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.solana.writer"]
 
 
 FROM writer-base AS substrate-writer
@@ -37,6 +41,16 @@ ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.substrate.writer"]
 FROM writer-base AS tron-writer
 RUN /app/env/bin/python -m sqa.tron.writer --help > /dev/null # win a little bit of startup time
 ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.tron.writer"]
+
+
+FROM writer-base AS starknet-writer
+RUN /app/env/bin/python -m sqa.starknet.writer --help > /dev/null # win a little bit of startup time
+ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.starknet.writer"]
+
+
+FROM writer-base AS fuel-writer
+RUN /app/env/bin/python -m sqa.fuel.writer --help > /dev/null # win a little bit of startup time
+ENTRYPOINT ["/app/env/bin/python", "-m", "sqa.fuel.writer"]
 
 
 FROM builder AS worker-builder

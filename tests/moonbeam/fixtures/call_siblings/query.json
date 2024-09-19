@@ -1,0 +1,18 @@
+{
+  "type": "substrate",
+  "fromBlock": 4669460,
+  "fields": {
+    "call": {
+      "name": true,
+      "args": true,
+      "origin": true,
+      "error": true
+    }
+  },
+  "calls": [
+    {
+      "name": ["System.remark_with_event"],
+      "siblings": true
+    }
+  ]
+}

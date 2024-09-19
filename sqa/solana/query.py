@@ -5,7 +5,7 @@ import pyarrow
 
 from sqa.query.model import Table, Item, Scan, ReqName, JoinRel, RefRel
 from sqa.query.schema import field_map_schema, BaseQuerySchema
-from sqa.query.util import get_selected_fields, json_project, field_in, to_snake_case
+from sqa.query.util import get_selected_fields, json_project, field_in, to_snake_case, field_eq
 from sqa.solana.writer.model import Base58Bytes
 
 
@@ -30,17 +30,21 @@ class TransactionFieldSelection(TypedDict, total=False):
     computeUnitsConsumed: bool
     loadedAddresses: bool
     feePayer: bool
+    hasDroppedLogMessages: bool
 
 
 class InstructionFieldSelection(TypedDict, total=False):
     programId: bool
     accounts: bool
     data: bool
-    error: bool
     d1: bool
     d2: bool
     d4: bool
     d8: bool
+    error: bool
+    computeUnitsConsumed: bool
+    isCommitted: bool
+    hasDroppedLogMessages: bool
 
 
 class LogFieldSelection(TypedDict, total=False):
@@ -50,11 +54,39 @@ class LogFieldSelection(TypedDict, total=False):
     message: bool
 
 
+class BalanceFieldSelection(TypedDict, total=False):
+    pre: bool
+    post: bool
+
+
+class TokenBalanceFieldSelection(TypedDict, total=False):
+    preMint: bool
+    postMint: bool
+    preDecimals: bool
+    postDecimals: bool
+    preProgramId: bool
+    postProgramId: bool
+    preOwner: bool
+    postOwner: bool
+    preAmount: bool
+    postAmount: bool
+
+
+class RewardFieldSelection(TypedDict, total=False):
+    lamports: bool
+    postBalance: bool
+    rewardType: bool
+    commission: bool
+
+
 class FieldSelection(TypedDict, total=False):
     block: BlockFieldSelection
     transaction: TransactionFieldSelection
     instruction: InstructionFieldSelection
     log: LogFieldSelection
+    balance: BalanceFieldSelection
+    tokenBalance: TokenBalanceFieldSelection
+    reward: RewardFieldSelection
 
 
 class _FieldSelectionSchema(mm.Schema):
@@ -62,6 +94,9 @@ class _FieldSelectionSchema(mm.Schema):
     transaction = field_map_schema(TransactionFieldSelection)
     instruction = field_map_schema(InstructionFieldSelection)
     log = field_map_schema(LogFieldSelection)
+    balance = field_map_schema(BalanceFieldSelection)
+    tokenBalance = field_map_schema(TokenBalanceFieldSelection)
+    reward = field_map_schema(RewardFieldSelection)
 
 
 class TransactionRequest(TypedDict, total=False):
@@ -92,7 +127,17 @@ class InstructionRequest(TypedDict, total=False):
     a7: list[Base58Bytes]
     a8: list[Base58Bytes]
     a9: list[Base58Bytes]
+    a10: list[Base58Bytes]
+    a11: list[Base58Bytes]
+    a12: list[Base58Bytes]
+    a13: list[Base58Bytes]
+    a14: list[Base58Bytes]
+    a15: list[Base58Bytes]
+    isCommitted: bool
     transaction: bool
+    transactionBalances: bool
+    transactionTokenBalances: bool
+    transactionInstructions: bool
     innerInstructions: bool
     logs: bool
 
@@ -113,7 +158,17 @@ class _InstructionRequestSchema(mm.Schema):
     a7 = mm.fields.List(mm.fields.Str())
     a8 = mm.fields.List(mm.fields.Str())
     a9 = mm.fields.List(mm.fields.Str())
+    a10 = mm.fields.List(mm.fields.Str())
+    a11 = mm.fields.List(mm.fields.Str())
+    a12 = mm.fields.List(mm.fields.Str())
+    a13 = mm.fields.List(mm.fields.Str())
+    a14 = mm.fields.List(mm.fields.Str())
+    a15 = mm.fields.List(mm.fields.Str())
+    isCommitted = mm.fields.Boolean()
     transaction = mm.fields.Boolean()
+    transactionBalances = mm.fields.Boolean()
+    transactionTokenBalances = mm.fields.Boolean()
+    transactionInstructions = mm.fields.Boolean()
     innerInstructions = mm.fields.Boolean()
     logs = mm.fields.Boolean()
 
@@ -132,11 +187,58 @@ class _LogRequestSchema(mm.Schema):
     instruction = mm.fields.Boolean()
 
 
+class BalanceRequest(TypedDict, total=False):
+    account: list[Base58Bytes]
+    transaction: bool
+    transactionInstructions: bool
+
+
+class _BalanceRequestSchema(mm.Schema):
+    account = mm.fields.List(mm.fields.Str())
+    transaction = mm.fields.Boolean()
+    transactionInstructions = mm.fields.Boolean()
+
+
+class TokenBalanceRequest(TypedDict, total=False):
+    account: list[Base58Bytes]
+    preMint: list[Base58Bytes]
+    postMint: list[Base58Bytes]
+    preProgramId: list[Base58Bytes]
+    postProgramId: list[Base58Bytes]
+    preOwner: list[Base58Bytes]
+    postOwner: list[Base58Bytes]
+    transaction: bool
+    transactionInstructions: bool
+
+
+class _TokenBalanceRequestSchema(mm.Schema):
+    account = mm.fields.List(mm.fields.Str())
+    preMint = mm.fields.List(mm.fields.Str())
+    postMint = mm.fields.List(mm.fields.Str())
+    preProgramId = mm.fields.List(mm.fields.Str())
+    postProgramId = mm.fields.List(mm.fields.Str())
+    preOwner = mm.fields.List(mm.fields.Str())
+    postOwner = mm.fields.List(mm.fields.Str())
+    transaction = mm.fields.Boolean()
+    transactionInstructions = mm.fields.Boolean()
+
+
+class RewardRequest(TypedDict, total=False):
+    pubkey: list[Base58Bytes]
+
+
+class _RewardRequestSchema(mm.Schema):
+    pubkey = mm.fields.List(mm.fields.Str())
+
+
 class _QuerySchema(BaseQuerySchema):
     fields = mm.fields.Nested(_FieldSelectionSchema())
     transactions = mm.fields.List(mm.fields.Nested(_TransactionRequestSchema()))
     instructions = mm.fields.List(mm.fields.Nested(_InstructionRequestSchema()))
     logs = mm.fields.List(mm.fields.Nested(_LogRequestSchema()))
+    balances = mm.fields.List(mm.fields.Nested(_BalanceRequestSchema()))
+    tokenBalances = mm.fields.List(mm.fields.Nested(_TokenBalanceRequestSchema()))
+    rewards = mm.fields.List(mm.fields.Nested(_RewardRequestSchema()))
 
 
 QUERY_SCHEMA = _QuerySchema()
@@ -159,20 +261,14 @@ class _BlockItem(Item):
         return get_selected_fields(fields.get('block'), ['number', 'hash'])
 
     def project(self, fields: FieldSelection) -> str:
-        def rewrite_timestamp(f: str):
-            if f == 'timestamp':
-                return 'timestamp', f'epoch_ms(timestamp)'
-            else:
-                return f
-
-        return json_project(
-            map(rewrite_timestamp, self.get_selected_fields(fields))
-        )
+        return json_project(self.get_selected_fields(fields), rewrite={
+            'timestamp': 'epoch(timestamp)::int8'
+        })
 
 
 _transactions_table = Table(
     name='transactions',
-    primary_key=['index'],
+    primary_key=['transaction_index'],
     column_weights={
         'account_keys': 'account_keys_size',
         'address_table_lookups': 'address_table_lookups_size',
@@ -201,7 +297,15 @@ class _TransactionItem(Item):
         return 'transactions'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('transaction'), ['index'])
+        return get_selected_fields(fields.get('transaction'), ['transactionIndex'])
+
+    def project(self, fields: FieldSelection) -> str:
+        return json_project(self.get_selected_fields(fields), rewrite={
+            'version': "if(version < 0, 'legacy'::json, version::json)",
+            'computeUnitsConsumed': 'compute_units_consumed::text',
+            'fee': 'fee::text',
+            'err': 'err::json'
+        })
 
 
 _instructions_table = Table(
@@ -219,6 +323,12 @@ _instructions_table = Table(
         'a7': 0,
         'a8': 0,
         'a9': 0,
+        'a10': 0,
+        'a11': 0,
+        'a12': 0,
+        'a13': 0,
+        'a14': 0,
+        'a15': 0,
         'rest_accounts': 0,
     }
 )
@@ -247,6 +357,13 @@ class _InstructionScan(Scan):
         yield field_in('a7', req.get('a7'))
         yield field_in('a8', req.get('a8'))
         yield field_in('a9', req.get('a9'))
+        yield field_in('a10', req.get('a10'))
+        yield field_in('a11', req.get('a11'))
+        yield field_in('a12', req.get('a12'))
+        yield field_in('a13', req.get('a13'))
+        yield field_in('a14', req.get('a14'))
+        yield field_in('a15', req.get('a15'))
+        yield field_eq('is_committed', req.get('isCommitted'))
 
 
 class _InstructionItem(Item):
@@ -273,24 +390,25 @@ class _InstructionItem(Item):
                 columns.append('a7')
                 columns.append('a8')
                 columns.append('a9')
+                columns.append('a10')
+                columns.append('a11')
+                columns.append('a12')
+                columns.append('a13')
+                columns.append('a14')
+                columns.append('a15')
                 columns.append('rest_accounts')
             else:
                 columns.append(to_snake_case(name))
         return columns
 
     def project(self, fields: FieldSelection) -> str:
-        def rewrite_accounts(f: str):
-            if f == 'accounts':
-                return ('accounts',
-                        f'list_concat('
-                        f'[a for a in list_value(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9) if a is not null], '
-                        f'rest_accounts)')
-            else:
-                return f
-
-        return json_project(
-            map(rewrite_accounts, self.get_selected_fields(fields))
-        )
+        return json_project(self.get_selected_fields(fields), rewrite={
+            'accounts': f'list_concat('
+                        f'[a for a in list_value('
+                        f'a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15'
+                        f') if a is not null], '
+                        f'rest_accounts)'
+        })
 
 
 _logs_table = Table(
@@ -324,15 +442,132 @@ class _LogItem(Item):
         return get_selected_fields(fields.get('log'), ['transactionIndex', 'logIndex'])
 
 
+_balance_table = Table(
+    name='balances',
+    primary_key=['transaction_index', 'account']
+)
+
+
+class _BalanceScan(Scan):
+    def table(self) -> Table:
+        return _balance_table
+
+    def request_name(self) -> ReqName:
+        return 'balances'
+
+    def where(self, req: BalanceRequest) -> Iterable[pyarrow.dataset.Expression | None]:
+        yield field_in('account', req.get('account'))
+
+
+class _BalanceItem(Item):
+    def table(self) -> Table:
+        return _balance_table
+
+    def name(self) -> str:
+        return 'balances'
+
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('balance'), ['transactionIndex', 'account'])
+
+    def project(self, fields: FieldSelection) -> str:
+        return json_project(self.get_selected_fields(fields), rewrite={
+            'pre': 'pre::text',
+            'post': 'post::text'
+        })
+
+
+_token_balance_table = Table(
+    name='token_balances',
+    primary_key=[
+        'transaction_index',
+        'account'
+    ]
+)
+
+
+class _TokenBalanceScan(Scan):
+    def table(self) -> Table:
+        return _token_balance_table
+
+    def request_name(self) -> ReqName:
+        return 'tokenBalances'
+
+    def where(self, req: TokenBalanceRequest) -> Iterable[pyarrow.dataset.Expression | None]:
+        yield field_in('account', req.get('account'))
+        yield field_in('pre_mint', req.get('preMint'))
+        yield field_in('post_mint', req.get('postMint'))
+        yield field_in('pre_owner', req.get('preOwner'))
+        yield field_in('post_owner', req.get('postOwner'))
+        yield field_in('pre_program_id', req.get('preProgramId'))
+        yield field_in('post_program_id', req.get('postProgramId'))
+
+
+class _TokenBalanceItem(Item):
+    def table(self) -> Table:
+        return _token_balance_table
+
+    def name(self) -> str:
+        return 'tokenBalances'
+
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('tokenBalance'), ['transactionIndex', 'account'])
+
+    def project(self, fields: FieldSelection) -> str:
+        return json_project(self.get_selected_fields(fields), rewrite={
+            'preAmount': 'pre_amount::text',
+            'postAmount': 'post_amount::text'
+        })
+
+
+_reward_table = Table(
+    name='rewards',
+    primary_key=['pubkey']
+)
+
+
+class _RewardScan(Scan):
+    def table(self) -> Table:
+        return _reward_table
+
+    def request_name(self) -> ReqName:
+        return 'rewards'
+
+    def where(self, req: RewardRequest) -> Iterable[pyarrow.dataset.Expression | None]:
+        yield field_in('pubkey', req.get('pubkey'))
+
+
+class _RewardItem(Item):
+    def table(self) -> Table:
+        return _reward_table
+
+    def name(self) -> str:
+        return 'rewards'
+
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('reward'), ['pubkey'])
+
+    def project(self, fields: FieldSelection) -> str:
+        return json_project(self.get_selected_fields(fields), rewrite={
+            'lamports': 'lamports::text',
+            'postBalance': 'post_balance::text'
+        })
+
+
 def _build_model():
     tx_scan = _TransactionScan()
     ins_scan = _InstructionScan()
     log_scan = _LogScan()
+    balance_scan = _BalanceScan()
+    token_balance_scan = _TokenBalanceScan()
+    reward_scan = _RewardScan()
 
     block_item = _BlockItem()
     tx_item = _TransactionItem()
     ins_item = _InstructionItem()
     log_item = _LogItem()
+    balance_item = _BalanceItem()
+    token_balance_item = _TokenBalanceItem()
+    reward_item = _RewardItem()
 
     tx_item.sources.extend([
         tx_scan,
@@ -346,6 +581,16 @@ def _build_model():
             include_flag_name='transaction',
             scan_columns=['transaction_index'],
         ),
+        RefRel(
+            scan=balance_scan,
+            include_flag_name='transaction',
+            scan_columns=['transaction_index']
+        ),
+        RefRel(
+            scan=token_balance_scan,
+            include_flag_name='transaction',
+            scan_columns=['transaction_index']
+        )
     ])
 
     ins_item.sources.extend([
@@ -373,6 +618,17 @@ def _build_model():
         )
     ])
 
+    for s in (ins_scan, balance_scan, token_balance_scan):
+        ins_item.sources.append(
+            JoinRel(
+                scan=s,
+                include_flag_name='transactionInstructions',
+                query='SELECT * FROM instructions i, s WHERE '
+                      'i.block_number = s.block_number AND '
+                      'i.transaction_index = s.transaction_index'
+            )
+        )
+
     log_item.sources.extend([
         log_scan,
         JoinRel(
@@ -380,7 +636,7 @@ def _build_model():
             include_flag_name='logs',
             query='SELECT * FROM logs i, s WHERE '
                   'i.block_number = s.block_number AND '
-                  'i.transaction_index = s.index'
+                  'i.transaction_index = s.transaction_index'
         ),
         JoinRel(
             scan=ins_scan,
@@ -392,14 +648,46 @@ def _build_model():
         )
     ])
 
+    balance_item.sources.extend([
+        balance_scan,
+        JoinRel(
+            scan=ins_scan,
+            include_flag_name='transactionBalances',
+            query='SELECT * FROM balances i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        )
+    ])
+
+    token_balance_item.sources.extend([
+        token_balance_scan,
+        JoinRel(
+            scan=ins_scan,
+            include_flag_name='transactionTokenBalances',
+            query='SELECT * FROM token_balances i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index '
+        )
+    ])
+
+    reward_item.sources.extend([
+        reward_scan
+    ])
+
     return [
         tx_scan,
         ins_scan,
         log_scan,
+        balance_scan,
+        token_balance_scan,
+        reward_scan,
         block_item,
         tx_item,
         ins_item,
-        log_item
+        log_item,
+        balance_item,
+        token_balance_item,
+        reward_item
     ]
 
 

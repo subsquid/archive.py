@@ -12,6 +12,8 @@ import sqa.eth.query
 import sqa.substrate.query
 import sqa.solana.query
 import sqa.tron.query
+import sqa.starknet.query
+import sqa.fuel.query
 from sqa.fs import LocalFs
 from sqa.layout import get_chunks, get_filelist, Partition
 from sqa.query.model import Model
@@ -35,10 +37,14 @@ def validate_query(q) -> ArchiveQuery:
         q = _validate_shape(q, sqa.eth.query.QUERY_SCHEMA)
     elif query_type == 'substrate':
         q = _validate_shape(q, sqa.substrate.query.QUERY_SCHEMA)
+    elif query_type == 'starknet':
+        q = _validate_shape(q, sqa.starknet.query.QUERY_SCHEMA)
     elif query_type == 'solana':
         q = _validate_shape(q, sqa.solana.query.QUERY_SCHEMA)
     elif query_type == 'tron':
         q = _validate_shape(q, sqa.tron.query.QUERY_SCHEMA)
+    elif query_type == 'fuel':
+        q = _validate_shape(q, sqa.fuel.query.QUERY_SCHEMA)
     else:
         raise InvalidQuery(f'unknown query type - {query_type}"')
 
@@ -74,10 +80,14 @@ def _get_model(q: dict) -> Model:
         return sqa.eth.query.MODEL
     elif query_type == 'substrate':
         return sqa.substrate.query.MODEL
+    elif query_type == 'starknet':
+        return sqa.starknet.query.MODEL
     elif query_type == 'solana':
         return sqa.solana.query.MODEL
     elif query_type == 'tron':
         return sqa.tron.query.MODEL
+    elif query_type == 'fuel':
+        return sqa.fuel.query.MODEL
     else:
         raise TypeError(f'unknown query type - {query_type}')
 

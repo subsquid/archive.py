@@ -1,10 +1,12 @@
 import binascii
 from typing import TypedDict, NotRequired
+import math
 
 from trie import HexaryTrie
 from Crypto.Hash import keccak
 import rlp
 from eth_utils.encoding import int_to_big_endian
+from eth_keys.datatypes import Signature
 
 from sqa.eth.ingest.model import Qty, Hash32, Transaction, Address20
 
@@ -169,7 +171,7 @@ def transactions_root(transactions: list[Transaction]) -> str:
             ])
         elif tx['type'] == '0x65':
             # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L43
-            pass
+            raise NotImplementedError('cannot encode tx with type 0x65')
             # trie[path] = b'\x65' + rlp.encode([
             #     qty2int(tx['chainId']),
             #     decode_hex(tx['from']),
@@ -182,7 +184,7 @@ def transactions_root(transactions: list[Transaction]) -> str:
             # ])
         elif tx['type'] == '0x66':
             # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L104
-            pass
+            raise NotImplementedError('cannot encode tx with type 0x66')
             # trie[path] = b'\x66' + rlp.encode([
             #     qty2int(tx['chainId']),
             #     decode_hex(tx['requestId']),
@@ -247,3 +249,86 @@ def transactions_root(transactions: list[Transaction]) -> str:
         else:
             raise Exception(f'Unknown tx type {tx["type"]}')
     return encode_hex(trie.root_hash)
+
+
+def get_polygon_bor_tx_hash(block_num: int, block_hash: str):
+    tx_receipt_key = b'matic-bor-receipt-' + block_num.to_bytes(8) + decode_hex(block_hash)
+    return encode_hex(keccak256(tx_receipt_key))
+
+
+def _serialize_transaction(tx: Transaction):
+    if tx['type'] == '0x0':
+        fields = [
+            qty2int(tx['nonce']),
+            qty2int(tx['gasPrice']),
+            qty2int(tx['gas']),
+            decode_hex(tx['to']) if tx['to'] else b'',
+            qty2int(tx['value']),
+            decode_hex(tx['input']),
+        ]
+
+        chain_id = qty2int(tx['chainId']) if 'chainId' in tx else None
+        if chain_id:
+            fields.extend([chain_id, 0, 0])
+
+        return rlp.encode(fields)
+    elif tx['type'] == '0x1':
+        return b'\x01' + rlp.encode([
+            qty2int(tx['chainId']),
+            qty2int(tx['nonce']),
+            qty2int(tx['gasPrice']),
+            qty2int(tx['gas']),
+            decode_hex(tx['to']) if tx['to'] else b'',
+            qty2int(tx['value']),
+            decode_hex(tx['input']),
+            _encode_access_list(tx['accessList']),
+        ])
+    elif tx['type'] == '0x2':
+        return b'\x02' + rlp.encode([
+            qty2int(tx['chainId']),
+            qty2int(tx['nonce']),
+            qty2int(tx['maxPriorityFeePerGas']),
+            qty2int(tx['maxFeePerGas']),
+            qty2int(tx['gas']),
+            decode_hex(tx['to']) if tx['to'] else b'',
+            qty2int(tx['value']),
+            decode_hex(tx['input']),
+            _encode_access_list(tx['accessList']),
+        ])
+    elif tx['type'] == '0x3':
+        return b'\x03' + rlp.encode([
+            qty2int(tx['chainId']),
+            qty2int(tx['nonce']),
+            qty2int(tx['maxPriorityFeePerGas']),
+            qty2int(tx['maxFeePerGas']),
+            qty2int(tx['gas']),
+            decode_hex(tx['to']) if tx['to'] else b'',
+            qty2int(tx['value']),
+            decode_hex(tx['input']),
+            _encode_access_list(tx['accessList']),
+            qty2int(tx['maxFeePerBlobGas']),
+            [decode_hex(h) for h in tx['blobVersionedHashes']],
+        ])
+    else:
+        raise Exception(f'Unknown tx type {tx["type"]}')
+
+
+def _create_signature(tx: Transaction):
+    v = qty2int(tx['v'])
+    if v not in (0, 1):
+        if 'chainId' in tx:
+            chain_id = qty2int(tx['chainId'])
+        else:
+            chain_id = math.floor((v - 35) / 2)
+        v -= chain_id * 2 + 35
+
+    vrs = (v, qty2int(tx['r']), qty2int(tx['s']))
+    return Signature(vrs=vrs)
+
+
+def recover_tx_sender(tx: Transaction):
+    message = _serialize_transaction(tx)
+    signature = _create_signature(tx)
+    public_key = signature.recover_public_key_from_msg(message)
+    address = public_key.to_canonical_address()
+    return encode_hex(address)

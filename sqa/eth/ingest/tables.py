@@ -13,6 +13,10 @@ def qty():
     return pyarrow.string()
 
 
+def bigfloat():
+    return pyarrow.string()
+
+
 class BlockTableBuilder(TableBuilder):
     def __init__(self):
         self.number = Column(pyarrow.int32())
@@ -85,6 +89,13 @@ class TxTableBuilder(TableBuilder):
         self.contract_address = Column(pyarrow.string())
         self.type = Column(pyarrow.uint8())
         self.status = Column(pyarrow.int8())
+        self.l1_fee = Column(qty())
+        self.l1_fee_scalar = Column(bigfloat())
+        self.l1_gas_price = Column(qty())
+        self.l1_gas_used = Column(qty())
+        self.l1_blob_base_fee = Column(qty())
+        self.l1_blob_base_fee_scalar = Column(pyarrow.uint32())
+        self.l1_base_fee_scalar = Column(pyarrow.uint32())
 
     def append(self, tx: Transaction):
         block_number = qty2int(tx['blockNumber'])
@@ -119,6 +130,13 @@ class TxTableBuilder(TableBuilder):
             self.type.append(receipt.get('type') and qty2int(receipt['type']))
             self.status.append(qty2int(receipt['status']))
             self.contract_address.append(receipt.get('contractAddress'))
+            self.l1_fee.append(receipt.get('l1Fee'))
+            self.l1_fee_scalar.append(receipt.get('l1FeeScalar'))
+            self.l1_gas_price.append(receipt.get('l1GasPrice'))
+            self.l1_gas_used.append(receipt.get('l1GasUsed'))
+            self.l1_blob_base_fee.append(receipt.get('l1BlobBaseFee'))
+            self.l1_blob_base_fee_scalar.append(_qty2int(receipt.get('l1BlobBaseFeeScalar')))
+            self.l1_base_fee_scalar.append(_qty2int(receipt.get('l1BaseFeeScalar')))
         else:
             self.gas_used.append(None)
             self.cumulative_gas_used.append(None)
@@ -131,6 +149,13 @@ class TxTableBuilder(TableBuilder):
             else:
                 self.status.append(None)
                 self.contract_address.append(None)
+            self.l1_fee.append(None)
+            self.l1_fee_scalar.append(None)
+            self.l1_gas_price.append(None)
+            self.l1_gas_used.append(None)
+            self.l1_blob_base_fee.append(None)
+            self.l1_blob_base_fee_scalar.append(None)
+            self.l1_base_fee_scalar.append(None)
 
 
 class LogTableBuilder(TableBuilder):
@@ -306,7 +331,7 @@ class TraceTableBuilder(TableBuilder):
             if trace_type == 'create':
                 self.create_from.append(frame['from'])
                 self.create_value.append(frame['value'])
-                self.create_gas.append(frame['gas'])
+                self.create_gas.append(frame.get('gas'))
                 self.create_init.append(frame['input'])
                 self.create_result_gas_used.append(frame.get('gasUsed'))
                 self.create_result_code.append(frame.get('output'))
@@ -324,7 +349,7 @@ class TraceTableBuilder(TableBuilder):
                 self.call_from.append(frame['from'])
                 self.call_to.append(frame['to'])
                 self.call_value.append(frame.get('value'))
-                self.call_gas.append(frame['gas'])
+                self.call_gas.append(frame.get('gas'))
                 self.call_sighash.append(_to_sighash(frame['input']))
                 self.call_input.append(frame['input'])
                 self.call_type.append(frame_type.lower())
@@ -342,9 +367,9 @@ class TraceTableBuilder(TableBuilder):
                 self.call_result_output.append(None)
 
             if trace_type == 'suicide':
-                self.suicide_address.append(frame['from'])
-                self.suicide_refund_address.append(frame['to'])
-                self.suicide_balance.append(frame['value'])
+                self.suicide_address.append(frame.get('from'))
+                self.suicide_refund_address.append(frame.get('to'))
+                self.suicide_balance.append(frame.get('value'))
             else:
                 self.suicide_address.append(None)
                 self.suicide_refund_address.append(None)
@@ -523,3 +548,7 @@ def _to_sighash(tx_input: str) -> str | None:
         return tx_input[:10]
     else:
         return None
+
+
+def _qty2int(v: Qty | None) -> int | None:
+    return None if v is None else qty2int(v)

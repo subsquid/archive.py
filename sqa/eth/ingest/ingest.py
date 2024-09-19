@@ -6,7 +6,8 @@ from typing import Optional, AsyncIterator, Literal, Iterable, Coroutine
 from sqa.eth.ingest.model import Block, Log, Receipt, DebugFrame, DebugFrameResult, \
     DebugStateDiffResult, TraceTransactionReplay, Transaction
 from sqa.util.rpc import RpcClient
-from sqa.eth.ingest.util import qty2int, get_tx_status_from_traces, logs_bloom, transactions_root
+from sqa.eth.ingest.util import qty2int, get_tx_status_from_traces, logs_bloom, \
+    transactions_root, get_polygon_bor_tx_hash, recover_tx_sender
 from sqa.eth.ingest.moonbase import fix_and_exclude_invalid_moonbase_blocks, is_moonbase_traceless
 
 
@@ -26,9 +27,12 @@ class Ingest:
         with_statediffs: bool = False,
         use_trace_api: bool = False,
         use_debug_api_for_statediffs: bool = False,
+        debug_api_trace_config_timeout: Optional[str] = None,
         validate_tx_root: bool = False,
         validate_tx_type: bool = False,
+        validate_tx_sender: bool = False,
         validate_logs_bloom: bool = False,
+        polygon_based: bool = False,
     ):
         self._rpc = rpc
         self._finality_confirmation = finality_confirmation
@@ -37,9 +41,12 @@ class Ingest:
         self._with_statediffs = with_statediffs
         self._use_trace_api = use_trace_api
         self._use_debug_api_for_statediffs = use_debug_api_for_statediffs
+        self._debug_api_trace_config_timeout = debug_api_trace_config_timeout
         self._validate_tx_root = validate_tx_root
         self._validate_tx_type = validate_tx_type
+        self._validate_tx_sender = validate_tx_sender
         self._validate_logs_bloom = validate_logs_bloom
+        self._polygon_based = polygon_based
         self._height = from_block - 1
         self._genesis = genesis_block
         self._end = to_block
@@ -212,7 +219,17 @@ class Ingest:
 
         if self._validate_tx_root:
             for block in blocks:
-                assert block['transactionsRoot'] == transactions_root(block['transactions'])
+                if self._polygon_based:
+                    state_sync_tx_hash = get_polygon_bor_tx_hash(qty2int(block['number']), block['hash'])
+                    txs = [tx for tx in block['transactions'] if tx['hash'] != state_sync_tx_hash]
+                    assert block['transactionsRoot'] == transactions_root(txs)
+                else:
+                    assert block['transactionsRoot'] == transactions_root(block['transactions'])
+
+        if self._validate_tx_sender:
+            for block in blocks:
+                for tx in block['transactions']:
+                    assert tx['from'] == recover_tx_sender(tx)
 
         return blocks
 
@@ -244,7 +261,12 @@ class Ingest:
             block_logs = logs_by_hash.get(block['hash'], [])
 
             if self._validate_logs_bloom:
-                assert block['logsBloom'] == logs_bloom(block_logs)
+                if self._polygon_based:
+                    state_sync_tx_hash = get_polygon_bor_tx_hash(qty2int(block['number']), block['hash'])
+                    logs = [log for log in block_logs if log['transactionHash'] != state_sync_tx_hash]
+                    assert block['logsBloom'] == logs_bloom(logs)
+                else:
+                    assert block['logsBloom'] == logs_bloom(block_logs)
 
             block['logs_'] = block_logs
 
@@ -295,6 +317,8 @@ class Ingest:
                 continue
 
             for log in r['logs']:
+                tx = tx_by_index[log['blockHash']][log['transactionIndex']]
+                assert log['transactionHash'] == tx['hash']
                 block_logs.append(log)
 
         for block in blocks:
@@ -313,7 +337,12 @@ class Ingest:
             block_logs = logs_by_hash.get(block['hash'], [])
 
             if self._validate_logs_bloom:
-                assert block['logsBloom'] == logs_bloom(block_logs)
+                if self._polygon_based:
+                    state_sync_tx_hash = get_polygon_bor_tx_hash(qty2int(block['number']), block['hash'])
+                    logs = [log for log in block_logs if log['transactionHash'] != state_sync_tx_hash]
+                    assert block['logsBloom'] == logs_bloom(logs)
+                else:
+                    assert block['logsBloom'] == logs_bloom(block_logs)
 
             for tx in block['transactions']:
                 if self._is_arbitrum_one and tx['hash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800' and block['number'] == hex(4527955):
@@ -351,14 +380,20 @@ class Ingest:
                 'tracerConfig': {
                     'onlyTopCall': False,
                     'withLog': True
-                }
-            }
+                },
+                'timeout': self._debug_api_trace_config_timeout,
+            },
         ], priority=block_number, validate_result=_validate_debug_trace)
 
         if self._is_moonriver and qty2int(block['number']) == 2077600:
             _fix_moonriver_2077600(block)
 
         transactions = block['transactions']
+        if self._polygon_based:
+            transactions = [
+                tx for tx in transactions
+                if tx['hash'] != get_polygon_bor_tx_hash(block_number, block['hash'])
+            ]
         if self._is_polygon or self._is_polygon_testnet:
             transactions = [tx for tx in transactions if not _is_polygon_precompiled(tx)]
         if self._is_moonbase:
@@ -384,11 +419,17 @@ class Ingest:
                 'tracerConfig': {
                     'onlyTopCall': False,  # Incorrect, but required by Alchemy endpoints
                     'diffMode': True
-                }
+                },
+                'timeout': self._debug_api_trace_config_timeout,
             }
-        ], priority=block_number)
+        ], priority=block_number, validate_result=_validate_debug_statediffs)
 
         transactions = block['transactions']
+        if self._polygon_based:
+            transactions = [
+                tx for tx in transactions
+                if tx['hash'] != get_polygon_bor_tx_hash(block_number, block['hash'])
+            ]
         assert len(transactions) == len(diffs)
         for tx, diff in zip(transactions, diffs):
             assert 'result' in diff
@@ -482,8 +523,18 @@ def _fix_astar_995596(block: Block):
 
 def _validate_debug_trace(result):
     for trace in result:
-        if len(trace.keys()) == 1 and trace.get('error') == 'execution timeout':
+        if trace.get('error') == 'execution timeout':
             return False
+        if error := trace.get('error'):
+            if isinstance(error, dict):
+                return False
+    return True
+
+def _validate_debug_statediffs(result):
+    for diff in result:
+        if error := diff.get('error'):
+            if isinstance(error, dict):
+                return False
     return True
 
 
