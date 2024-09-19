@@ -164,7 +164,6 @@ class LogTable(TableBuilder):
         self.block_number = Column(pyarrow.int32())
         self.log_index = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
-        self.transaction_hash = Column(pyarrow.string())
         self.address = Column(pyarrow.string())
         self.data = Column(pyarrow.string())
         self.topic0 = Column(pyarrow.string())
@@ -176,7 +175,6 @@ class LogTable(TableBuilder):
         self.block_number.append(block_number)
         self.log_index.append(log['logIndex'])
         self.transaction_index.append(log['transactionIndex'])
-        self.transaction_hash.append(log['transactionHash'])
         self.address.append(log['address'])
         self.data.append(log.get('data'))
         topics = iter(log.get('topics', []))
@@ -190,7 +188,7 @@ class InternalTransactionTable(TableBuilder):
     def __init__(self):
         self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
-        self.transaction_hash = Column(pyarrow.string())
+        self.internal_transaction_index = Column(pyarrow.int32())
         self.hash = Column(pyarrow.string())
         self.caller_address = Column(pyarrow.string())
         self.transer_to_address = Column(pyarrow.string())
@@ -202,7 +200,7 @@ class InternalTransactionTable(TableBuilder):
     def append(self, block_number: int, internal_tx: InternalTransaction):
         self.block_number.append(block_number)
         self.transaction_index.append(internal_tx['transactionIndex'])
-        self.transaction_hash.append(internal_tx['transactionHash'])
+        self.internal_transaction_index.append(internal_tx['internalTransactionIndex'])
         self.hash.append(internal_tx['hash'])
         self.caller_address.append(internal_tx['callerAddress'])
         self.transer_to_address.append(internal_tx.get('transferToAddress'))
@@ -252,8 +250,8 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
 
     logs = tables['logs']
     logs = logs.sort_by([
-        ('address', 'ascending'),
         ('topic0', 'ascending'),
+        ('address', 'ascending'),
         ('block_number', 'ascending'),
         ('log_index', 'ascending')
     ])
@@ -265,7 +263,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         logs,
         row_group_size=10_000,
         use_dictionary=['address', 'topic0'],
-        write_statistics=['_idx', 'address', 'topic0', 'block_number'],
+        write_statistics=['_idx', 'address', 'topic0', 'block_number', 'transaction_index', 'log_index'],
         **kwargs
     )
 
@@ -283,18 +281,31 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         transactions,
         row_group_size=10_000,
         use_dictionary=['type', 'ret'],
-        write_statistics=['_idx', 'block_number'],
+        write_statistics=['_idx', 'block_number', 'transaction_index', 'type'],
         **kwargs
     )
 
     internal_transactions = tables['internal_transactions']
+    internal_transactions = internal_transactions.sort_by([
+        ('transer_to_address', 'ascending'),
+        ('caller_address', 'ascending'),
+        ('block_number', 'ascending'),
+        ('internal_transaction_index', 'ascending')
+    ])
     internal_transactions = add_index_column(internal_transactions)
 
     fs.write_parquet(
         'internal_transactions.parquet',
         internal_transactions,
         use_dictionary=False,
-        write_statistics=['_idx', 'block_number'],
+        write_statistics=[
+            '_idx',
+            'block_number',
+            'transaction_index',
+            'internal_transaction_index',
+            'transer_to_address',
+            'caller_address'
+        ],
         **kwargs
     )
 
@@ -303,7 +314,6 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     fs.write_parquet(
         'blocks.parquet',
         blocks,
-        use_dictionary=[],
-        write_statistics=[],
+        write_statistics=['number'],
         **kwargs
     )

@@ -9,15 +9,13 @@ from sqa.query.util import to_snake_case, json_project, get_selected_fields, fie
 
 
 class BlockFieldSelection(TypedDict, total=False):
-    number: bool
-    hash: bool
     parentHash: bool
     timestamp: bool
     txTrieRoot: bool
     version: bool
     timestamp: bool
-    witness_address: bool
-    witness_signature: bool
+    witnessAddress: bool
+    witnessSignature: bool
 
 
 TxFieldSelection = TypedDict('TxFieldSelection', {
@@ -53,15 +51,12 @@ TxFieldSelection = TypedDict('TxFieldSelection', {
 
 
 class LogFieldSelection(TypedDict, total=False):
-    logIndex: bool
-    transactionHash: bool
     address: bool
     data: bool
     topics: bool
 
 
 class InternalTransactionFieldSelection(TypedDict, total=False):
-    transactionHash: bool
     hash: bool
     callerAddress: bool
     transferToAddress: bool
@@ -193,7 +188,7 @@ _blocks_table = Table(
 
 _tx_table = Table(
     name='transactions',
-    primary_key=['hash'],
+    primary_key=['transaction_index'],
     column_weights={
         'raw_data_hex': 'raw_data_hex_size'
     }
@@ -211,7 +206,7 @@ _logs_table = Table(
 
 _internal_tx_table = Table(
     name='internal_transactions',
-    primary_key=['hash']
+    primary_key=['internal_transaction_index']
 )
 
 
@@ -223,7 +218,7 @@ class _BlockItem(Item):
         return 'blocks'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('block'), ['number', 'hash', 'parentHash'])
+        return get_selected_fields(fields.get('block'), ['number', 'hash'])
 
     def project(self, fields: FieldSelection) -> str:
         def rewrite_timestamp(f: str):
@@ -297,7 +292,7 @@ class _TxItem(Item):
         return 'transactions'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('transaction'), ['hash'])
+        return get_selected_fields(fields.get('transaction'), ['transactionIndex'])
 
     def project(self, fields: FieldSelection) -> str:
         def rewrite_timestamp(f: str):
@@ -334,7 +329,7 @@ class _LogItem(Item):
         return 'logs'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('log'), ['logIndex', 'transactionHash'])
+        return get_selected_fields(fields.get('log'), ['transactionIndex', 'logIndex'])
 
     def selected_columns(self, fields: FieldSelection) -> list[str]:
         columns = []
@@ -381,7 +376,7 @@ class _InternalTxItem(Item):
         return 'internalTransactions'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('internalTransactions'), [])
+        return get_selected_fields(fields.get('internalTransactions'), ['transactionIndex', 'internalTransactionIndex'])
 
 
 def _build_model():
@@ -403,7 +398,8 @@ def _build_model():
             scan=tx_scan,
             include_flag_name='internalTransactions',
             query='SELECT * FROM internal_transactions i, s WHERE '
-                  'i.transaction_hash = s.hash'
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
         )
     ])
 
@@ -413,7 +409,8 @@ def _build_model():
             scan=tx_scan,
             include_flag_name='logs',
             query='SELECT * FROM logs i, s WHERE '
-                  'i.transaction_hash = s.hash'
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
         )
     ])
 
@@ -425,12 +422,12 @@ def _build_model():
         RefRel(
             scan=log_scan,
             include_flag_name='transaction',
-            scan_columns=['transaction_hash']
+            scan_columns=['transaction_index']
         ),
         RefRel(
             scan=internal_tx_scan,
             include_flag_name='transaction',
-            scan_columns=['transaction_hash']
+            scan_columns=['transaction_index']
         ),
     ])
 
