@@ -270,6 +270,14 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     transactions = tables['transactions']
     transactions = transactions.sort_by([
         ('type', 'ascending'),
+        ('_trigger_smart_contract_contract', 'ascending'),
+        ('_trigger_smart_contract_sighash', 'ascending'),
+        ('_trigger_smart_contract_owner', 'ascending'),
+        ('_transfer_contract_owner', 'ascending'),
+        ('_transfer_contract_to', 'ascending'),
+        ('_transfer_asset_contract_owner', 'ascending'),
+        ('_transfer_asset_contract_to', 'ascending'),
+        ('_transfer_asset_contract_asset', 'ascending'),
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending')
     ])
@@ -281,7 +289,20 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         transactions,
         row_group_size=10_000,
         use_dictionary=['type', 'ret'],
-        write_statistics=['_idx', 'block_number', 'transaction_index', 'type'],
+        write_statistics=[
+            '_idx',
+            'block_number',
+            'transaction_index',
+            'type',
+            '_transfer_contract_owner',
+            '_transfer_contract_to',
+            '_transfer_asset_contract_owner',
+            '_transfer_asset_contract_to',
+            '_transfer_asset_contract_asset',
+            '_trigger_smart_contract_owner',
+            '_trigger_smart_contract_contract',
+            '_trigger_smart_contract_sighash',
+        ],
         **kwargs
     )
 

@@ -197,7 +197,7 @@ _tx_table = Table(
 
 _logs_table = Table(
     name='logs',
-    primary_key=['log_index'],
+    primary_key=['transaction_index', 'log_index'],
     column_weights={
         'data': 'data_size'
     }
@@ -206,7 +206,7 @@ _logs_table = Table(
 
 _internal_tx_table = Table(
     name='internal_transactions',
-    primary_key=['internal_transaction_index']
+    primary_key=['transaction_index', 'internal_transaction_index']
 )
 
 
@@ -279,9 +279,9 @@ class _TriggerSmartContractTransferTxScan(Scan):
 
     def where(self, req: TriggerSmartContractTxRequest) -> Iterable[Expression | None]:
         yield field_in('type', ['TriggerSmartContract'])
-        yield field_in('_trigger_smart_contract_owner', req.get('owner'))
         yield field_in('_trigger_smart_contract_contract', req.get('contract'))
         yield field_in('_trigger_smart_contract_sighash', req.get('sighash'))
+        yield field_in('_trigger_smart_contract_owner', req.get('owner'))
 
 
 class _TxItem(Item):
