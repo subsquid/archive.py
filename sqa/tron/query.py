@@ -279,8 +279,8 @@ class _TriggerSmartContractTransferTxScan(Scan):
 
     def where(self, req: TriggerSmartContractTxRequest) -> Iterable[Expression | None]:
         yield field_in('type', ['TriggerSmartContract'])
-        yield field_in('_trigger_smart_contract_contract', req.get('contract'))
         yield field_in('_trigger_smart_contract_sighash', req.get('sighash'))
+        yield field_in('_trigger_smart_contract_contract', req.get('contract'))
         yield field_in('_trigger_smart_contract_owner', req.get('owner'))
 
 
@@ -295,15 +295,11 @@ class _TxItem(Item):
         return get_selected_fields(fields.get('transaction'), ['transactionIndex'])
 
     def project(self, fields: FieldSelection) -> str:
-        def rewrite_timestamp(f: str):
-            if f in ['timestamp', 'expiration']:
-                return f, f'epoch_ms({f})'
-            else:
-                return f
-
-        return json_project(
-            map(rewrite_timestamp, self.get_selected_fields(fields))
-        )
+        return json_project(self.get_selected_fields(fields), rewrite={
+            'timestamp': 'epoch_ms(timestamp)',
+            'expiration': 'epoch_ms(expiration)',
+            'parameter': 'parameter::json'
+        })
 
 
 class _LogScan(Scan):

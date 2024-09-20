@@ -38,7 +38,7 @@ class BlockTable(TableBuilder):
         self.witness_signature = Column(pyarrow.string())
 
     def append(self, header: BlockHeader) -> None:
-        self.number.append(header.get('number', 0))
+        self.number.append(header['height'])
         self.hash.append(header['hash'])
         self.parent_hash.append(header['parentHash'])
         self.tx_trie_root.append(header['txTrieRoot'])
@@ -270,8 +270,8 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     transactions = tables['transactions']
     transactions = transactions.sort_by([
         ('type', 'ascending'),
-        ('_trigger_smart_contract_contract', 'ascending'),
         ('_trigger_smart_contract_sighash', 'ascending'),
+        ('_trigger_smart_contract_contract', 'ascending'),
         ('_trigger_smart_contract_owner', 'ascending'),
         ('_transfer_contract_owner', 'ascending'),
         ('_transfer_contract_to', 'ascending'),
