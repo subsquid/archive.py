@@ -10,7 +10,6 @@ from sqa.query.util import to_snake_case, json_project, get_selected_fields, fie
 
 class BlockFieldSelection(TypedDict, total=False):
     parentHash: bool
-    timestamp: bool
     txTrieRoot: bool
     version: bool
     timestamp: bool
