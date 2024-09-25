@@ -16,7 +16,7 @@ class Log(TypedDict):
     logIndex: int
     transactionIndex: int
     address: str
-    data: str
+    data: NotRequired[str]
     topics: NotRequired[list[str]]
 
 

@@ -297,7 +297,19 @@ class _TxItem(Item):
         return json_project(self.get_selected_fields(fields), rewrite={
             'timestamp': 'epoch_ms(timestamp)',
             'expiration': 'epoch_ms(expiration)',
-            'parameter': 'parameter::json'
+            'parameter': 'parameter::json',
+            'feeLimit': 'fee_limit::text',
+            'fee': 'fee::text',
+            'withdrawAmount': 'withdraw_amount::text',
+            'unfreezeAmount': 'unfreeze_amount::text',
+            'withdrawExpireAmount': 'withdraw_expire_amount::text',
+            'energyFee': 'energy_fee::text',
+            'energyUsage': 'energy_usage::text',
+            'energyUsageTotal': 'energy_usage_total::text',
+            'netUsage': 'net_usage::text',
+            'netFee': 'net_fee::text',
+            'originEnergyUsage': 'origin_energy_usage::text',
+            'energyPenaltyTotal': 'energy_penalty_total::text',
         })
 
 
@@ -371,7 +383,7 @@ class _InternalTxItem(Item):
         return 'internalTransactions'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('internalTransactions'), ['transactionIndex', 'internalTransactionIndex'])
+        return get_selected_fields(fields.get('internalTransaction'), ['transactionIndex', 'internalTransactionIndex'])
 
 
 def _build_model():
