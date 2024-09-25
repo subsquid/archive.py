@@ -45,7 +45,7 @@ class BlockTableBuilder(TableBuilder):
         self.hash.append(block['hash'])
         self.parent_hash.append(block['parentHash'])
         self.nonce.append(block.get('nonce'))
-        self.sha3_uncles.append(block['sha3Uncles'])
+        self.sha3_uncles.append(block.get('sha3Uncles'))
         self.logs_bloom.append(block['logsBloom'])
         self.transactions_root.append(block['transactionsRoot'])
         self.state_root.append(block['stateRoot'])
