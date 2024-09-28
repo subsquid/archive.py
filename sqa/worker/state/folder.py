@@ -31,6 +31,11 @@ class StateFolder:
                      ):
         # !!! This function should allow to apply the same update multiple times in a row
 
+        # delete temp dataset dirs
+        for temp_item in glob.glob('temp-*', root_dir=self.fs.abs()):
+            log.info(f'deleting abandoned dataset at {self.fs.abs(temp_item)}')
+            self.fs.delete(temp_item)
+
         # delete temp chunk dirs
         for temp_item in glob.glob('*/*/temp-*', root_dir=self.fs.abs()):
             log.info(f'deleting abandoned chunk download at {self.fs.abs(temp_item)}')

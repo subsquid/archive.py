@@ -54,6 +54,14 @@ ingest-kusama:
 		--chunk-size 256
 
 
+ingest-tron:
+	@python3 -m sqa.tron.writer data/tron \
+		--src http://localhost:7373 \
+		--first-block 11322942 \
+		--last-block 11323358 \
+		--chunk-size 256
+
+
 ingest-starknet:
 	@python3 -m sqa.starknet.writer data/starknet \
 		-e ${STARKNET_NODE} \
@@ -86,4 +94,4 @@ test:
 	@python3 -m tests.run
 
 
-.PHONY: deps image-ingest image-worker ingest-eth ingest-arb ingest-poly ingest-kusama router worker test
+.PHONY: deps image-ingest image-worker ingest-eth ingest-arb ingest-poly ingest-kusama ingest-tron router worker test

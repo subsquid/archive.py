@@ -23,6 +23,8 @@ writer = [
     "rlp>=3.0.0",
     "setuptools>=68.2.2",
     "base58>=2.1.1",
+    "eth-keys==0.5.0",
+    "coincurve==20.0.0",
 ]
 
 http-worker = [

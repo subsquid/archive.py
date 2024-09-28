@@ -600,7 +600,7 @@ def _build_model():
             include_flag_name='instructions',
             query='SELECT * FROM instructions i, s WHERE '
                   'i.block_number = s.block_number AND '
-                  'i.transaction_index = s.index'
+                  'i.transaction_index = s.transaction_index'
         ),
         JoinRel(
             scan=ins_scan,
