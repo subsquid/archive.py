@@ -145,7 +145,7 @@ class TraceRequest(TypedDict, total=False):
 
 
 class _TraceRequestSchema(mm.Schema):
-    invocationType: list[str]
+    invocationType = mm.fields.List(mm.fields.Str())
     callerAddress = mm.fields.List(mm.fields.Str())
     callContractAddress = mm.fields.List(mm.fields.Str())
     callClassHash = mm.fields.List(mm.fields.Str())
