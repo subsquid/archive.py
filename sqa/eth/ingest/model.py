@@ -33,6 +33,8 @@ class Block(TypedDict):
     uncles: list[Hash32]
     transactions: list['Transaction']
     l1BlockNumber: NotRequired[Qty]
+    blobGasUsed: NotRequired[Qty]
+    excessBlobGas: NotRequired[Qty]
     logs_: NotRequired[list['Log']]
     unknownTraceReplays_: NotRequired[list]
 
@@ -59,6 +61,8 @@ Transaction = TypedDict('Transaction', {
     'yParity': NotRequired[Qty],
     'accessList': NotRequired[list],
     'chainId': NotRequired[Qty],
+    'maxFeePerBlobGas': NotRequired[Qty],
+    'blobVersionedHashes': NotRequired[list[Hash32]],
     'receipt_': NotRequired['Receipt'],
     'debugFrame_': NotRequired['DebugFrameResult'],
     'debugStateDiff_': NotRequired['DebugStateDiffResult'],
