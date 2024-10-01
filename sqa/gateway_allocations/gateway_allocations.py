@@ -1,6 +1,7 @@
+import asyncio
 import logging
 import os
-import asyncio
+import time
 
 from web3 import AsyncWeb3
 
@@ -17,7 +18,8 @@ class GatewayAllocations:
     async def new(cls, rpc_url: str, peer_id: str, db_path: str):
         self = cls(rpc_url, peer_id, db_path)
         LOG.info("Initializing gateway allocations manager")
-        await self._get_own_id()
+        self._own_id = await self._provider.get_worker_id(self._peer_id)
+        LOG.info(f'Onchain ID={self._own_id}')
         self._storage.initialize(self._own_id)
         return self
 
@@ -29,16 +31,17 @@ class GatewayAllocations:
         self._own_id = None
         self._lock = asyncio.Lock()
 
-    async def _get_own_id(self):
-        if self._own_id is None:
-            self._own_id = await self._provider.get_worker_id(self._peer_id)
-            LOG.info(f'Onchain ID={self._own_id}')
-
     async def run(self):
         while True:
             try:
                 current_epoch = await self._provider.get_current_epoch()
-                self._storage.update_epoch(current_epoch)
+                if self._storage.update_epoch(current_epoch):
+                    LOG.info("New epoch started. Updating allocations")
+                    start = time.time()
+                    clusters = await self._provider.get_all_gateways(self._own_id)
+                    self._storage.update_allocations(clusters)
+                    end = time.time()
+                    LOG.info(f"Allocations updated in {int((end - start) * 1000)} ms")
             except:
                 LOG.exception('Error updating epoch')
             await asyncio.sleep(POLLING_INTERVAL)
@@ -46,11 +49,4 @@ class GatewayAllocations:
     async def try_to_execute(self, gateway_id: str) -> bool:
         LOG.debug(f"Gateway {gateway_id} trying to execute a query")
         async with self._lock:
-            if not self._storage.has_allocation(gateway_id):
-                LOG.debug(f"No allocation for gateway {gateway_id}, checking on chain")
-                cluster = await self._provider.get_gateway_cluster(gateway_id)
-                allocated_cus = await self._provider.get_allocated_cus(gateway_id, self._own_id)
-                if cluster is None or allocated_cus is None:
-                    return False
-                self._storage.update_allocation(cluster, allocated_cus)
             return self._storage.try_spend_cus(gateway_id, SINGLE_EXECUTION_COST)

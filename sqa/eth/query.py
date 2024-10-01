@@ -62,6 +62,13 @@ TxFieldSelection = TypedDict('TxFieldSelection', {
     'status': bool,
     'maxFeePerBlobGas': bool,
     'blobVersionedHashes': bool,
+    'l1Fee': bool,
+    'l1FeeScalar': bool,
+    'l1GasPrice': bool,
+    'l1GasUsed': bool,
+    'l1BlobBaseFee': bool,
+    'l1BlobBaseFeeScalar': bool,
+    'l1BaseFeeScalar': bool,
 }, total=False)
 
 

@@ -108,3 +108,9 @@ def field_lte(field_name: str, value: Any | None) -> pyarrow.dataset.Expression 
     if value is None:
         return
     return pyarrow.compute.field(field_name) <= value
+
+
+def field_eq(field_name: str, value: Any | None) -> pyarrow.dataset.Expression | None:
+    if value is None:
+        return
+    return pyarrow.compute.field(field_name) == value

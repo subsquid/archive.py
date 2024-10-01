@@ -77,7 +77,7 @@ class RPCWrapper:
             try:
                 envelope = msg_pb.Envelope.FromString(msg.content)
                 yield msg.peer_id, envelope
-            except ValueError:
+            except (AttributeError, ValueError, google.protobuf.message.DecodeError):
                 LOG.warning(f"Invalid message received from {msg.peer_id}")
 
     @retry

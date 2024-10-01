@@ -177,6 +177,13 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
+        '--debug-api-trace-config-timeout',
+        type=str,
+        default=None,
+        help='timeout for TraceConfig with a unit suffix (by default null)'
+    )
+
+    program.add_argument(
         '--validate-tx-root',
         action='store_true',
         help='validate block transactions against transactions root'
@@ -192,6 +199,18 @@ def parse_cli_arguments():
         '--validate-tx-type',
         action='store_true',
         help='check if transaction type is not empty',
+    )
+
+    program.add_argument(
+        '--validate-tx-sender',
+        action='store_true',
+        help='check if transaction sender matches sender recovered from signature'
+    )
+
+    program.add_argument(
+        '--polygon-based',
+        action='store_true',
+        help='enable features related to polygon based networks',
     )
 
     program.add_argument(
@@ -299,9 +318,12 @@ async def rpc_ingest(args, rpc: RpcClient, first_block: int, last_block: int | N
         with_statediffs=args.with_statediffs,
         use_trace_api=args.use_trace_api,
         use_debug_api_for_statediffs=args.use_debug_api_for_statediffs,
+        debug_api_trace_config_timeout=args.debug_api_trace_config_timeout,
         validate_tx_root=args.validate_tx_root,
         validate_tx_type=args.validate_tx_type,
+        validate_tx_sender=args.validate_tx_sender,
         validate_logs_bloom=args.validate_logs_bloom,
+        polygon_based=args.polygon_based,
     )
 
     try:
@@ -447,6 +469,9 @@ class WriteService:
         else:
             tasks = self._parquet_writer(batches)
 
+        await self.submit_write_tasks(tasks)
+
+    async def submit_write_tasks(self, tasks: AsyncIterator[WriteTask]):
         with concurrent.futures.ThreadPoolExecutor(
                 max_workers=1,
                 thread_name_prefix='block_writer'

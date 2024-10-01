@@ -95,11 +95,9 @@ class BaseParquetWriter(Writer):
         arrow_tables = {}
         for n, t in self._tables.items():
             arrow_tables[n] = t.to_table()
+            t.reset()
 
         self._submit_write(fs, arrow_tables)
-
-        for t in self._tables.values():
-            t.reset()
 
     def _submit_write(self, fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         self._wait_for_prev_write()

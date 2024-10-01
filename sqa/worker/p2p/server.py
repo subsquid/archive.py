@@ -26,7 +26,6 @@ from sqa.worker.state.manager import StateManager
 from sqa.worker.util import sha3_256
 from sqa.worker.worker import Worker
 
-
 LOG = logging.getLogger(__name__)
 
 # This is the maximum *decompressed* size of the message
@@ -35,21 +34,23 @@ LOGS_MESSAGE_MAX_BYTES = 64000
 LOGS_SEND_INTERVAL_SEC = int(os.environ.get('LOGS_SEND_INTERVAL_SEC', '600'))
 PING_TOPIC = "worker_ping"
 LOGS_TOPIC = "worker_query_logs"
-WORKER_VERSION = "0.2.3"
+WORKER_VERSION = "0.2.4"
 
 
 def bundle_logs(logs: list[msg_pb.QueryExecuted]) -> Iterator[msg_pb.Envelope]:
+    logs.reverse()
     while logs:
         bundle = []
         bundle_size = 0
-        while logs and (log := logs.pop(0)).ByteSize() + bundle_size < LOGS_MESSAGE_MAX_BYTES:
+        while logs and logs[-1].ByteSize() + bundle_size < LOGS_MESSAGE_MAX_BYTES:
+            log = logs.pop()
             bundle.append(log)
             bundle_size += log.ByteSize()
         if bundle:
             yield msg_pb.Envelope(query_logs=msg_pb.QueryLogs(queries_executed=bundle))
         else:
             LOG.error("Query log too big to be sent")
-            logs.pop(0)
+            logs.pop()
 
 
 class P2PTransport:

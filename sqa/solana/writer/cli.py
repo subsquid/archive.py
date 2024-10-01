@@ -7,8 +7,8 @@ class _CLI(CLI):
     def create_writer(self) -> Writer:
         return ParquetWriter()
 
-    def get_default_chunk_size(self) -> int:
-        return 2048
+    def get_default_top_dir_size(self) -> int:
+        return 4096
 
 
 def main(module_name: str) -> None:

@@ -8,6 +8,8 @@ from .ingest import ingest_from_service, ingest_from_stdin
 
 
 class CLI:
+    validate_chain_continuity = True
+
     def __init__(self, module_name: str):
         self.module_name = module_name
 
@@ -16,6 +18,9 @@ class CLI:
 
     def get_default_chunk_size(self) -> int:
         return 1024
+
+    def get_default_top_dir_size(self) -> int:
+        return 500
 
     @cache
     def _arguments(self):
@@ -61,6 +66,14 @@ class CLI:
         )
 
         program.add_argument(
+            '--top-dir-size',
+            metavar='MB',
+            type=int,
+            default=self.get_default_top_dir_size(),
+            help='number of chunks in top-level dir'
+        )
+
+        program.add_argument(
             '--get-next-block',
             action='store_true',
             help='check the stored data, print the next block to write and exit'
@@ -86,7 +99,8 @@ class CLI:
             dest=args.dest,
             first_block=args.first_block,
             last_block=args.last_block,
-            chunk_size=args.chunk_size
+            chunk_size=args.chunk_size,
+            validate_chain_continuity=self.validate_chain_continuity,
         )
 
     def _start_prometheus_metrics(self):
