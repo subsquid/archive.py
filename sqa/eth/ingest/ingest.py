@@ -7,7 +7,7 @@ from sqa.eth.ingest.model import Block, Log, Receipt, DebugFrame, DebugFrameResu
     DebugStateDiffResult, TraceTransactionReplay, Transaction
 from sqa.util.rpc import RpcClient
 from sqa.eth.ingest.util import qty2int, get_tx_status_from_traces, logs_bloom, \
-    transactions_root, get_polygon_bor_tx_hash, recover_tx_sender
+    transactions_root, get_polygon_bor_tx_hash, recover_tx_sender, block_hash
 from sqa.eth.ingest.moonbase import fix_and_exclude_invalid_moonbase_blocks, is_moonbase_traceless
 
 
@@ -28,6 +28,7 @@ class Ingest:
         use_trace_api: bool = False,
         use_debug_api_for_statediffs: bool = False,
         debug_api_trace_config_timeout: Optional[str] = None,
+        validate_block_hash: bool = False,
         validate_tx_root: bool = False,
         validate_tx_type: bool = False,
         validate_tx_sender: bool = False,
@@ -42,6 +43,7 @@ class Ingest:
         self._use_trace_api = use_trace_api
         self._use_debug_api_for_statediffs = use_debug_api_for_statediffs
         self._debug_api_trace_config_timeout = debug_api_trace_config_timeout
+        self._validate_block_hash = validate_block_hash
         self._validate_tx_root = validate_tx_root
         self._validate_tx_type = validate_tx_type
         self._validate_tx_sender = validate_tx_sender
@@ -216,6 +218,10 @@ class Ingest:
             for block in blocks:
                 for tx in block['transactions']:
                     tx['type'] = '0x0'
+
+        if self._validate_block_hash:
+            for block in blocks:
+                assert block['hash'] == block_hash(block)
 
         if self._validate_tx_root:
             for block in blocks:

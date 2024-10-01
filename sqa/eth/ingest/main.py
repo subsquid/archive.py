@@ -184,6 +184,12 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
+        '--validate-block-hash',
+        action='store_true',
+        help='validate block header against block hash'
+    )
+
+    program.add_argument(
         '--validate-tx-root',
         action='store_true',
         help='validate block transactions against transactions root'
@@ -319,6 +325,7 @@ async def rpc_ingest(args, rpc: RpcClient, first_block: int, last_block: int | N
         use_trace_api=args.use_trace_api,
         use_debug_api_for_statediffs=args.use_debug_api_for_statediffs,
         debug_api_trace_config_timeout=args.debug_api_trace_config_timeout,
+        validate_block_hash=args.validate_block_hash,
         validate_tx_root=args.validate_tx_root,
         validate_tx_type=args.validate_tx_type,
         validate_tx_sender=args.validate_tx_sender,
