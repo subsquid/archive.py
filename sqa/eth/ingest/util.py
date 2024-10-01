@@ -354,21 +354,21 @@ def block_hash(block: Block) -> str:
     ]
 
     # https://eips.ethereum.org/EIPS/eip-1559#block-hash-changing
-    if base_fee := block.get('baseFeePerGas'):
-        fields.append(qty2int(base_fee))
+    if 'baseFeePerGas' in block:
+        fields.append(qty2int(block['baseFeePerGas']))
 
     # https://eips.ethereum.org/EIPS/eip-4895#new-field-in-the-execution-payload-header-withdrawals-root
-    if withdrawals_root := block.get('withdrawalsRoot'):
-        fields.append(decode_hex(withdrawals_root))
+    if 'withdrawalsRoot' in block:
+        fields.append(decode_hex(block['withdrawalsRoot']))
 
     # https://eips.ethereum.org/EIPS/eip-4844#header-extension
-    if blob_gas_used := block.get('blobGasUsed'):
-        fields.append(qty2int(blob_gas_used))
+    if 'blobGasUsed' in block:
+        fields.append(qty2int(block['blobGasUsed']))
         fields.append(qty2int(block['excessBlobGas']))
 
     # https://eips.ethereum.org/EIPS/eip-4788#block-structure-and-validity
-    if parent_beacon_block_root := block.get('parentBeaconBlockRoot'):
-        fields.append(decode_hex(parent_beacon_block_root))
+    if 'parentBeaconBlockRoot' in block:
+        fields.append(decode_hex(block['parentBeaconBlockRoot']))
 
     encoded = rlp.encode(fields)
     return encode_hex(keccak256(encoded))
