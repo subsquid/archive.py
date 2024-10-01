@@ -63,8 +63,8 @@ class BlockTableBuilder(TableBuilder):
         self.timestamp.append(qty2int(block['timestamp']))
         self.base_fee_per_gas.append(block.get('baseFeePerGas'))
         self.l1_block_number.append(_qty2int(block.get('l1BlockNumber')))
-        self.blob_gas_used.append(_qty2int(block.get('blobGasUsed')))
-        self.excess_blob_gas.append(_qty2int(block.get('excessBlobGas')))
+        self.blob_gas_used.append(block.get('blobGasUsed'))
+        self.excess_blob_gas.append(block.get('excessBlobGas'))
 
 
 class TxTableBuilder(TableBuilder):
@@ -125,7 +125,7 @@ class TxTableBuilder(TableBuilder):
         self.s.append(tx.get('s'))
         self.y_parity.append(_qty2int(tx.get('yParity')))
         self.chain_id.append(_qty2int(tx.get('chainId')))
-        self.max_fee_per_blob_gas.append(_qty2int(tx.get('maxFeePerBlobGas')))
+        self.max_fee_per_blob_gas.append(tx.get('maxFeePerBlobGas'))
         self.blob_versioned_hashes.append(tx.get('blobVersionedHashes'))
 
         self.sighash.append(_to_sighash(tx_input))
