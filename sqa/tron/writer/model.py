@@ -1,6 +1,9 @@
 from typing import TypedDict, Any, NotRequired
 
 
+JsBigInt = str
+
+
 class BlockHeader(TypedDict):
     height: int
     hash: str
@@ -30,30 +33,30 @@ class Transaction(TypedDict):
     permissionId: NotRequired[int]
     refBlockBytes: NotRequired[str]
     refBlockHash: NotRequired[str]
-    feeLimit: NotRequired[int]
+    feeLimit: NotRequired[JsBigInt]
     expiration: NotRequired[int]
-    timestamp: NotRequired[int]
+    timestamp: NotRequired[JsBigInt]
     rawDataHex: str
-    fee: NotRequired[int]
+    fee: NotRequired[JsBigInt]
     contractResult: NotRequired[str]
     contractAddress: NotRequired[str]
     resMessage: NotRequired[str]
-    withdrawAmount: NotRequired[int]
-    unfreezeAmount: NotRequired[int]
-    withdrawExpireAmount: NotRequired[int]
-    cancelUnfreezeV2Amount: NotRequired[dict[str, int]]
+    withdrawAmount: NotRequired[JsBigInt]
+    unfreezeAmount: NotRequired[JsBigInt]
+    withdrawExpireAmount: NotRequired[JsBigInt]
+    cancelUnfreezeV2Amount: NotRequired[dict[str, JsBigInt]]
     result: NotRequired[str]
-    energyFee: NotRequired[int]
-    energyUsage: NotRequired[int]
-    energyUsageTotal: NotRequired[int]
-    netUsage: NotRequired[int]
-    netFee: NotRequired[int]
-    originEnergyUsage: NotRequired[int]
-    energyPenaltyTotal: NotRequired[int]
+    energyFee: NotRequired[JsBigInt]
+    energyUsage: NotRequired[JsBigInt]
+    energyUsageTotal: NotRequired[JsBigInt]
+    netUsage: NotRequired[JsBigInt]
+    netFee: NotRequired[JsBigInt]
+    originEnergyUsage: NotRequired[JsBigInt]
+    energyPenaltyTotal: NotRequired[JsBigInt]
 
 
 class CallValueInfo(TypedDict):
-    callValue: NotRequired[int]
+    callValue: NotRequired[JsBigInt]
     tokenId: NotRequired[str]
 
 

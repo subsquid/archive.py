@@ -383,7 +383,10 @@ class _InternalTxItem(Item):
         return 'internalTransactions'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('internalTransaction'), ['transactionIndex', 'internalTransactionIndex'])
+        selected = get_selected_fields(fields.get('internalTransaction'), ['transactionIndex', 'internalTransactionIndex'])
+        return json_project(selected, rewrite={
+            'callValueInfo': 'call_value_info::json'
+        })
 
 
 def _build_model():
