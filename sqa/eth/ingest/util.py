@@ -8,7 +8,7 @@ import rlp
 from eth_utils.encoding import int_to_big_endian
 from eth_keys.datatypes import Signature
 
-from sqa.eth.ingest.model import Qty, Hash32, Transaction, Address20
+from sqa.eth.ingest.model import Qty, Hash32, Transaction, Address20, Block
 
 
 def qty2int(v: Qty) -> int:
@@ -332,3 +332,43 @@ def recover_tx_sender(tx: Transaction):
     public_key = signature.recover_public_key_from_msg(message)
     address = public_key.to_canonical_address()
     return encode_hex(address)
+
+
+def block_hash(block: Block) -> str:
+    fields = [
+        decode_hex(block['parentHash']),
+        decode_hex(block['sha3Uncles']),
+        decode_hex(block['miner']),
+        decode_hex(block['stateRoot']),
+        decode_hex(block['transactionsRoot']),
+        decode_hex(block['receiptsRoot']),
+        decode_hex(block['logsBloom']),
+        qty2int(block['difficulty']),
+        qty2int(block['number']),
+        qty2int(block['gasLimit']),
+        qty2int(block['gasUsed']),
+        qty2int(block['timestamp']),
+        decode_hex(block['extraData']),
+        decode_hex(block['mixHash']),
+        decode_hex(block['nonce'])
+    ]
+
+    # https://eips.ethereum.org/EIPS/eip-1559#block-hash-changing
+    if 'baseFeePerGas' in block:
+        fields.append(qty2int(block['baseFeePerGas']))
+
+    # https://eips.ethereum.org/EIPS/eip-4895#new-field-in-the-execution-payload-header-withdrawals-root
+    if 'withdrawalsRoot' in block:
+        fields.append(decode_hex(block['withdrawalsRoot']))
+
+    # https://eips.ethereum.org/EIPS/eip-4844#header-extension
+    if 'blobGasUsed' in block:
+        fields.append(qty2int(block['blobGasUsed']))
+        fields.append(qty2int(block['excessBlobGas']))
+
+    # https://eips.ethereum.org/EIPS/eip-4788#block-structure-and-validity
+    if 'parentBeaconBlockRoot' in block:
+        fields.append(decode_hex(block['parentBeaconBlockRoot']))
+
+    encoded = rlp.encode(fields)
+    return encode_hex(keccak256(encoded))
