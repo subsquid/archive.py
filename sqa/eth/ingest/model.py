@@ -54,7 +54,7 @@ Transaction = TypedDict('Transaction', {
     'value': Qty,
     'type': NotRequired[Qty],
     'gas': Qty,
-    'gasPrice': Qty,
+    'gasPrice': NotRequired[Qty],
     'maxFeePerGas': NotRequired[Qty],
     'maxPriorityFeePerGas': NotRequired[Qty],
     'v': NotRequired[Qty],

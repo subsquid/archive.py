@@ -111,7 +111,7 @@ class TxTableBuilder(TableBuilder):
         self.block_number.append(block_number)
         self.__dict__['from'].append(tx['from'])
         self.gas.append(tx['gas'])
-        self.gas_price.append(tx['gasPrice'])
+        self.gas_price.append(tx.get('gasPrice'))
         self.max_fee_per_gas.append(tx.get('maxFeePerGas'))
         self.max_priority_fee_per_gas.append(tx.get('maxPriorityFeePerGas'))
         self.hash.append(tx['hash'])
