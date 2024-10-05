@@ -8,7 +8,7 @@ import rlp
 from eth_utils.encoding import int_to_big_endian
 from eth_keys.datatypes import Signature
 
-from sqa.eth.ingest.model import Qty, Hash32, Transaction, Address20, Block
+from sqa.eth.ingest.model import Qty, Hash32, Transaction, Address20, Block, Log, Receipt
 
 
 def qty2int(v: Qty) -> int:
@@ -76,7 +76,7 @@ def _add_to_bloom(bloom: bytearray, bloom_entry: bytes):
         bloom[byte_index] = bloom[byte_index] | bit_value
 
 
-def logs_bloom(logs) -> str:
+def logs_bloom(logs: list[Log]) -> str:
     bloom = bytearray(b"\x00" * 256)
     for log in logs:
         _add_to_bloom(bloom, decode_hex(log['address']))
@@ -248,6 +248,32 @@ def transactions_root(transactions: list[Transaction]) -> str:
             ])
         else:
             raise Exception(f'Unknown tx type {tx["type"]}')
+    return encode_hex(trie.root_hash)
+
+
+def _encode_logs(logs: list[Log]):
+    encoded = []
+    for log in logs:
+        address = decode_hex(log['address'])
+        topics = []
+        for topic in log['topics']:
+            topics.append(decode_hex(topic))
+        data = decode_hex(log['data'])
+        encoded.append([address, topics, data])
+    return encoded
+
+
+def receipts_root(receipts: list[Receipt]) -> str:
+    trie = HexaryTrie({})
+    for receipt in receipts:
+        path = rlp.encode(qty2int(receipt['transactionIndex']))
+        type_ = b'' if receipt['type'] == '0x0' else rlp.encode(qty2int(receipt['type']))
+        trie[path] = type_ + rlp.encode([
+            qty2int(receipt['status']),
+            qty2int(receipt['cumulativeGasUsed']),
+            decode_hex(logs_bloom(receipt['logs'])),
+            _encode_logs(receipt['logs']),
+        ])
     return encode_hex(trie.root_hash)
 
 

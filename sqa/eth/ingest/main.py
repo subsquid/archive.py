@@ -202,6 +202,12 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
+        '--validate-receipts-root',
+        action='store_true',
+        help='validate block receipts against receipts root'
+    )
+
+    program.add_argument(
         '--validate-tx-type',
         action='store_true',
         help='check if transaction type is not empty',
@@ -330,6 +336,7 @@ async def rpc_ingest(args, rpc: RpcClient, first_block: int, last_block: int | N
         validate_tx_type=args.validate_tx_type,
         validate_tx_sender=args.validate_tx_sender,
         validate_logs_bloom=args.validate_logs_bloom,
+        validate_receipts_root=args.validate_receipts_root,
         polygon_based=args.polygon_based,
     )
 

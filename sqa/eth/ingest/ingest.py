@@ -7,7 +7,7 @@ from sqa.eth.ingest.model import Block, Log, Receipt, DebugFrame, DebugFrameResu
     DebugStateDiffResult, TraceTransactionReplay, Transaction
 from sqa.util.rpc import RpcClient
 from sqa.eth.ingest.util import qty2int, get_tx_status_from_traces, logs_bloom, \
-    transactions_root, get_polygon_bor_tx_hash, recover_tx_sender, block_hash
+    transactions_root, get_polygon_bor_tx_hash, recover_tx_sender, block_hash, receipts_root
 from sqa.eth.ingest.moonbase import fix_and_exclude_invalid_moonbase_blocks, is_moonbase_traceless
 
 
@@ -33,6 +33,7 @@ class Ingest:
         validate_tx_type: bool = False,
         validate_tx_sender: bool = False,
         validate_logs_bloom: bool = False,
+        validate_receipts_root: bool = False,
         polygon_based: bool = False,
     ):
         self._rpc = rpc
@@ -48,6 +49,7 @@ class Ingest:
         self._validate_tx_type = validate_tx_type
         self._validate_tx_sender = validate_tx_sender
         self._validate_logs_bloom = validate_logs_bloom
+        self._validate_receipts_root = validate_receipts_root
         self._polygon_based = polygon_based
         self._height = from_block - 1
         self._genesis = genesis_block
@@ -294,9 +296,12 @@ class Ingest:
 
         receipts_map: dict[str, Receipt] = {}
         logs_by_hash: dict[str, list[Log]] = {}
+        receipts_by_hash: dict[str, list[Receipt]] = {}
         for r in receipts:
             receipts_map[r['transactionHash']] = r
             block_logs = logs_by_hash.setdefault(r['blockHash'], [])
+            block_receipts = receipts_by_hash.setdefault(r['blockHash'], [])
+            block_receipts.append(r)
 
             if self._is_arbitrum_one and r['transactionHash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800':
                 continue
@@ -341,6 +346,7 @@ class Ingest:
                 _fix_astar_995596(block)
 
             block_logs = logs_by_hash.get(block['hash'], [])
+            block_receipts = receipts_by_hash.get(block['hash'], [])
 
             if self._validate_logs_bloom:
                 if self._polygon_based:
@@ -349,6 +355,9 @@ class Ingest:
                     assert block['logsBloom'] == logs_bloom(logs)
                 else:
                     assert block['logsBloom'] == logs_bloom(block_logs)
+
+            if self._validate_receipts_root:
+                assert block['receiptsRoot'] == receipts_root(block_receipts)
 
             for tx in block['transactions']:
                 if self._is_arbitrum_one and tx['hash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800' and block['number'] == hex(4527955):
