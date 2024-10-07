@@ -122,7 +122,7 @@ def transactions_root(transactions: list[Transaction]) -> str:
                 decode_hex(tx['to']) if tx['to'] else b'',
                 qty2int(tx['value']),
                 decode_hex(tx['input']),
-                _encode_access_list(tx['accessList']),
+                _encode_access_list(tx.get('accessList', [])),
                 qty2int(tx['v']),
                 qty2int(tx['r']),
                 qty2int(tx['s'])
@@ -137,7 +137,7 @@ def transactions_root(transactions: list[Transaction]) -> str:
                 decode_hex(tx['to']) if tx['to'] else b'',
                 qty2int(tx['value']),
                 decode_hex(tx['input']),
-                _encode_access_list(tx['accessList']),
+                _encode_access_list(tx.get('accessList', [])),
                 qty2int(tx['v']),
                 qty2int(tx['r']),
                 qty2int(tx['s'])
@@ -153,7 +153,7 @@ def transactions_root(transactions: list[Transaction]) -> str:
                 decode_hex(tx['to']) if tx['to'] else b'',
                 qty2int(tx['value']),
                 decode_hex(tx['input']),
-                _encode_access_list(tx['accessList']),
+                _encode_access_list(tx.get('accessList', [])),
                 qty2int(tx['maxFeePerBlobGas']),
                 [decode_hex(h) for h in tx['blobVersionedHashes']],
                 qty2int(tx['yParity']) if 'yParity' in tx else qty2int(tx['v']),
