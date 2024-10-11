@@ -68,6 +68,7 @@ class Ingest:
         self._is_optimism = False
         self._is_astar = False
         self._is_skale_nebula = False
+        self._is_bitfinity_mainnet = False
 
     async def loop(self) -> AsyncIterator[list[Block]]:
         assert not self._running
@@ -100,6 +101,7 @@ class Ingest:
         self._is_optimism = genesis_hash == '0x7ca38a1916c42007829c55e69d3e9a73265554b586a499015373241b8a3fa48b'
         self._is_astar = genesis_hash == '0x0d28a86ac0fe37871285bd1dac45d83a4b3833e01a37571a1ac4f0a44c64cdc2'
         self._is_skale_nebula = genesis_hash == '0x28e07f346c28a837dfd2897ce70c8500de6e67ddbc33cb5b9cd720fff4aeb598'
+        self._is_bitfinity_mainnet = genesis_hash == '0xc2fca73be73731907eec1890d851a2b64fe23616766586f0ee572b3a152eee81'
 
     def _schedule_strides(self):
         while len(self._strides) < max(1, min(10, self._rpc.get_total_capacity())) \
@@ -220,6 +222,14 @@ class Ingest:
             for block in blocks:
                 for tx in block['transactions']:
                     tx['type'] = '0x0'
+        if self._is_bitfinity_mainnet:
+            for block in blocks:
+                for tx in block['transactions']:
+                    if tx.get('type') is None:
+                        if 'maxPriorityFeePerGas' in tx:
+                            tx['type'] = '0x2'
+                        else:
+                            tx['type'] = '0x0'
 
         if self._validate_block_hash:
             for block in blocks:
@@ -307,6 +317,11 @@ class Ingest:
                 continue
             if self._is_skale_nebula:
                 r['type'] = '0x0'
+            elif self._is_bitfinity_mainnet:
+                if r.get('type') is None:
+                    tx = tx_by_index[r['blockHash']][r['transactionIndex']]
+                    assert r['transactionHash'] == tx['hash']
+                    r['type'] = tx['type']
             elif self._validate_tx_type:
                 assert r.get('type') is not None
 
@@ -379,6 +394,17 @@ class Ingest:
 
         if self._is_skale_nebula:
             receipt['type'] = '0x0'
+        if self._is_bitfinity_mainnet:
+            if receipt.get('type') is None:
+                tx: Transaction = await self._rpc.call(
+                    'eth_getTransactionByHash',
+                    [tx['hash']],
+                    priority=block_number
+                )
+                if 'maxPriorityFeePerGas' in tx:
+                    receipt['type'] = '0x2'
+                else:
+                    receipt['type'] = '0x0'
 
         assert receipt['transactionHash'] == tx['hash']
         tx['receipt_'] = receipt
