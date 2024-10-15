@@ -330,25 +330,25 @@ class QueryPlan:
         self._block_number_type = block_number_type
 
     def fetch(self, partition: Partition) -> pyarrow.Table:
-        scan_data: ScanData = {}
-        for req_name, scan_queries in self._scan_queries.items():
-            scan_data[req_name] = [
-                q.fetch(partition) for q in scan_queries
-            ]
-
-        selected_items: dict[ItemName, pyarrow.Table] = {}
-        for name, q in self._item_selection_queries.items():
-            selected_items[name] = q.fetch(partition, scan_data)
-
-        block_numbers = self._get_selected_blocks(partition, selected_items)
-
-        item_data: dict[ItemName, pyarrow.Table] = {}
-        for name, selection in selected_items.items():
-            selection = selection.filter(pyarrow.compute.field('block_number').isin(block_numbers))
-            data_query = self._item_data_queries[name]
-            item_data[name] = data_query.fetch(partition, selection.column('idx'))
-
         try:
+            scan_data: ScanData = {}
+            for req_name, scan_queries in self._scan_queries.items():
+                scan_data[req_name] = [
+                    q.fetch(partition) for q in scan_queries
+                ]
+
+            selected_items: dict[ItemName, pyarrow.Table] = {}
+            for name, q in self._item_selection_queries.items():
+                selected_items[name] = q.fetch(partition, scan_data)
+
+            block_numbers = self._get_selected_blocks(partition, selected_items)
+
+            item_data: dict[ItemName, pyarrow.Table] = {}
+            for name, selection in selected_items.items():
+                selection = selection.filter(pyarrow.compute.field('block_number').isin(block_numbers))
+                data_query = self._item_data_queries[name]
+                item_data[name] = data_query.fetch(partition, selection.column('idx'))
+
             return self._block_query.fetch(partition, item_data, block_numbers)
         except pyarrow.ArrowInvalid as e:
             if field := _get_missing_field(e):
