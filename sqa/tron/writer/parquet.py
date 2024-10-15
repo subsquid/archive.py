@@ -66,7 +66,7 @@ class TransactionTable(TableBuilder):
         self.ref_block_hash = Column(pyarrow.string())
         self.fee_limit = Column(pyarrow.int64())
         self.expiration = Column(pyarrow.timestamp('ms', tz='UTC'))
-        self.timestamp = Column(pyarrow.timestamp('ms', tz='UTC'))
+        self.timestamp = Column(pyarrow.int64())
         self.raw_data_hex = Column(pyarrow.string())
 
         # info

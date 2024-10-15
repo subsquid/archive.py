@@ -23,10 +23,14 @@ class Log(TypedDict):
     topics: NotRequired[list[str]]
 
 
+class TransactionResult(TypedDict):
+    contractRet: NotRequired[str]
+
+
 class Transaction(TypedDict):
     hash: str
     transactionIndex: int
-    ret: NotRequired[str]
+    ret: NotRequired[list[TransactionResult]]
     signature: NotRequired[list[str]]
     type: str
     parameter: Any

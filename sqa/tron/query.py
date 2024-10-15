@@ -295,7 +295,7 @@ class _TxItem(Item):
 
     def project(self, fields: FieldSelection) -> str:
         return json_project(self.get_selected_fields(fields), rewrite={
-            'timestamp': 'epoch_ms(timestamp)',
+            'timestamp': 'timestamp::text',
             'expiration': 'epoch_ms(expiration)',
             'parameter': 'parameter::json',
             'feeLimit': 'fee_limit::text',
@@ -310,6 +310,7 @@ class _TxItem(Item):
             'netFee': 'net_fee::text',
             'originEnergyUsage': 'origin_energy_usage::text',
             'energyPenaltyTotal': 'energy_penalty_total::text',
+            'ret': 'ret::json'
         })
 
 
@@ -383,8 +384,10 @@ class _InternalTxItem(Item):
         return 'internalTransactions'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        selected = get_selected_fields(fields.get('internalTransaction'), ['transactionIndex', 'internalTransactionIndex'])
-        return json_project(selected, rewrite={
+        return get_selected_fields(fields.get('internalTransaction'), ['transactionIndex', 'internalTransactionIndex'])
+
+    def project(self, fields: FieldSelection) -> list[str]:
+        return json_project(self.get_selected_fields(fields), rewrite={
             'callValueInfo': 'call_value_info::json'
         })
 
