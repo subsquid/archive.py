@@ -65,7 +65,10 @@ ingest-tron:
 ingest-starknet:
 	@python3 -m sqa.starknet.writer data/starknet \
 		-e ${STARKNET_NODE} \
-		--first-block 600000 \
+		--first-block 702000 \
+		--last-block 703000 \
+		--with-traces \
+		--with-statediffs \
 		--chunk-size 256
 
 
