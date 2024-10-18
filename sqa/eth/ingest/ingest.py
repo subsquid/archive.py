@@ -19,7 +19,6 @@ class Ingest:
         self,
         rpc: RpcClient,
         finality_confirmation: int,
-        genesis_block: int = 0,
         from_block: int = 0,
         to_block: Optional[int] = None,
         with_receipts: bool = False,
@@ -52,7 +51,6 @@ class Ingest:
         self._validate_receipts_root = validate_receipts_root
         self._polygon_based = polygon_based
         self._height = from_block - 1
-        self._genesis = genesis_block
         self._end = to_block
         self._chain_height = 0
         self._strides = []
@@ -64,7 +62,6 @@ class Ingest:
         self._is_moonriver = False
         self._is_moonbase = False
         self._is_polygon = False
-        self._is_polygon_testnet = False
         self._is_optimism = False
         self._is_astar = False
         self._is_skale_nebula = False
@@ -90,18 +87,16 @@ class Ingest:
         self._rpc.close()
 
     async def _detect_special_chains(self) -> None:
-        genesis: Block = await self._rpc.call('eth_getBlockByNumber', [hex(self._genesis), False])
-        genesis_hash = genesis['hash']
-        self._is_arbitrum_one = genesis_hash == '0x7ee576b35482195fc49205cec9af72ce14f003b9ae69f6ba0faef4514be8b442'
-        self._is_moonbeam = genesis_hash == '0x7e6b3bbed86828a558271c9c9f62354b1d8b5aa15ff85fd6f1e7cbe9af9dde7e'
-        self._is_moonriver = genesis_hash == '0xce24348303f7a60c4d2d3c82adddf55ca57af89cd9e2cd4b863906ef53b89b3c'
-        self._is_moonbase = genesis_hash == '0x33638dde636f9264b6472b9d976d58e757fe88badac53f204f3f530ecc5aacfa'
-        self._is_polygon = genesis_hash == '0xa9c28ce2141b56c474f1dc504bee9b01eb1bd7d1a507580d5519d4437a97de1b'
-        self._is_polygon_testnet = genesis_hash == '0x7b66506a9ebdbf30d32b43c5f15a3b1216269a1ec3a75aa3182b86176a2b1ca7'
-        self._is_optimism = genesis_hash == '0x7ca38a1916c42007829c55e69d3e9a73265554b586a499015373241b8a3fa48b'
-        self._is_astar = genesis_hash == '0x0d28a86ac0fe37871285bd1dac45d83a4b3833e01a37571a1ac4f0a44c64cdc2'
-        self._is_skale_nebula = genesis_hash == '0x28e07f346c28a837dfd2897ce70c8500de6e67ddbc33cb5b9cd720fff4aeb598'
-        self._is_bitfinity_mainnet = genesis_hash == '0xc2fca73be73731907eec1890d851a2b64fe23616766586f0ee572b3a152eee81'
+        chain_id: str = await self._rpc.call('eth_chainId', [])
+        self._is_arbitrum_one = chain_id == '0xa4b1'
+        self._is_moonbeam = chain_id == '0x504'
+        self._is_moonriver = chain_id == '0x505'
+        self._is_moonbase = chain_id == '0x507'
+        self._is_polygon = chain_id == '0x89'
+        self._is_optimism = chain_id == '0xa'
+        self._is_astar = chain_id == '0x250'
+        self._is_skale_nebula = chain_id == '0x585eb4b1'
+        self._is_bitfinity_mainnet = chain_id == '0x56b26'
 
     def _schedule_strides(self):
         while len(self._strides) < max(1, min(10, self._rpc.get_total_capacity())) \
@@ -339,7 +334,7 @@ class Ingest:
                 else:
                     raise e
 
-            if (self._is_polygon or self._is_polygon_testnet) and _is_polygon_precompiled(tx):
+            if self._is_polygon and _is_polygon_precompiled(tx):
                 continue
 
             for log in r['logs']:
@@ -435,7 +430,7 @@ class Ingest:
                 tx for tx in transactions
                 if tx['hash'] != get_polygon_bor_tx_hash(block_number, block['hash'])
             ]
-        if self._is_polygon or self._is_polygon_testnet:
+        if self._is_polygon:
             transactions = [tx for tx in transactions if not _is_polygon_precompiled(tx)]
         if self._is_moonbase:
             transactions = [tx for tx in transactions if not is_moonbase_traceless(tx, block)]
