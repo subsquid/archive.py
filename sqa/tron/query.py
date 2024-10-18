@@ -310,7 +310,8 @@ class _TxItem(Item):
             'netFee': 'net_fee::text',
             'originEnergyUsage': 'origin_energy_usage::text',
             'energyPenaltyTotal': 'energy_penalty_total::text',
-            'ret': 'ret::json'
+            'ret': 'ret::json',
+            'cancelUnfreezeV2Amount': 'cancel_unfreeze_v2_amount::json'
         })
 
 
