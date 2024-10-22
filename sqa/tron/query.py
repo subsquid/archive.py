@@ -389,7 +389,8 @@ class _InternalTxItem(Item):
 
     def project(self, fields: FieldSelection) -> list[str]:
         return json_project(self.get_selected_fields(fields), rewrite={
-            'callValueInfo': 'call_value_info::json'
+            'callValueInfo': 'call_value_info::json',
+            'transferToAddress': 'transer_to_address::text'
         })
 
 
@@ -414,6 +415,27 @@ def _build_model():
             query='SELECT * FROM internal_transactions i, s WHERE '
                   'i.block_number = s.block_number AND '
                   'i.transaction_index = s.transaction_index'
+        ),
+        JoinRel(
+            scan=transfer_tx_scan,
+            include_flag_name='internalTransactions',
+            query='SELECT * FROM internal_transactions i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        ),
+        JoinRel(
+            scan=transfer_asset_tx_scan,
+            include_flag_name='internalTransactions',
+            query='SELECT * FROM internal_transactions i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        ),
+        JoinRel(
+            scan=trigger_contract_tx_scan,
+            include_flag_name='internalTransactions',
+            query='SELECT * FROM internal_transactions i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
         )
     ])
 
@@ -421,6 +443,27 @@ def _build_model():
         log_scan,
         JoinRel(
             scan=tx_scan,
+            include_flag_name='logs',
+            query='SELECT * FROM logs i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        ),
+        JoinRel(
+            scan=transfer_tx_scan,
+            include_flag_name='logs',
+            query='SELECT * FROM logs i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        ),
+        JoinRel(
+            scan=transfer_asset_tx_scan,
+            include_flag_name='logs',
+            query='SELECT * FROM logs i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        ),
+        JoinRel(
+            scan=trigger_contract_tx_scan,
             include_flag_name='logs',
             query='SELECT * FROM logs i, s WHERE '
                   'i.block_number = s.block_number AND '
