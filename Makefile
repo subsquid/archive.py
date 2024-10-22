@@ -68,6 +68,12 @@ ingest-starknet:
 		--first-block 600000 \
 		--chunk-size 256
 
+ingest-starknet-to-json:
+	@python3 -m sqa.starknet.writer json/starknet \
+		-e ${STARKNET_NODE} \
+		--first-block 600000 \
+		--chunk-size 256 \
+		--raw
 
 ingest-fuel:
 	@python3 -m sqa.fuel.writer data/fuel \

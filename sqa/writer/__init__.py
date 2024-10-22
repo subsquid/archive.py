@@ -1,10 +1,15 @@
+import json
 import logging
 import math
+import os
+import tempfile
 import time
 from functools import cached_property
 from typing import Iterable, Protocol, Any
 
-from sqa.fs import create_fs, Fs
+import pyarrow
+
+from sqa.fs import LocalFs, create_fs, Fs
 from sqa.layout import ChunkWriter
 from sqa.util.counters import Progress
 
@@ -172,13 +177,54 @@ class Sink:
                 self._report()
                 last_report = current_time
 
-        if self._writer.buffered_bytes() > 0 and last_block == write_range[1]:
-            flush()
+        # NOTE: In case no chunks were made we still need to save data we received
+        flush()
 
         self._writer.end()
 
         if self._progress.has_news():
             self._report()
+
+    def _raw_writer(self, strides: Iterable[list[Block]]) -> None:
+        # heavily copied from sqa.eth.ingest.main._raw_writer
+        while True:
+            written = 0
+            first_block = math.inf
+            tmp = tempfile.NamedTemporaryFile(delete=False)
+            try:
+                with tmp, pyarrow.CompressedOutputStream(tmp, 'gzip') as out:
+                    for bb in strides:
+                        first_block = min(first_block, bb[0]['number'])
+                        last_block = bb[-1]['number']
+                        last_hash = bb[-1]['hash']
+
+                        for block in bb:
+                            line = json.dumps(block).encode('utf-8')
+                            out.write(line)
+                            out.write(b'\n')
+                            written += len(line) + 1
+
+                        if written > self._chunk_size * 1024 * 1024:
+                            break
+
+                if written > 0:
+                    chunk = self._chunk_writer.next_chunk(first_block, last_block, _short_hash(last_hash))
+                    dest = f'{chunk.path()}/blocks.jsonl.gz'
+                    if isinstance(self._fs, LocalFs):
+                        loc = self._fs.abs(dest)
+                        os.makedirs(os.path.dirname(loc), exist_ok=True)
+                        os.rename(tmp.name, loc)
+                    else:
+                        # from _upload_temp_file function
+                        try:
+                            self._fs.upload(tmp.name, dest)
+                        finally:
+                            os.remove(tmp.name)
+                else:
+                    return
+            except:
+                os.remove(tmp.name)
+                raise
 
 
 def _short_hash(value: str) -> str:
