@@ -374,7 +374,7 @@ class _InternalTxScan(Scan):
 
     def where(self, req: InternalTxRequest) -> Iterable[Expression | None]:
         yield field_in('caller_address', req.get('caller'))
-        yield field_in('transer_to_address', req.get('transferTo'))
+        yield field_in('transfer_to_address', req.get('transferTo'))
 
 
 class _InternalTxItem(Item):
@@ -389,8 +389,7 @@ class _InternalTxItem(Item):
 
     def project(self, fields: FieldSelection) -> list[str]:
         return json_project(self.get_selected_fields(fields), rewrite={
-            'callValueInfo': 'call_value_info::json',
-            'transferToAddress': 'transer_to_address::text'
+            'callValueInfo': 'call_value_info::json'
         })
 
 

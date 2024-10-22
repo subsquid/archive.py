@@ -195,7 +195,7 @@ class InternalTransactionTable(TableBuilder):
         self.internal_transaction_index = Column(pyarrow.int32())
         self.hash = Column(pyarrow.string())
         self.caller_address = Column(pyarrow.string())
-        self.transer_to_address = Column(pyarrow.string())
+        self.transfer_to_address = Column(pyarrow.string())
         self.call_value_info = Column(JSON())
         self.note = Column(pyarrow.string())
         self.rejected = Column(pyarrow.bool_())
@@ -207,7 +207,7 @@ class InternalTransactionTable(TableBuilder):
         self.internal_transaction_index.append(internal_tx['internalTransactionIndex'])
         self.hash.append(internal_tx['hash'])
         self.caller_address.append(internal_tx['callerAddress'])
-        self.transer_to_address.append(internal_tx.get('transferToAddress'))
+        self.transfer_to_address.append(internal_tx.get('transferToAddress'))
         self.call_value_info.append(_to_json(internal_tx['callValueInfo']))
         self.note.append(internal_tx['note'])
         self.rejected.append(internal_tx.get('rejected'))
@@ -312,7 +312,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
 
     internal_transactions = tables['internal_transactions']
     internal_transactions = internal_transactions.sort_by([
-        ('transer_to_address', 'ascending'),
+        ('transfer_to_address', 'ascending'),
         ('caller_address', 'ascending'),
         ('block_number', 'ascending'),
         ('internal_transaction_index', 'ascending')
@@ -328,7 +328,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
             'block_number',
             'transaction_index',
             'internal_transaction_index',
-            'transer_to_address',
+            'transfer_to_address',
             'caller_address'
         ],
         **kwargs
