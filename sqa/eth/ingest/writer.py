@@ -131,7 +131,7 @@ def write_metadata(loc: Fs, with_traces: bool, with_statediffs: bool):
     try:
         metadata = generate_metadata(with_traces, with_statediffs)
         with tmp:
-            json.dump(metadata, tmp)
+            json.dump(metadata, tmp, indent=4)
         loc.upload(tmp.name, 'metadata.json')
     finally:
         os.remove(tmp.name)
