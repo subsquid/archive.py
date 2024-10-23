@@ -157,6 +157,12 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
+        '--with-metadata',
+        action='store_true',
+        help='generate and write chunk metadata'
+    )
+
+    program.add_argument(
         '--use-trace-api',
         action='store_true',
         help='use trace_* API for statediffs and call traces'
@@ -268,6 +274,7 @@ async def run(args):
         last_block=args.last_block,
         with_traces=args.with_traces,
         with_statediffs=args.with_statediffs,
+        with_metadata=args.with_metadata,
         raw=args.raw
     )
 
@@ -388,6 +395,7 @@ class WriteOptions(NamedTuple):
     last_block: Optional[int] = None
     with_traces: bool = False
     with_statediffs: bool = False
+    with_metadata: bool = False
     raw: bool = False
 
 
@@ -543,7 +551,8 @@ class WriteService:
             self.fs,
             self._chunk_writer,
             with_traces=self.options.with_traces,
-            with_statediffs=self.options.with_statediffs
+            with_statediffs=self.options.with_statediffs,
+            with_metadata=self.options.with_metadata
         )
 
         async for blocks, extra in batches:
