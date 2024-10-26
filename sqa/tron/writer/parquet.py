@@ -26,6 +26,10 @@ def _to_sighash(data: str | None) -> str | None:
         return data[:8] if len(data) >= 8 else None
 
 
+def _to_int(val: str | None) -> int | None:
+    return None if val is None else int(val)
+
+
 class BlockTable(TableBuilder):
     def __init__(self):
         self.number = Column(pyarrow.int32())
@@ -53,7 +57,7 @@ class TransactionTable(TableBuilder):
         self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
         self.hash = Column(pyarrow.string())
-        self.ret = Column(pyarrow.list_(JSON()))
+        self.ret = Column(JSON())
         self.signature = Column(pyarrow.list_(pyarrow.string()))
         self.type = Column(pyarrow.string())
         self.parameter = Column(JSON())
@@ -62,7 +66,7 @@ class TransactionTable(TableBuilder):
         self.ref_block_hash = Column(pyarrow.string())
         self.fee_limit = Column(pyarrow.int64())
         self.expiration = Column(pyarrow.timestamp('ms', tz='UTC'))
-        self.timestamp = Column(pyarrow.timestamp('ms', tz='UTC'))
+        self.timestamp = Column(pyarrow.int64())
         self.raw_data_hex = Column(pyarrow.string())
 
         # info
@@ -73,7 +77,7 @@ class TransactionTable(TableBuilder):
         self.withdraw_amount = Column(pyarrow.int64())
         self.unfreeze_amount = Column(pyarrow.int64())
         self.withdraw_expire_amount = Column(pyarrow.int64())
-        self.cancel_unfreezeV2_amount = Column(JSON())
+        self.cancel_unfreeze_v2_amount = Column(JSON())
 
         # receipt
         self.result = Column(pyarrow.string())
@@ -110,28 +114,28 @@ class TransactionTable(TableBuilder):
         self.permission_id.append(tx.get('permissionId'))
         self.ref_block_bytes.append(tx.get('refBlockBytes'))
         self.ref_block_hash.append(tx.get('refBlockHash'))
-        self.fee_limit.append(tx.get('feeLimit'))
+        self.fee_limit.append(_to_int(tx.get('feeLimit')))
         self.expiration.append(tx.get('expiration'))
-        self.timestamp.append(tx.get('timestamp'))
+        self.timestamp.append(_to_int(tx.get('timestamp')))
         self.raw_data_hex.append(tx['rawDataHex'])
 
-        self.fee.append(tx.get('fee'))
+        self.fee.append(_to_int(tx.get('fee')))
         self.contract_result.append(tx.get('contractResult'))
         self.contract_address.append(tx.get('contractAddress'))
         self.res_message.append(tx.get('resMessage'))
-        self.withdraw_amount.append(tx.get('withdrawAmount'))
-        self.unfreeze_amount.append(tx.get('unfreezeAmount'))
-        self.withdraw_expire_amount.append(tx.get('withdrawExpireAmount'))
-        self.cancel_unfreezeV2_amount.append(_to_json(tx.get('cancelUnfreezeV2Amount')))
+        self.withdraw_amount.append(_to_int(tx.get('withdrawAmount')))
+        self.unfreeze_amount.append(_to_int(tx.get('unfreezeAmount')))
+        self.withdraw_expire_amount.append(_to_int(tx.get('withdrawExpireAmount')))
+        self.cancel_unfreeze_v2_amount.append(_to_json(tx.get('cancelUnfreezeV2Amount')))
 
         self.result.append(tx.get('result'))
-        self.energy_fee.append(tx.get('energyFee'))
-        self.energy_usage.append(tx.get('energyUsage'))
-        self.energy_usage_total.append(tx.get('energyUsageTotal'))
-        self.net_usage.append(tx.get('netUsage'))
-        self.net_fee.append(tx.get('netFee'))
-        self.origin_energy_usage.append(tx.get('originEnergyUsage'))
-        self.energy_penalty_total.append(tx.get('energyPenaltyTotal'))
+        self.energy_fee.append(_to_int(tx.get('energyFee')))
+        self.energy_usage.append(_to_int(tx.get('energyUsage')))
+        self.energy_usage_total.append(_to_int(tx.get('energyUsageTotal')))
+        self.net_usage.append(_to_int(tx.get('netUsage')))
+        self.net_fee.append(_to_int(tx.get('netFee')))
+        self.origin_energy_usage.append(_to_int(tx.get('originEnergyUsage')))
+        self.energy_penalty_total.append(_to_int(tx.get('energyPenaltyTotal')))
 
         if tx['type'] == 'TransferContract':
             self._transfer_contract_owner.append(tx['parameter']['value']['owner_address'])
@@ -191,7 +195,7 @@ class InternalTransactionTable(TableBuilder):
         self.internal_transaction_index = Column(pyarrow.int32())
         self.hash = Column(pyarrow.string())
         self.caller_address = Column(pyarrow.string())
-        self.transer_to_address = Column(pyarrow.string())
+        self.transfer_to_address = Column(pyarrow.string())
         self.call_value_info = Column(JSON())
         self.note = Column(pyarrow.string())
         self.rejected = Column(pyarrow.bool_())
@@ -203,7 +207,7 @@ class InternalTransactionTable(TableBuilder):
         self.internal_transaction_index.append(internal_tx['internalTransactionIndex'])
         self.hash.append(internal_tx['hash'])
         self.caller_address.append(internal_tx['callerAddress'])
-        self.transer_to_address.append(internal_tx.get('transferToAddress'))
+        self.transfer_to_address.append(internal_tx.get('transferToAddress'))
         self.call_value_info.append(_to_json(internal_tx['callValueInfo']))
         self.note.append(internal_tx['note'])
         self.rejected.append(internal_tx.get('rejected'))
@@ -308,7 +312,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
 
     internal_transactions = tables['internal_transactions']
     internal_transactions = internal_transactions.sort_by([
-        ('transer_to_address', 'ascending'),
+        ('transfer_to_address', 'ascending'),
         ('caller_address', 'ascending'),
         ('block_number', 'ascending'),
         ('internal_transaction_index', 'ascending')
@@ -324,7 +328,7 @@ def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
             'block_number',
             'transaction_index',
             'internal_transaction_index',
-            'transer_to_address',
+            'transfer_to_address',
             'caller_address'
         ],
         **kwargs

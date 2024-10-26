@@ -1,5 +1,8 @@
 import logging
 from typing import TypedDict, NotRequired
+import tempfile
+import json
+import os
 
 import pyarrow
 
@@ -7,6 +10,7 @@ from sqa.eth.ingest.model import Block
 from sqa.eth.ingest.tables import BlockTableBuilder, LogTableBuilder, TxTableBuilder, TraceTableBuilder, \
     StateDiffTableBuilder
 from sqa.eth.ingest.util import short_hash
+from sqa.eth.ingest.metadata import generate_metadata
 from sqa.fs import Fs
 from sqa.layout import ChunkWriter
 from sqa.writer.parquet import add_size_column, add_index_column
@@ -92,11 +96,19 @@ class ArrowBatchBuilder:
 
 
 class ParquetWriter:
-    def __init__(self, fs: Fs, chunk_writer: ChunkWriter, with_traces: bool, with_statediffs: bool):
+    def __init__(
+        self,
+        fs: Fs,
+        chunk_writer: ChunkWriter,
+        with_traces: bool,
+        with_statediffs: bool,
+        with_metadata: bool,
+    ):
         self.fs = fs
         self.chunk_writer = chunk_writer
         self.with_traces = with_traces
         self.with_statediffs = with_statediffs
+        self.with_metadata = with_metadata
 
     def write(self, batch: ArrowDataBatch) -> None:
         blocks = batch['blocks']
@@ -109,7 +121,22 @@ class ParquetWriter:
         LOG.debug('saving data chunk %s', chunk.path())
 
         with self.fs.transact(chunk.path()) as loc:
+            if self.with_metadata:
+                write_metadata(loc, self.with_traces, self.with_statediffs)
             write_parquet(loc, batch)
+
+
+def write_metadata(loc: Fs, with_traces: bool, with_statediffs: bool):
+    tmp = tempfile.NamedTemporaryFile(mode='w', delete=False)
+    try:
+        metadata = generate_metadata(with_traces, with_statediffs)
+        with tmp:
+            json.dump(metadata, tmp, indent=4)
+        loc.upload(tmp.name, 'metadata.json')
+    finally:
+        os.remove(tmp.name)
+
+    LOG.debug('wrote %s', loc.abs('metadata.json'))
 
 
 def write_parquet(loc: Fs, batch: ArrowDataBatch) -> None:

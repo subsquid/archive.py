@@ -32,6 +32,8 @@ class BlockFieldSelection(TypedDict, total=False):
     totalDifficulty: bool
     baseFeePerGas: bool
     l1BlockNumber: bool
+    blobGasUsed: bool
+    excessBlobGas: bool
 
 
 TxFieldSelection = TypedDict('TxFieldSelection', {
@@ -58,6 +60,8 @@ TxFieldSelection = TypedDict('TxFieldSelection', {
     'effectiveGasPrice': bool,
     'type': bool,
     'status': bool,
+    'maxFeePerBlobGas': bool,
+    'blobVersionedHashes': bool,
     'l1Fee': bool,
     'l1FeeScalar': bool,
     'l1GasPrice': bool,

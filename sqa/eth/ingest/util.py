@@ -8,7 +8,7 @@ import rlp
 from eth_utils.encoding import int_to_big_endian
 from eth_keys.datatypes import Signature
 
-from sqa.eth.ingest.model import Qty, Hash32, Transaction, Address20
+from sqa.eth.ingest.model import Qty, Hash32, Transaction, Address20, Block, Log, Receipt
 
 
 def qty2int(v: Qty) -> int:
@@ -76,7 +76,7 @@ def _add_to_bloom(bloom: bytearray, bloom_entry: bytes):
         bloom[byte_index] = bloom[byte_index] | bit_value
 
 
-def logs_bloom(logs) -> str:
+def logs_bloom(logs: list[Log]) -> str:
     bloom = bytearray(b"\x00" * 256)
     for log in logs:
         _add_to_bloom(bloom, decode_hex(log['address']))
@@ -122,7 +122,7 @@ def transactions_root(transactions: list[Transaction]) -> str:
                 decode_hex(tx['to']) if tx['to'] else b'',
                 qty2int(tx['value']),
                 decode_hex(tx['input']),
-                _encode_access_list(tx['accessList']),
+                _encode_access_list(tx.get('accessList', [])),
                 qty2int(tx['v']),
                 qty2int(tx['r']),
                 qty2int(tx['s'])
@@ -137,7 +137,7 @@ def transactions_root(transactions: list[Transaction]) -> str:
                 decode_hex(tx['to']) if tx['to'] else b'',
                 qty2int(tx['value']),
                 decode_hex(tx['input']),
-                _encode_access_list(tx['accessList']),
+                _encode_access_list(tx.get('accessList', [])),
                 qty2int(tx['v']),
                 qty2int(tx['r']),
                 qty2int(tx['s'])
@@ -153,7 +153,7 @@ def transactions_root(transactions: list[Transaction]) -> str:
                 decode_hex(tx['to']) if tx['to'] else b'',
                 qty2int(tx['value']),
                 decode_hex(tx['input']),
-                _encode_access_list(tx['accessList']),
+                _encode_access_list(tx.get('accessList', [])),
                 qty2int(tx['maxFeePerBlobGas']),
                 [decode_hex(h) for h in tx['blobVersionedHashes']],
                 qty2int(tx['yParity']) if 'yParity' in tx else qty2int(tx['v']),
@@ -251,6 +251,32 @@ def transactions_root(transactions: list[Transaction]) -> str:
     return encode_hex(trie.root_hash)
 
 
+def _encode_logs(logs: list[Log]):
+    encoded = []
+    for log in logs:
+        address = decode_hex(log['address'])
+        topics = []
+        for topic in log['topics']:
+            topics.append(decode_hex(topic))
+        data = decode_hex(log['data'])
+        encoded.append([address, topics, data])
+    return encoded
+
+
+def receipts_root(receipts: list[Receipt]) -> str:
+    trie = HexaryTrie({})
+    for receipt in receipts:
+        path = rlp.encode(qty2int(receipt['transactionIndex']))
+        type_ = b'' if receipt['type'] == '0x0' else rlp.encode(qty2int(receipt['type']))
+        trie[path] = type_ + rlp.encode([
+            qty2int(receipt['status']),
+            qty2int(receipt['cumulativeGasUsed']),
+            decode_hex(logs_bloom(receipt['logs'])),
+            _encode_logs(receipt['logs']),
+        ])
+    return encode_hex(trie.root_hash)
+
+
 def get_polygon_bor_tx_hash(block_num: int, block_hash: str):
     tx_receipt_key = b'matic-bor-receipt-' + block_num.to_bytes(8) + decode_hex(block_hash)
     return encode_hex(keccak256(tx_receipt_key))
@@ -332,3 +358,43 @@ def recover_tx_sender(tx: Transaction):
     public_key = signature.recover_public_key_from_msg(message)
     address = public_key.to_canonical_address()
     return encode_hex(address)
+
+
+def block_hash(block: Block) -> str:
+    fields = [
+        decode_hex(block['parentHash']),
+        decode_hex(block['sha3Uncles']),
+        decode_hex(block['miner']),
+        decode_hex(block['stateRoot']),
+        decode_hex(block['transactionsRoot']),
+        decode_hex(block['receiptsRoot']),
+        decode_hex(block['logsBloom']),
+        qty2int(block['difficulty']),
+        qty2int(block['number']),
+        qty2int(block['gasLimit']),
+        qty2int(block['gasUsed']),
+        qty2int(block['timestamp']),
+        decode_hex(block['extraData']),
+        decode_hex(block['mixHash']),
+        decode_hex(block['nonce'])
+    ]
+
+    # https://eips.ethereum.org/EIPS/eip-1559#block-hash-changing
+    if 'baseFeePerGas' in block:
+        fields.append(qty2int(block['baseFeePerGas']))
+
+    # https://eips.ethereum.org/EIPS/eip-4895#new-field-in-the-execution-payload-header-withdrawals-root
+    if 'withdrawalsRoot' in block:
+        fields.append(decode_hex(block['withdrawalsRoot']))
+
+    # https://eips.ethereum.org/EIPS/eip-4844#header-extension
+    if 'blobGasUsed' in block:
+        fields.append(qty2int(block['blobGasUsed']))
+        fields.append(qty2int(block['excessBlobGas']))
+
+    # https://eips.ethereum.org/EIPS/eip-4788#block-structure-and-validity
+    if 'parentBeaconBlockRoot' in block:
+        fields.append(decode_hex(block['parentBeaconBlockRoot']))
+
+    encoded = rlp.encode(fields)
+    return encode_hex(keccak256(encoded))

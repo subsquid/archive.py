@@ -7,7 +7,7 @@ from sqa.eth.ingest.model import Block, Log, Receipt, DebugFrame, DebugFrameResu
     DebugStateDiffResult, TraceTransactionReplay, Transaction
 from sqa.util.rpc import RpcClient
 from sqa.eth.ingest.util import qty2int, get_tx_status_from_traces, logs_bloom, \
-    transactions_root, get_polygon_bor_tx_hash, recover_tx_sender
+    transactions_root, get_polygon_bor_tx_hash, recover_tx_sender, block_hash, receipts_root
 from sqa.eth.ingest.moonbase import fix_and_exclude_invalid_moonbase_blocks, is_moonbase_traceless
 
 
@@ -19,7 +19,6 @@ class Ingest:
         self,
         rpc: RpcClient,
         finality_confirmation: int,
-        genesis_block: int = 0,
         from_block: int = 0,
         to_block: Optional[int] = None,
         with_receipts: bool = False,
@@ -28,10 +27,12 @@ class Ingest:
         use_trace_api: bool = False,
         use_debug_api_for_statediffs: bool = False,
         debug_api_trace_config_timeout: Optional[str] = None,
+        validate_block_hash: bool = False,
         validate_tx_root: bool = False,
         validate_tx_type: bool = False,
         validate_tx_sender: bool = False,
         validate_logs_bloom: bool = False,
+        validate_receipts_root: bool = False,
         polygon_based: bool = False,
     ):
         self._rpc = rpc
@@ -42,13 +43,14 @@ class Ingest:
         self._use_trace_api = use_trace_api
         self._use_debug_api_for_statediffs = use_debug_api_for_statediffs
         self._debug_api_trace_config_timeout = debug_api_trace_config_timeout
+        self._validate_block_hash = validate_block_hash
         self._validate_tx_root = validate_tx_root
         self._validate_tx_type = validate_tx_type
         self._validate_tx_sender = validate_tx_sender
         self._validate_logs_bloom = validate_logs_bloom
+        self._validate_receipts_root = validate_receipts_root
         self._polygon_based = polygon_based
         self._height = from_block - 1
-        self._genesis = genesis_block
         self._end = to_block
         self._chain_height = 0
         self._strides = []
@@ -60,10 +62,10 @@ class Ingest:
         self._is_moonriver = False
         self._is_moonbase = False
         self._is_polygon = False
-        self._is_polygon_testnet = False
         self._is_optimism = False
         self._is_astar = False
         self._is_skale_nebula = False
+        self._is_bitfinity_mainnet = False
 
     async def loop(self) -> AsyncIterator[list[Block]]:
         assert not self._running
@@ -85,17 +87,16 @@ class Ingest:
         self._rpc.close()
 
     async def _detect_special_chains(self) -> None:
-        genesis: Block = await self._rpc.call('eth_getBlockByNumber', [hex(self._genesis), False])
-        genesis_hash = genesis['hash']
-        self._is_arbitrum_one = genesis_hash == '0x7ee576b35482195fc49205cec9af72ce14f003b9ae69f6ba0faef4514be8b442'
-        self._is_moonbeam = genesis_hash == '0x7e6b3bbed86828a558271c9c9f62354b1d8b5aa15ff85fd6f1e7cbe9af9dde7e'
-        self._is_moonriver = genesis_hash == '0xce24348303f7a60c4d2d3c82adddf55ca57af89cd9e2cd4b863906ef53b89b3c'
-        self._is_moonbase = genesis_hash == '0x33638dde636f9264b6472b9d976d58e757fe88badac53f204f3f530ecc5aacfa'
-        self._is_polygon = genesis_hash == '0xa9c28ce2141b56c474f1dc504bee9b01eb1bd7d1a507580d5519d4437a97de1b'
-        self._is_polygon_testnet = genesis_hash == '0x7b66506a9ebdbf30d32b43c5f15a3b1216269a1ec3a75aa3182b86176a2b1ca7'
-        self._is_optimism = genesis_hash == '0x7ca38a1916c42007829c55e69d3e9a73265554b586a499015373241b8a3fa48b'
-        self._is_astar = genesis_hash == '0x0d28a86ac0fe37871285bd1dac45d83a4b3833e01a37571a1ac4f0a44c64cdc2'
-        self._is_skale_nebula = genesis_hash == '0x28e07f346c28a837dfd2897ce70c8500de6e67ddbc33cb5b9cd720fff4aeb598'
+        chain_id: str = await self._rpc.call('eth_chainId', [])
+        self._is_arbitrum_one = chain_id == '0xa4b1'
+        self._is_moonbeam = chain_id == '0x504'
+        self._is_moonriver = chain_id == '0x505'
+        self._is_moonbase = chain_id == '0x507'
+        self._is_polygon = chain_id == '0x89'
+        self._is_optimism = chain_id == '0xa'
+        self._is_astar = chain_id == '0x250'
+        self._is_skale_nebula = chain_id == '0x585eb4b1'
+        self._is_bitfinity_mainnet = chain_id == '0x56b26'
 
     def _schedule_strides(self):
         while len(self._strides) < max(1, min(10, self._rpc.get_total_capacity())) \
@@ -216,6 +217,18 @@ class Ingest:
             for block in blocks:
                 for tx in block['transactions']:
                     tx['type'] = '0x0'
+        if self._is_bitfinity_mainnet:
+            for block in blocks:
+                for tx in block['transactions']:
+                    if tx.get('type') is None:
+                        if 'maxPriorityFeePerGas' in tx:
+                            tx['type'] = '0x2'
+                        else:
+                            tx['type'] = '0x0'
+
+        if self._validate_block_hash:
+            for block in blocks:
+                assert block['hash'] == block_hash(block)
 
         if self._validate_tx_root:
             for block in blocks:
@@ -288,14 +301,22 @@ class Ingest:
 
         receipts_map: dict[str, Receipt] = {}
         logs_by_hash: dict[str, list[Log]] = {}
+        receipts_by_hash: dict[str, list[Receipt]] = {}
         for r in receipts:
             receipts_map[r['transactionHash']] = r
             block_logs = logs_by_hash.setdefault(r['blockHash'], [])
+            block_receipts = receipts_by_hash.setdefault(r['blockHash'], [])
+            block_receipts.append(r)
 
             if self._is_arbitrum_one and r['transactionHash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800':
                 continue
             if self._is_skale_nebula:
                 r['type'] = '0x0'
+            elif self._is_bitfinity_mainnet:
+                if r.get('type') is None:
+                    tx = tx_by_index[r['blockHash']][r['transactionIndex']]
+                    assert r['transactionHash'] == tx['hash']
+                    r['type'] = tx['type']
             elif self._validate_tx_type:
                 assert r.get('type') is not None
 
@@ -313,7 +334,7 @@ class Ingest:
                 else:
                     raise e
 
-            if (self._is_polygon or self._is_polygon_testnet) and _is_polygon_precompiled(tx):
+            if self._is_polygon and _is_polygon_precompiled(tx):
                 continue
 
             for log in r['logs']:
@@ -335,6 +356,7 @@ class Ingest:
                 _fix_astar_995596(block)
 
             block_logs = logs_by_hash.get(block['hash'], [])
+            block_receipts = receipts_by_hash.get(block['hash'], [])
 
             if self._validate_logs_bloom:
                 if self._polygon_based:
@@ -343,6 +365,9 @@ class Ingest:
                     assert block['logsBloom'] == logs_bloom(logs)
                 else:
                     assert block['logsBloom'] == logs_bloom(block_logs)
+
+            if self._validate_receipts_root:
+                assert block['receiptsRoot'] == receipts_root(block_receipts)
 
             for tx in block['transactions']:
                 if self._is_arbitrum_one and tx['hash'] == '0x1d76d3d13e9f8cc713d484b0de58edd279c4c62e46e963899aec28eb648b5800' and block['number'] == hex(4527955):
@@ -364,6 +389,17 @@ class Ingest:
 
         if self._is_skale_nebula:
             receipt['type'] = '0x0'
+        if self._is_bitfinity_mainnet:
+            if receipt.get('type') is None:
+                tx: Transaction = await self._rpc.call(
+                    'eth_getTransactionByHash',
+                    [tx['hash']],
+                    priority=block_number
+                )
+                if 'maxPriorityFeePerGas' in tx:
+                    receipt['type'] = '0x2'
+                else:
+                    receipt['type'] = '0x0'
 
         assert receipt['transactionHash'] == tx['hash']
         tx['receipt_'] = receipt
@@ -394,7 +430,7 @@ class Ingest:
                 tx for tx in transactions
                 if tx['hash'] != get_polygon_bor_tx_hash(block_number, block['hash'])
             ]
-        if self._is_polygon or self._is_polygon_testnet:
+        if self._is_polygon:
             transactions = [tx for tx in transactions if not _is_polygon_precompiled(tx)]
         if self._is_moonbase:
             transactions = [tx for tx in transactions if not is_moonbase_traceless(tx, block)]

@@ -30,6 +30,10 @@ class Block(TypedDict):
     difficulty: NotRequired[Qty]
     totalDifficulty: NotRequired[Qty]
     baseFeePerGas: NotRequired[Qty]
+    withdrawalsRoot: NotRequired[Bytes]
+    blobGasUsed: NotRequired[Qty]
+    excessBlobGas: NotRequired[Qty]
+    parentBeaconBlockRoot: NotRequired[Bytes]
     uncles: list[Hash32]
     transactions: list['Transaction']
     l1BlockNumber: NotRequired[Qty]
@@ -50,7 +54,7 @@ Transaction = TypedDict('Transaction', {
     'value': Qty,
     'type': NotRequired[Qty],
     'gas': Qty,
-    'gasPrice': Qty,
+    'gasPrice': NotRequired[Qty],
     'maxFeePerGas': NotRequired[Qty],
     'maxPriorityFeePerGas': NotRequired[Qty],
     'v': NotRequired[Qty],
@@ -59,6 +63,8 @@ Transaction = TypedDict('Transaction', {
     'yParity': NotRequired[Qty],
     'accessList': NotRequired[list],
     'chainId': NotRequired[Qty],
+    'maxFeePerBlobGas': NotRequired[Qty],
+    'blobVersionedHashes': NotRequired[list[Hash32]],
     'receipt_': NotRequired['Receipt'],
     'debugFrame_': NotRequired['DebugFrameResult'],
     'debugStateDiff_': NotRequired['DebugStateDiffResult'],

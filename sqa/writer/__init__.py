@@ -145,10 +145,12 @@ class Sink:
                     block_hash = self._get_hash(block)
                     block_parent_hash = self._get_parent_hash(block)
                     if last_hash and last_hash != block_parent_hash:
-                        raise Exception(
-                            f'broken chain: block {self._get_height(block)}#{block_hash} '
-                            f'is not a direct child of {self._get_height(block) - 1}#{last_hash}'
-                        )
+                        fallback_hash = _short_hash_fallback(self._writer.get_block_parent_hash(block))
+                        if last_hash != fallback_hash:
+                            raise Exception(
+                                f'broken chain: block {self._get_height(block)}#{block_hash} '
+                                f'is not a direct child of {self._get_height(block) - 1}#{last_hash}'
+                            )
                     last_hash = block_hash
                 else:
                     last_hash = self._get_hash(block)
@@ -181,6 +183,10 @@ class Sink:
 
 
 def _short_hash(value: str) -> str:
+    return value[-5:]
+
+
+def _short_hash_fallback(value: str) -> str:
     if value.startswith('0x'):
         return value[2:10]
     else:

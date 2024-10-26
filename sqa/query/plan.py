@@ -176,6 +176,14 @@ def _get_weight_exp(item: Item, params: Params, fields: FieldSelection) -> str:
     return ' + '.join(weight_components)
 
 
+def _get_missing_field(e: pyarrow.ArrowInvalid):
+    if e.args and type(e.args[0]) == str:
+        msg: str = e.args[0]
+        if msg.startswith('No match for FieldRef'):
+            field = msg[msg.find('(') + 1:msg.find(')')]
+            return field
+
+
 class _ItemSelectionQuery:
     def __init__(self, item: Item, fields: FieldSelection, sources: list[ItemSrcQuery]):
         self.table_name = item.table().name
@@ -323,25 +331,30 @@ class QueryPlan:
         self._block_number_type = block_number_type
 
     def fetch(self, partition: Partition) -> pyarrow.Table:
-        scan_data: ScanData = {}
-        for req_name, scan_queries in self._scan_queries.items():
-            scan_data[req_name] = [
-                q.fetch(partition) for q in scan_queries
-            ]
+        try:
+            scan_data: ScanData = {}
+            for req_name, scan_queries in self._scan_queries.items():
+                scan_data[req_name] = [
+                    q.fetch(partition) for q in scan_queries
+                ]
 
-        selected_items: dict[ItemName, pyarrow.Table] = {}
-        for name, q in self._item_selection_queries.items():
-            selected_items[name] = q.fetch(partition, scan_data)
+            selected_items: dict[ItemName, pyarrow.Table] = {}
+            for name, q in self._item_selection_queries.items():
+                selected_items[name] = q.fetch(partition, scan_data)
 
-        block_numbers = self._get_selected_blocks(partition, selected_items)
+            block_numbers = self._get_selected_blocks(partition, selected_items)
 
-        item_data: dict[ItemName, pyarrow.Table] = {}
-        for name, selection in selected_items.items():
-            selection = selection.filter(pyarrow.compute.field('block_number').isin(block_numbers))
-            data_query = self._item_data_queries[name]
-            item_data[name] = data_query.fetch(partition, selection.column('idx'))
+            item_data: dict[ItemName, pyarrow.Table] = {}
+            for name, selection in selected_items.items():
+                selection = selection.filter(pyarrow.compute.field('block_number').isin(block_numbers))
+                data_query = self._item_data_queries[name]
+                item_data[name] = data_query.fetch(partition, selection.column('idx'))
 
-        return self._block_query.fetch(partition, item_data, block_numbers)
+            return self._block_query.fetch(partition, item_data, block_numbers)
+        except pyarrow.ArrowInvalid as e:
+            if field := _get_missing_field(e):
+                raise MissingData(f'field "{field}" is not available')
+            raise e
 
     def _get_selected_blocks(self,
                              parition: Partition,

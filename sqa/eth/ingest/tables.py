@@ -39,13 +39,15 @@ class BlockTableBuilder(TableBuilder):
         self.timestamp = Column(pyarrow.timestamp('s'))
         self.base_fee_per_gas = Column(qty())
         self.l1_block_number = Column(pyarrow.int32())
+        self.blob_gas_used = Column(qty())
+        self.excess_blob_gas = Column(qty())
 
     def append(self, block: Block) -> None:
         self.number.append(qty2int(block['number']))
         self.hash.append(block['hash'])
         self.parent_hash.append(block['parentHash'])
         self.nonce.append(block.get('nonce'))
-        self.sha3_uncles.append(block['sha3Uncles'])
+        self.sha3_uncles.append(block.get('sha3Uncles'))
         self.logs_bloom.append(block['logsBloom'])
         self.transactions_root.append(block['transactionsRoot'])
         self.state_root.append(block['stateRoot'])
@@ -60,7 +62,9 @@ class BlockTableBuilder(TableBuilder):
         self.gas_limit.append(block['gasLimit'])
         self.timestamp.append(qty2int(block['timestamp']))
         self.base_fee_per_gas.append(block.get('baseFeePerGas'))
-        self.l1_block_number.append(block.get('l1BlockNumber') and qty2int(block['l1BlockNumber']))
+        self.l1_block_number.append(_qty2int(block.get('l1BlockNumber')))
+        self.blob_gas_used.append(block.get('blobGasUsed'))
+        self.excess_blob_gas.append(block.get('excessBlobGas'))
 
 
 class TxTableBuilder(TableBuilder):
@@ -89,6 +93,8 @@ class TxTableBuilder(TableBuilder):
         self.contract_address = Column(pyarrow.string())
         self.type = Column(pyarrow.uint8())
         self.status = Column(pyarrow.int8())
+        self.max_fee_per_blob_gas = Column(qty())
+        self.blob_versioned_hashes = Column(pyarrow.list_(pyarrow.string()))
         self.l1_fee = Column(qty())
         self.l1_fee_scalar = Column(bigfloat())
         self.l1_gas_price = Column(qty())
@@ -105,7 +111,7 @@ class TxTableBuilder(TableBuilder):
         self.block_number.append(block_number)
         self.__dict__['from'].append(tx['from'])
         self.gas.append(tx['gas'])
-        self.gas_price.append(tx['gasPrice'])
+        self.gas_price.append(tx.get('gasPrice'))
         self.max_fee_per_gas.append(tx.get('maxFeePerGas'))
         self.max_priority_fee_per_gas.append(tx.get('maxPriorityFeePerGas'))
         self.hash.append(tx['hash'])
@@ -117,8 +123,10 @@ class TxTableBuilder(TableBuilder):
         self.v.append(tx.get('v'))
         self.r.append(tx.get('r'))
         self.s.append(tx.get('s'))
-        self.y_parity.append(tx.get('yParity') and qty2int(tx['yParity']))
-        self.chain_id.append(tx.get('chainId') and qty2int(tx['chainId']))
+        self.y_parity.append(_qty2int(tx.get('yParity')))
+        self.chain_id.append(_qty2int(tx.get('chainId')))
+        self.max_fee_per_blob_gas.append(tx.get('maxFeePerBlobGas'))
+        self.blob_versioned_hashes.append(tx.get('blobVersionedHashes'))
 
         self.sighash.append(_to_sighash(tx_input))
 
@@ -127,7 +135,7 @@ class TxTableBuilder(TableBuilder):
             self.gas_used.append(receipt['gasUsed'])
             self.cumulative_gas_used.append(receipt['cumulativeGasUsed'])
             self.effective_gas_price.append(receipt.get('effectiveGasPrice'))
-            self.type.append(receipt.get('type') and qty2int(receipt['type']))
+            self.type.append(_qty2int(receipt.get('type')))
             self.status.append(qty2int(receipt['status']))
             self.contract_address.append(receipt.get('contractAddress'))
             self.l1_fee.append(receipt.get('l1Fee'))

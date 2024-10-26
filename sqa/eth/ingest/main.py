@@ -116,14 +116,6 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
-        '--genesis-block',
-        type=int,
-        default=0,
-        metavar='N',
-        help='genesis block of a network'
-    )
-
-    program.add_argument(
         '--first-block',
         type=int,
         default=0,
@@ -165,6 +157,12 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
+        '--with-metadata',
+        action='store_true',
+        help='generate and write chunk metadata'
+    )
+
+    program.add_argument(
         '--use-trace-api',
         action='store_true',
         help='use trace_* API for statediffs and call traces'
@@ -184,6 +182,12 @@ def parse_cli_arguments():
     )
 
     program.add_argument(
+        '--validate-block-hash',
+        action='store_true',
+        help='validate block header against block hash'
+    )
+
+    program.add_argument(
         '--validate-tx-root',
         action='store_true',
         help='validate block transactions against transactions root'
@@ -193,6 +197,12 @@ def parse_cli_arguments():
         '--validate-logs-bloom',
         action='store_true',
         help='validate block logs against logs bloom'
+    )
+
+    program.add_argument(
+        '--validate-receipts-root',
+        action='store_true',
+        help='validate block receipts against receipts root'
     )
 
     program.add_argument(
@@ -264,6 +274,7 @@ async def run(args):
         last_block=args.last_block,
         with_traces=args.with_traces,
         with_statediffs=args.with_statediffs,
+        with_metadata=args.with_metadata,
         raw=args.raw
     )
 
@@ -310,7 +321,6 @@ async def rpc_ingest(args, rpc: RpcClient, first_block: int, last_block: int | N
     ingest = Ingest(
         rpc=rpc,
         finality_confirmation=args.best_block_offset,
-        genesis_block=args.genesis_block,
         from_block=first_block,
         to_block=last_block,
         with_receipts=args.with_receipts,
@@ -319,10 +329,12 @@ async def rpc_ingest(args, rpc: RpcClient, first_block: int, last_block: int | N
         use_trace_api=args.use_trace_api,
         use_debug_api_for_statediffs=args.use_debug_api_for_statediffs,
         debug_api_trace_config_timeout=args.debug_api_trace_config_timeout,
+        validate_block_hash=args.validate_block_hash,
         validate_tx_root=args.validate_tx_root,
         validate_tx_type=args.validate_tx_type,
         validate_tx_sender=args.validate_tx_sender,
         validate_logs_bloom=args.validate_logs_bloom,
+        validate_receipts_root=args.validate_receipts_root,
         polygon_based=args.polygon_based,
     )
 
@@ -383,6 +395,7 @@ class WriteOptions(NamedTuple):
     last_block: Optional[int] = None
     with_traces: bool = False
     with_statediffs: bool = False
+    with_metadata: bool = False
     raw: bool = False
 
 
@@ -538,7 +551,8 @@ class WriteService:
             self.fs,
             self._chunk_writer,
             with_traces=self.options.with_traces,
-            with_statediffs=self.options.with_statediffs
+            with_statediffs=self.options.with_statediffs,
+            with_metadata=self.options.with_metadata
         )
 
         async for blocks, extra in batches:

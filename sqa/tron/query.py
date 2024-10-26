@@ -295,7 +295,7 @@ class _TxItem(Item):
 
     def project(self, fields: FieldSelection) -> str:
         return json_project(self.get_selected_fields(fields), rewrite={
-            'timestamp': 'epoch_ms(timestamp)',
+            'timestamp': 'timestamp::text',
             'expiration': 'epoch_ms(expiration)',
             'parameter': 'parameter::json',
             'feeLimit': 'fee_limit::text',
@@ -310,6 +310,8 @@ class _TxItem(Item):
             'netFee': 'net_fee::text',
             'originEnergyUsage': 'origin_energy_usage::text',
             'energyPenaltyTotal': 'energy_penalty_total::text',
+            'ret': 'ret::json',
+            'cancelUnfreezeV2Amount': 'cancel_unfreeze_v2_amount::json'
         })
 
 
@@ -372,7 +374,7 @@ class _InternalTxScan(Scan):
 
     def where(self, req: InternalTxRequest) -> Iterable[Expression | None]:
         yield field_in('caller_address', req.get('caller'))
-        yield field_in('transer_to_address', req.get('transferTo'))
+        yield field_in('transfer_to_address', req.get('transferTo'))
 
 
 class _InternalTxItem(Item):
@@ -384,6 +386,11 @@ class _InternalTxItem(Item):
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
         return get_selected_fields(fields.get('internalTransaction'), ['transactionIndex', 'internalTransactionIndex'])
+
+    def project(self, fields: FieldSelection) -> list[str]:
+        return json_project(self.get_selected_fields(fields), rewrite={
+            'callValueInfo': 'call_value_info::json'
+        })
 
 
 def _build_model():
@@ -407,6 +414,27 @@ def _build_model():
             query='SELECT * FROM internal_transactions i, s WHERE '
                   'i.block_number = s.block_number AND '
                   'i.transaction_index = s.transaction_index'
+        ),
+        JoinRel(
+            scan=transfer_tx_scan,
+            include_flag_name='internalTransactions',
+            query='SELECT * FROM internal_transactions i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        ),
+        JoinRel(
+            scan=transfer_asset_tx_scan,
+            include_flag_name='internalTransactions',
+            query='SELECT * FROM internal_transactions i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        ),
+        JoinRel(
+            scan=trigger_contract_tx_scan,
+            include_flag_name='internalTransactions',
+            query='SELECT * FROM internal_transactions i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
         )
     ])
 
@@ -414,6 +442,27 @@ def _build_model():
         log_scan,
         JoinRel(
             scan=tx_scan,
+            include_flag_name='logs',
+            query='SELECT * FROM logs i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        ),
+        JoinRel(
+            scan=transfer_tx_scan,
+            include_flag_name='logs',
+            query='SELECT * FROM logs i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        ),
+        JoinRel(
+            scan=transfer_asset_tx_scan,
+            include_flag_name='logs',
+            query='SELECT * FROM logs i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index'
+        ),
+        JoinRel(
+            scan=trigger_contract_tx_scan,
             include_flag_name='logs',
             query='SELECT * FROM logs i, s WHERE '
                   'i.block_number = s.block_number AND '
