@@ -1,11 +1,11 @@
-from typing import Iterable, TypedDict
+from collections.abc import Iterable
+from typing import TypedDict
 
 import marshmallow as mm
 from pyarrow.dataset import Expression
 
 from sqa.query.model import Item, JoinRel, Model, RefRel, Scan, Table
-from sqa.query.schema import BaseQuerySchema
-from sqa.query.schema import field_map_schema
+from sqa.query.schema import BaseQuerySchema, field_map_schema
 from sqa.query.util import field_gte, field_in, field_lte, get_selected_fields, json_project, to_snake_case
 
 
@@ -41,6 +41,7 @@ class EventFieldSelection(TypedDict, total=False):
 
 
 class TraceFieldSelection(TypedDict, total=False):
+    traceType: bool
     invocationType: bool
     callerAddress: bool
     callContractAddress: bool
@@ -51,18 +52,18 @@ class TraceFieldSelection(TypedDict, total=False):
     callRevertReason: bool
     calldata: bool
     callResult: bool
-    parentIndex: bool
-    traceType: bool
+
+
+class CallMessageFieldSelection(TypedDict, total=False):
+    fromAddress: bool
+    toAddress: bool
+    payload: bool
+    order: bool
 
 
 class StateUpdateFieldSelection(TypedDict, total=False):
-    blockNumber: bool
-    blockHash: bool
     newRoot: bool
     oldRoot: bool
-    storageDiffsAddress: bool
-    storageDiffsKeys: bool
-    storageDiffsValues: bool
     deprecatedDeclaredClasses: bool
     declaredClassesClassHash: bool
     declaredClassesCompiledClassHash: bool
@@ -73,12 +74,19 @@ class StateUpdateFieldSelection(TypedDict, total=False):
     noncesContractAddress: bool
     noncesNonce: bool
 
+class StorageDiffFieldSelection(TypedDict, total=False):
+    keys: bool
+    values: bool
+
+
 class FieldSelection(TypedDict, total=False):
     block: BlockFieldSelection
     transaction: TransactionFieldSelection
     event: EventFieldSelection
     trace: TraceFieldSelection
+    callMessage: CallMessageFieldSelection
     stateUpdate: StateUpdateFieldSelection
+    storageDiff: StorageDiffFieldSelection
 
 
 class _FieldSelectionSchema(mm.Schema):
@@ -86,16 +94,21 @@ class _FieldSelectionSchema(mm.Schema):
     transaction = field_map_schema(TransactionFieldSelection)
     event = field_map_schema(EventFieldSelection)
     trace = field_map_schema(TraceFieldSelection)
+    callMessage = field_map_schema(CallMessageFieldSelection)
     stateUpdate = field_map_schema(StateUpdateFieldSelection)
+    storageDiff = field_map_schema(StorageDiffFieldSelection)
 
 
 class TransactionRequest(TypedDict, total=False):
+    transactionHash: list[str]
     contractAddress: list[str]
     senderAddress: list[str]
     type: list[str]
     firstNonce: int
     lastNonce: int
     events: bool
+    traces: bool
+    messages: bool
 
 
 class _TransactionRequestSchema(mm.Schema):
@@ -104,13 +117,15 @@ class _TransactionRequestSchema(mm.Schema):
     type = mm.fields.List(mm.fields.Str())
     firstNonce = mm.fields.Integer(
         strict=True,
-        validate=mm.validate.Range(min=0, min_inclusive=True)
-    ),
+        validate=mm.validate.Range(min=0, min_inclusive=True),
+    )
     lastNonce = mm.fields.Integer(
         strict=True,
-        validate=mm.validate.Range(min=0, min_inclusive=True)
+        validate=mm.validate.Range(min=0, min_inclusive=True),
     )
     events = mm.fields.Boolean()
+    traces = mm.fields.Boolean()
+    messages = mm.fields.Boolean()
 
 
 class EventRequest(TypedDict, total=False):
@@ -132,7 +147,7 @@ class _EventRequestSchema(mm.Schema):
 
 
 class TraceRequest(TypedDict, total=False):
-    # TODO: potentialy filter by calldata simular to keys of events
+    traceType: list[str]
     invocationType: list[str]
     callerAddress: list[str]
     callContractAddress: list[str]
@@ -140,11 +155,13 @@ class TraceRequest(TypedDict, total=False):
     callType: list[str]
     callEntryPointSelector: list[str]
     callEntryPointType: list[str]
-    traceType: list[str]
     transaction: bool
+    messages: bool
+    events: bool
 
 
 class _TraceRequestSchema(mm.Schema):
+    traceType = mm.fields.List(mm.fields.Str())
     invocationType = mm.fields.List(mm.fields.Str())
     callerAddress = mm.fields.List(mm.fields.Str())
     callContractAddress = mm.fields.List(mm.fields.Str())
@@ -152,9 +169,18 @@ class _TraceRequestSchema(mm.Schema):
     callType = mm.fields.List(mm.fields.Str())
     callEntryPointSelector = mm.fields.List(mm.fields.Str())
     callEntryPointType = mm.fields.List(mm.fields.Str())
-    traceType = mm.fields.List(mm.fields.Str())
     transaction = mm.fields.Boolean()
+    messages = mm.fields.Boolean()
+    events = mm.fields.Boolean()
 
+
+class CallMessageRequest(TypedDict, total=False):
+    fromAddress: list[str]
+    toAddress: list[str]
+
+class _CallMessageRequestSchema(mm.Schema):
+    fromAddress = mm.fields.List(mm.fields.Str())
+    toAddress = mm.fields.List(mm.fields.Str())
 
 class StateUpdateRequest(TypedDict, total=False):
     newRoot: list[str]
@@ -166,12 +192,22 @@ class _StateUpdateRequestSchema(mm.Schema):
     oldRoot = mm.fields.List(mm.fields.Str())
 
 
+class StorageDiffRequest(TypedDict, total=False):
+    address: list[str]
+
+
+class _StorageDiffRequestSchema(mm.Schema):
+    address = mm.fields.List(mm.fields.Str())
+
+
 class _QuerySchema(BaseQuerySchema):
     fields = mm.fields.Nested(_FieldSelectionSchema())
     transactions = mm.fields.List(mm.fields.Nested(_TransactionRequestSchema()))
     events = mm.fields.List(mm.fields.Nested(_EventRequestSchema()))
     traces = mm.fields.List(mm.fields.Nested(_TraceRequestSchema()))
+    callMessages = mm.fields.List(mm.fields.Nested(_CallMessageRequestSchema()))
     stateUpdates = mm.fields.List(mm.fields.Nested(_StateUpdateRequestSchema()))
+    storageDiffs = mm.fields.List(mm.fields.Nested(_StorageDiffRequestSchema()))
 
 
 QUERY_SCHEMA = _QuerySchema()
@@ -186,11 +222,7 @@ _blocks_table = Table(
 _tx_table = Table(
     name='transactions',
     primary_key=['transaction_index'],
-    column_weights={
-        'calldata': 'calldata_size',
-        'signature': 'signature_size',
-        'constructor_calldata':  'constructor_calldata_size'
-    }
+    column_weights={},
 )
 
 
@@ -203,47 +235,34 @@ _events_table = Table(
         'key2': 0,
         'key3': 0,
         'rest_keys': 0,
-        'data': 'data_size'
-    }
+    },
 )
 
 
 _traces_table = Table(
     name='traces',
-    primary_key=['transaction_index', 'call_index'],
-    column_weights={
-        'calldata': 'calldata_size',
-        'call_result': 'call_result_size',
-        'call_events_keys': 'call_events_keys_size',
-        'call_events_data': 'call_events_data_size',
-        'call_events_order': 'call_events_order_size',
-        'call_messages_payload': 'call_messages_payload_size',
-        'call_messages_from_address': 'call_messages_from_address_size',
-        'call_messages_to_address': 'call_messages_to_address_size',
-        'call_messages_order': 'call_messages_order_size',
-    }
+    primary_key=['transaction_index', 'trace_address'],
+    column_weights={},
+)
+
+_call_messages_table = Table(
+    name='call_messages',
+    primary_key=['transaction_index', 'trace_address'],
+    column_weights={},
 )
 
 
 _state_updates_table = Table(
     name='state_updates',
     primary_key=[],
-    column_weights={
-        'storage_diffs_address': 'storage_diffs_address_size',
-        'storage_diffs_keys': 'storage_diffs_keys_size',
-        'storage_diffs_values': 'storage_diffs_values_size',
-        'deprecated_declared_classes': 'deprecated_declared_classes_size',
-        'declared_classes_class_hash': 'declared_classes_class_hash_size',
-        'declared_classes_compiled_class_hash': 'declared_classes_compiled_class_hash_size',
-        'deployed_contracts_address': 'deployed_contracts_address_size',
-        'deployed_contracts_class_hash': 'deployed_contracts_class_hash_size',
-        'replaced_classes_contract_address': 'replaced_classes_contract_address_size',
-        'replaced_classes_class_hash': 'replaced_classes_class_hash_size',
-        'nonces_contract_address': 'nonces_contract_address_size',
-        'nonces_nonce': 'nonces_nonce_size',
-    }
+    column_weights={},
 )
 
+_storage_diffs_table = Table(
+    name='storage_diffs',
+    primary_key=['address'],
+    column_weights={},
+)
 
 class _BlockItem(Item):
     def table(self) -> Table:
@@ -257,7 +276,7 @@ class _BlockItem(Item):
 
     def project(self, fields: FieldSelection) -> str:
         return json_project(self.get_selected_fields(fields), rewrite={
-            'timestamp': 'epoch(timestamp)::int64'
+            'timestamp': 'epoch(timestamp)::int64',
         })
 
 
@@ -269,6 +288,7 @@ class _TxScan(Scan):
         return 'transactions'
 
     def where(self, req: TransactionRequest) -> Iterable[Expression | None]:
+        yield field_in('transaction_hash', req.get('transactionHash'))
         yield field_in('contract_address', req.get('contractAddress'))
         yield field_in('sender_address', req.get('senderAddress'))
         yield field_in('type', req.get('type'))
@@ -327,10 +347,10 @@ class _EventItem(Item):
 
     def project(self, fields: FieldSelection) -> str:
         return json_project(self.get_selected_fields(fields), rewrite={
-            'keys': f'list_concat('
-                    f'[k for k in list_value(key0, key1, key2, key3) if k is not null], '
-                    f'rest_keys'
-                    f')'
+            'keys': 'list_concat('
+                    '[k for k in list_value(key0, key1, key2, key3) if k is not null], '
+                    'rest_keys'
+                    ')',
         })
 
 
@@ -362,8 +382,31 @@ class _TraceItem(Item):
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
         return get_selected_fields(fields.get('trace'), [
             'transaction_index',
-            'call_index'
+            'trace_address',
         ])
+
+
+class _CallMessageScan(Scan):
+    def table(self) -> Table:
+        return _call_messages_table
+
+    def request_name(self) -> str:
+        return 'callMessages'
+
+    def where(self, req: CallMessageRequest) -> Iterable[Expression | None]:
+        yield field_in('from_address', req.get('fromAddress'))
+        yield field_in('to_address', req.get('toAddress'))
+
+
+class _CallMessageItem(Item):
+    def table(self) -> Table:
+        return _call_messages_table
+
+    def name(self) -> str:
+        return 'call_messages'
+
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('callMessage'), ['transactionIndex', 'traceAddress'])
 
 
 class _StateUpdateScan(Scan):
@@ -389,17 +432,43 @@ class _StateUpdateItem(Item):
         return get_selected_fields(fields.get('stateUpdate'))
 
 
+class _StorageDiffScan(Scan):
+    def table(self) -> Table:
+        return _storage_diffs_table
+
+    def request_name(self) -> str:
+        return 'storageDiffs'
+
+    def where(self, req: StorageDiffRequest) -> Iterable[Expression | None]:
+        yield field_in('address', req.get('address'))
+
+
+class _StorageDiffItem(Item):
+    def table(self) -> Table:
+        return _storage_diffs_table
+
+    def name(self) -> str:
+        return 'storage_diffs'
+
+    def get_selected_fields(self, fields: FieldSelection) -> list[str]:
+        return get_selected_fields(fields.get('storageDiff'), ['address'])
+
+
 def _build_model() -> Model:
     tx_scan = _TxScan()
     event_scan = _EventScan()
     trace_scan = _TraceScan()
+    call_message_scan = _CallMessageScan()
     state_update_scan = _StateUpdateScan()
+    storage_diff_scan = _StorageDiffScan()
 
     block_item = _BlockItem()
     tx_item = _TxItem()
     event_item = _EventItem()
     trace_item = _TraceItem()
+    call_message_item = _CallMessageItem()
     state_update_item = _StateUpdateItem()
+    storage_diff_item = _StorageDiffItem()
 
     event_item.sources.extend([
         event_scan,
@@ -408,8 +477,16 @@ def _build_model() -> Model:
             include_flag_name='events',
             query='SELECT * FROM events i, s WHERE '
                   'i.block_number = s.block_number AND '
-                  'i.transaction_index = s.transaction_index'
-        )
+                  'i.transaction_index = s.transaction_index',
+        ),
+        JoinRel(
+            scan=trace_scan,
+            include_flag_name='events',
+            query='SELECT * FROM events i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index AND '
+                  'i.trace_address = s.trace_address',
+        ),
     ])
 
     tx_item.sources.extend([
@@ -417,13 +494,13 @@ def _build_model() -> Model:
         RefRel(
             scan=event_scan,
             include_flag_name='transaction',
-            scan_columns=['transaction_index']
+            scan_columns=['transaction_index'],
         ),
         RefRel(
             scan=trace_scan,
             include_flag_name='transaction',
-            scan_columns=['transaction_index']
-        )
+            scan_columns=['transaction_index'],
+        ),
     ])
 
     trace_item.sources.extend([
@@ -433,13 +510,37 @@ def _build_model() -> Model:
             include_flag_name='traces',
             query='SELECT * FROM traces i, s WHERE '
                   'i.block_number = s.block_number AND '
-                  'i.transaction_index = s.transaction_index'
-        )
+                  'i.transaction_index = s.transaction_index',
+        ),
+    ])
+
+    call_message_item.sources.extend([
+        call_message_scan,
+        JoinRel(
+            scan=trace_scan,
+            include_flag_name='messages',
+            scan_columns=['transaction_index', 'trace_address'],
+            query='SELECT * FROM call_messages i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index AND '
+                  'i.trace_address = s.trace_address',
+        ),
+        JoinRel(
+            scan=tx_scan,
+            include_flag_name='messages',
+            scan_columns=['transaction_index'],
+            query='SELECT * FROM messages i, s WHERE '
+                  'i.block_number = s.block_number AND '
+                  'i.transaction_index = s.transaction_index',
+        ),
     ])
 
     state_update_item.sources.extend([state_update_scan])
 
-    return [tx_scan, event_scan, trace_scan, state_update_scan, block_item, tx_item, event_item, trace_item, state_update_item]
+    storage_diff_item.sources.extend([storage_diff_scan])
+
+    return [tx_scan, event_scan, trace_scan, call_message_scan, state_update_scan, storage_diff_scan,
+            block_item, tx_item, event_item, trace_item, call_message_item, state_update_item, storage_diff_item]
 
 
 MODEL = _build_model()

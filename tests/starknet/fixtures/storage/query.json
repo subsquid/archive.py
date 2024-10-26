@@ -1,0 +1,19 @@
+{
+  "type": "starknet",
+  "fromBlock": 702076,
+  "toBlock": 702090,
+  "fields": {
+    "block": {
+      "timestamp": true
+    },
+    "storageDiff": {
+      "keys": true,
+      "values": true
+    }
+  },
+  "storageDiffs": [
+    {
+      "address": ["0x314341cc731260254db9efd6a309cd31af03cde435869d6ad7ad9d5b3552866"]
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+    "type": "starknet",
+    "fromBlock": 702002,
+    "toBlock": 702004,
+    "fields": {
+        "trace": {
+            "traceType": true,
+            "invocationType": true,
+            "callerAddress": true,
+            "callContractAddress": true,
+            "callType": true,
+            "callClassHash": true,
+            "callEntryPointSelector": true,
+            "callEntryPointType": true,
+            "callRevertReason": true,
+            "calldata": true,
+            "callResult": true
+        }
+    },
+    "traces": [
+        {
+            "callEntryPointSelector": [
+                "0x17655d3ec0a25c443f877d52bb6b36e9e6aaf8fbeb43608c3b9423bdc0822be"
+            ],
+            "events": true
+        }
+    ]
+}

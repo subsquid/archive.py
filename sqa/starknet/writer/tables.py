@@ -1,14 +1,18 @@
-from typing import cast
 import pyarrow
 
-from sqa.starknet.writer.model import (WriterBlockStateUpdate, WriterBlock, WriterEvent, WriterTrace,
-                                       WriterTransaction)
-from sqa.starknet.writer.model import Call as TraceCall
+from sqa.starknet.writer.model import (
+    WriterBlock,
+    WriterBlockStateUpdate,
+    WriterCall,
+    WriterEvent,
+    WriterStorageDiffItem,
+    WriterTransaction,
+)
 from sqa.writer.parquet import Column, TableBuilder
 
 
 class BlockTableBuilder(TableBuilder):
-    def __init__(self):
+    def __init__(self) -> None:
         self.number = Column(pyarrow.int32())
         self.hash = Column(pyarrow.string())
         self.parent_hash = Column(pyarrow.string())
@@ -35,7 +39,7 @@ class BlockTableBuilder(TableBuilder):
 
 
 class TxTableBuilder(TableBuilder):
-    def __init__(self):
+    def __init__(self) -> None:
         self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
 
@@ -55,7 +59,7 @@ class TxTableBuilder(TableBuilder):
         self.constructor_calldata = Column(pyarrow.list_(pyarrow.string()))
         # TODO: 6 Fields that havent been received left unmatched for a moment
 
-    def append(self, tx: WriterTransaction):
+    def append(self, tx: WriterTransaction) -> None:
         self.block_number.append(tx['block_number'])
         self.transaction_index.append(tx['transaction_index'])
         self.transaction_hash.append(tx['transaction_hash'])
@@ -77,10 +81,15 @@ class TxTableBuilder(TableBuilder):
 
 
 class EventTableBuilder(TableBuilder):
-    def __init__(self):
+
+    MAX_KEYS = 4
+
+    def __init__(self) -> None:
         self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
         self.event_index = Column(pyarrow.int32())
+
+        self.trace_address = Column(pyarrow.list_(pyarrow.int32()))
 
         self.from_address = Column(pyarrow.string())
         self.key0 = Column(pyarrow.string())
@@ -91,34 +100,48 @@ class EventTableBuilder(TableBuilder):
         self.data = Column(pyarrow.list_(pyarrow.string()))
         self.keys_size = Column(pyarrow.int64())
 
-    def append(self, event: WriterEvent):
+    def append(self, event: WriterEvent) -> None:
         self.block_number.append(event['block_number'])
         self.transaction_index.append(event['transaction_index'])
         self.event_index.append(event['event_index'])
+        self.trace_address.append([])
         self.from_address.append(event['from_address'])
         self._append_keys(event['keys'])
         self.data.append(event['data'])
 
+    def append_from_trace(self, tx_trace: WriterCall) -> None:
+        # TODO: ensure logic
+        if 'revert_reason' in tx_trace:
+            return
+        for event in tx_trace.get('events', []):
+            self.block_number.append(tx_trace['block_number'])
+            self.transaction_index.append(tx_trace['transaction_index'])
+            self.event_index.append(event['order'])
+            self.trace_address.append(tx_trace['trace_address'])
+            self.from_address.append(tx_trace['contract_address'])
+            self._append_keys(event['keys'])
+            self.data.append(event['data'])
+
     def _append_keys(self, keys: list[str]) -> None:
-        for i in range(4):
+        for i in range(self.MAX_KEYS):
             col = getattr(self, f'key{i}')
             col.append(keys[i] if i < len(keys) else None)
-        if len(keys) > 4:
-            self.rest_keys.append(keys[4:])
+        if len(keys) > self.MAX_KEYS:
+            self.rest_keys.append(keys[self.MAX_KEYS:])
         else:
             self.rest_keys.append(None)
         self.keys_size.append(sum(len(k) for k in keys))
 
 
 class TraceTableBuilder(TableBuilder):
-    def __init__(self):
+    def __init__(self) -> None:
         self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
         self.trace_type = Column(pyarrow.string())
-
         self.invocation_type = Column(pyarrow.string())
-        self.call_index = Column(pyarrow.int32())
-        self.parent_index = Column(pyarrow.int32())
+
+        self.trace_address = Column(pyarrow.list_(pyarrow.int32()))
+
         self.caller_address = Column(pyarrow.string())
         self.call_contract_address = Column(pyarrow.string())
         self.call_type = Column(pyarrow.string())
@@ -129,79 +152,60 @@ class TraceTableBuilder(TableBuilder):
         self.calldata = Column(pyarrow.list_(pyarrow.string()))
         self.call_result = Column(pyarrow.list_(pyarrow.string()))
 
-        self.call_events_keys = Column(pyarrow.list_(pyarrow.string()))
-        self.call_events_data = Column(pyarrow.list_(pyarrow.string()))
-        self.call_events_order = Column(pyarrow.list_(pyarrow.int32()))
-
-        self.call_messages_payload = Column(pyarrow.list_(pyarrow.string()))
-        self.call_messages_from_address = Column(pyarrow.list_(pyarrow.string()))
-        self.call_messages_to_address = Column(pyarrow.list_(pyarrow.string()))
-        self.call_messages_order = Column(pyarrow.list_(pyarrow.int32()))
-
-    def append_root(self, tx_trace: WriterTrace):
-        trace_root = tx_trace['trace_root']
-        # NOTE: ensure one and only one call trace presented
-        call_index = 0
-        if 'execute_invocation' in trace_root:
-            call_index += self.append_call(tx_trace, trace_root['execute_invocation'], 'execute_invocation', call_index)
-        if 'constructor_invocation' in trace_root:
-            call_index += self.append_call(tx_trace, trace_root['constructor_invocation'], 'constructor_invocation', call_index)
-        if 'validate_invocation' in trace_root:
-            call_index += self.append_call(tx_trace, trace_root['validate_invocation'], 'validate_invocation', call_index)
-        if 'fee_transfer_invocation' in trace_root:
-            call_index += self.append_call(tx_trace, trace_root['fee_transfer_invocation'], 'fee_transfer_invocation', call_index)
-
-    def append_call(self, tx_trace: WriterTrace, trace_call: TraceCall, invocation_type: str, call_index: int, parent_index: int = -1) -> int:
+    def append_call(self, tx_trace: WriterCall) -> None:
         self.block_number.append(tx_trace['block_number'])
         self.transaction_index.append(tx_trace['transaction_index'])
-        self.trace_type.append(tx_trace['trace_root']['type'])
-        self.invocation_type.append(invocation_type)
+        self.trace_type.append(tx_trace['trace_type'])
+        self.invocation_type.append(tx_trace['invocation_type'])
 
-        self.parent_index.append(parent_index)
-        self.call_index.append(call_index)
+        self.trace_address.append(tx_trace['trace_address'])
 
         # NOTE: fields below are empty for reverted calls
-        self.caller_address.append(trace_call.get('caller_address'))
-        self.call_contract_address.append(trace_call.get('contract_address'))
-        self.call_type.append(trace_call.get('call_type'))
-        self.call_class_hash.append(trace_call.get('class_hash'))
-        self.call_entry_point_selector.append(trace_call.get('entry_point_selector'))
-        self.call_entry_point_type.append(trace_call.get('entry_point_type'))
-        self.call_revert_reason.append(trace_call.get('revert_reason'))
-        self.calldata.append(trace_call.get('calldata'))
-        self.call_result.append(trace_call.get('result'))
-
-        # TODO: should call events have own table?
-        self.call_events_keys.append([';'.join(e['keys']) for e in trace_call.get('events', [])])
-        self.call_events_data.append([';'.join(e['data']) for e in trace_call.get('events', [])])
-        self.call_events_order.append([e['order'] for e in trace_call.get('events', [])])
-
-        # TODO: should join be replaced with another nested array?
-        self.call_messages_payload.append([';'.join(m['payload']) for m in trace_call.get('messages', [])])
-        self.call_messages_from_address.append([m['from_address'] for m in trace_call.get('messages', [])])
-        self.call_messages_to_address.append([m['to_address'] for m in trace_call.get('messages', [])])
-        self.call_messages_order.append([m['order'] for m in trace_call.get('messages', [])])
+        self.caller_address.append(tx_trace.get('caller_address'))
+        self.call_contract_address.append(tx_trace.get('contract_address'))
+        self.call_type.append(tx_trace.get('call_type'))
+        self.call_class_hash.append(tx_trace.get('class_hash'))
+        self.call_entry_point_selector.append(tx_trace.get('entry_point_selector'))
+        self.call_entry_point_type.append(tx_trace.get('entry'))
+        self.call_revert_reason.append(tx_trace.get('revert_reason'))
+        self.calldata.append(tx_trace.get('calldata'))
+        self.call_result.append(tx_trace.get('result'))
 
         # NOTE: Call execution resources omitted
 
-        node_index = call_index + 1
-        for t in trace_call.get('calls', []):
-            node_index += self.append_call(tx_trace, t, invocation_type, node_index, call_index)
 
-        return node_index - call_index
+class CallMessageTableBuilder(TableBuilder):
+    def __init__(self) -> None:
+        self.block_number = Column(pyarrow.int32())
+        self.transaction_index = Column(pyarrow.int32())
+        self.trace_address = Column(pyarrow.list_(pyarrow.int32()))
+
+        self.from_address = Column(pyarrow.string())
+        self.to_address = Column(pyarrow.string())
+        self.payload = Column(pyarrow.list_(pyarrow.string()))
+        self.order = Column(pyarrow.int32())
+
+    def append_from_call(self, trace_call: WriterCall) -> None:
+        if 'revert_reason' in trace_call:
+            return
+        for m in trace_call['messages']:
+            self.block_number.append(trace_call['block_number'])
+            self.transaction_index.append(trace_call['transaction_index'])
+            self.trace_address.append(trace_call['trace_address'])
+
+            self.from_address.append(m['from_address'])
+            self.to_address.append(m['to_address'])
+            self.payload.append(m['payload'])
+            self.order.append(m['order'])
 
 
 class StateUpdateTableBuilder(TableBuilder):
-    def __init__(self):
+    def __init__(self) -> None:
         self.block_number = Column(pyarrow.int32())
 
-        self.block_hash = Column(pyarrow.string())
         self.new_root = Column(pyarrow.string())
         self.old_root = Column(pyarrow.string())
 
-        self.storage_diffs_address = Column(pyarrow.list_(pyarrow.string()))
-        self.storage_diffs_keys = Column(pyarrow.list_(pyarrow.string()))
-        self.storage_diffs_values = Column(pyarrow.list_(pyarrow.string()))
         self.deprecated_declared_classes = Column(pyarrow.list_(pyarrow.string()))
         self.declared_classes_class_hash = Column(pyarrow.list_(pyarrow.string()))
         self.declared_classes_compiled_class_hash = Column(pyarrow.list_(pyarrow.string()))
@@ -212,18 +216,13 @@ class StateUpdateTableBuilder(TableBuilder):
         self.nonces_contract_address = Column(pyarrow.list_(pyarrow.string()))
         self.nonces_nonce = Column(pyarrow.list_(pyarrow.string()))
 
-    def append(self, state_update: WriterBlockStateUpdate):
+    def append(self, state_update: WriterBlockStateUpdate) -> None:
         self.block_number.append(state_update['block_number'])
 
-        self.block_hash.append(state_update['block_hash'])
         self.new_root.append(state_update.get('new_root'))
         self.old_root.append(state_update.get('old_root'))
 
         state_diff = state_update['state_diff']
-        self.storage_diffs_address.append([d['address'] for d in state_diff['storage_diffs']])
-        # TODO: probably replace with map array or move to separate table
-        self.storage_diffs_keys.append([';'.join(e['value'] for e in d['storage_entries']) for d in state_diff['storage_diffs']])
-        self.storage_diffs_values.append([';'.join(e['value'] for e in d['storage_entries']) for d in state_diff['storage_diffs']])
         self.deprecated_declared_classes.append(state_diff['deprecated_declared_classes'])
         self.declared_classes_class_hash.append([d['class_hash'] for d in state_diff['declared_classes']])
         self.declared_classes_compiled_class_hash.append([d['compiled_class_hash'] for d in state_diff['declared_classes']])
@@ -233,3 +232,19 @@ class StateUpdateTableBuilder(TableBuilder):
         self.replaced_classes_class_hash.append([d['class_hash'] for d in state_diff['replaced_classes']])
         self.nonces_contract_address.append([d['contract_address'] for d in state_diff['nonces']])
         self.nonces_nonce.append([d['nonce'] for d in state_diff['nonces']])
+
+
+class StorageDiffTableBuilder(TableBuilder):
+    def __init__(self) -> None:
+        self.block_number = Column(pyarrow.int32())
+        self.address = Column(pyarrow.string())
+
+        self.keys = Column(pyarrow.list_(pyarrow.string()))
+        self.values = Column(pyarrow.list_(pyarrow.string()))
+
+    def append(self, storage_diff: WriterStorageDiffItem) -> None:
+        self.block_number.append(storage_diff['block_number'])
+        self.address.append(storage_diff['address'])
+
+        self.keys.append([e['key'] for e in storage_diff['storage_entries']])
+        self.values.append([e['value'] for e in storage_diff['storage_entries']])

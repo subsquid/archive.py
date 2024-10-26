@@ -4,49 +4,63 @@ import pyarrow
 
 from sqa.fs import Fs
 from sqa.starknet.writer.model import WriterBlock
-from sqa.starknet.writer.tables import BlockTableBuilder, EventTableBuilder, StateUpdateTableBuilder, TraceTableBuilder, TxTableBuilder
-from sqa.writer.parquet import BaseParquetWriter, add_size_column, add_index_column
-
+from sqa.starknet.writer.tables import (
+    BlockTableBuilder,
+    CallMessageTableBuilder,
+    EventTableBuilder,
+    StateUpdateTableBuilder,
+    StorageDiffTableBuilder,
+    TraceTableBuilder,
+    TxTableBuilder,
+)
+from sqa.writer.parquet import BaseParquetWriter, add_index_column
 
 LOG = logging.getLogger(__name__)
 
 
 class ParquetWriter(BaseParquetWriter):
-    def __init__(self):
+    def __init__(self) -> None:
         self.blocks = BlockTableBuilder()
         self.transactions = TxTableBuilder()
         self.events = EventTableBuilder()
         self.traces = TraceTableBuilder()
+        self.call_messages = CallMessageTableBuilder()
         self.state_updates = StateUpdateTableBuilder()
+        self.storage_diffs = StorageDiffTableBuilder()
 
     def push(self, block: WriterBlock) -> None:
         self.blocks.append(block)
 
-        for tx in block['transactions']:
+        for tx in block['writer_txs']:
             self.transactions.append(tx)
 
-        for trace in block.get('traces', []):
-            self.traces.append_root(trace)
+        for trace in block.get('writer_call_traces', []):
+            self.traces.append_call(trace)
+            self.call_messages.append_from_call(trace)
+            self.events.append_from_trace(trace)
 
         if 'writer_state_update' in block:
             self.state_updates.append(block['writer_state_update'])
 
-        if 'writer_events' in block:
+        if 'writer_storage_diffs' in block:
+            for storage_diff in block['writer_storage_diffs']:
+                self.storage_diffs.append(storage_diff)
+
+        # NOTE: if we can we try to write events from traces with trace address
+        if 'writer_events' in block and 'writer_call_traces' not in block:
             for event in block['writer_events']:
                 self.events.append(event)
-        else:
-            raise NotImplementedError('Receipts not implemented')
 
     def _write(self, fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
         write_parquet(fs, tables)
 
-    def get_block_height(self, block: WriterBlock) -> int:  # type: ignore
+    def get_block_height(self, block: WriterBlock) -> int:  # type: ignore[typeddict-item]
         return block['number']
 
-    def get_block_hash(self, block: WriterBlock) -> str:  # type: ignore
+    def get_block_hash(self, block: WriterBlock) -> str:  # type: ignore[typeddict-item]
         return block['hash']
 
-    def get_block_parent_hash(self, block: WriterBlock) -> str:  # type: ignore
+    def get_block_parent_hash(self, block: WriterBlock) -> str:  # type: ignore[typeddict-item]
         return block['parent_hash']
 
 
@@ -56,7 +70,7 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
         'dictionary_pagesize_limit': 256 * 1024,
         'compression': 'zstd',
         'write_page_index': True,
-        'write_batch_size': 100
+        'write_batch_size': 100,
     }
 
     # Handling Starknet transactions
@@ -67,9 +81,6 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
     ])
-    transactions = add_size_column(transactions, 'calldata')
-    transactions = add_size_column(transactions, 'signature')
-    transactions = add_size_column(transactions, 'constructor_calldata')
     transactions = add_index_column(transactions)
 
     loc.write_parquet(
@@ -82,9 +93,9 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
             'contract_address',
             'sender_address',
             'block_number',
-            'transaction_index'
+            'transaction_index',
         ],
-        **kwargs
+        **kwargs,
     )
 
     LOG.debug('wrote %s', loc.abs('transactions.parquet'))
@@ -92,13 +103,12 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
     # Handling Starknet events
     events = tables['events']
     events = events.sort_by([
-        ('key0', 'ascending'),
-        ('from_address', 'ascending'),
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
         ('event_index', 'ascending'),
+        ('key0', 'ascending'),
+        ('from_address', 'ascending'),
     ])
-    events = add_size_column(events, 'data')
     events = add_index_column(events)
 
     loc.write_parquet(
@@ -112,9 +122,9 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
             'from_address',
             'block_number',
             'transaction_index',
-            'event_index'
+            'event_index',
         ],
-        **kwargs
+        **kwargs,
     )
 
     LOG.debug('wrote %s', loc.abs('events.parquet'))
@@ -124,19 +134,7 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
     traces = traces.sort_by([
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
-        ('call_index', 'ascending'),
     ])
-    traces = add_size_column(traces, 'calldata')
-    traces = add_size_column(traces, 'call_result')
-
-    traces = add_size_column(traces, 'call_events_keys')
-    traces = add_size_column(traces, 'call_events_data')
-    traces = add_size_column(traces, 'call_events_order')
-
-    traces = add_size_column(traces, 'call_messages_payload')
-    traces = add_size_column(traces, 'call_messages_from_address')
-    traces = add_size_column(traces, 'call_messages_to_address')
-    traces = add_size_column(traces, 'call_messages_order')
 
     traces = add_index_column(traces)
 
@@ -153,31 +151,41 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
             '_idx',
             'block_number',
             'transaction_index',
-            'call_index',
-            'parent_index',
         ],
-        **kwargs
+        **kwargs,
     )
 
     LOG.debug('wrote %s', loc.abs('traces.parquet'))
+
+    # Handling Starknet call messages
+    call_messages = tables['call_messages']
+    call_messages = call_messages.sort_by([
+        ('block_number', 'ascending'),
+        ('transaction_index', 'ascending'),
+    ])
+    call_messages = add_index_column(call_messages)
+
+    loc.write_parquet(
+        'call_messages.parquet',
+        call_messages,
+        use_dictionary=[],
+        row_group_size=50_000,
+        write_statistics=[
+            '_idx',
+            'block_number',
+            'transaction_index',
+        ],
+        **kwargs,
+    )
+
+    LOG.debug('wrote %s', loc.abs('call_messages.parquet'))
+
 
     # Handling Starknet state updates
     state_updates = tables['state_updates']
     state_updates = state_updates.sort_by([
         ('block_number', 'ascending'),
     ])
-    state_updates = add_size_column(state_updates, 'storage_diffs_address')
-    state_updates = add_size_column(state_updates, 'storage_diffs_keys')
-    state_updates = add_size_column(state_updates, 'storage_diffs_values')
-    state_updates = add_size_column(state_updates, 'deprecated_declared_classes')
-    state_updates = add_size_column(state_updates, 'declared_classes_class_hash')
-    state_updates = add_size_column(state_updates, 'declared_classes_compiled_class_hash')
-    state_updates = add_size_column(state_updates, 'deployed_contracts_address')
-    state_updates = add_size_column(state_updates, 'deployed_contracts_class_hash')
-    state_updates = add_size_column(state_updates, 'replaced_classes_contract_address')
-    state_updates = add_size_column(state_updates, 'replaced_classes_class_hash')
-    state_updates = add_size_column(state_updates, 'nonces_contract_address')
-    state_updates = add_size_column(state_updates, 'nonces_nonce')
     state_updates = add_index_column(state_updates)
 
     loc.write_parquet(
@@ -189,15 +197,37 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
             '_idx',
             'block_number',
         ],
-        **kwargs
+        **kwargs,
     )
 
     LOG.debug('wrote %s', loc.abs('state_updates.parquet'))
 
+    # Handling Starknet storage diffs
+    storage_diffs = tables['storage_diffs']
+    storage_diffs = storage_diffs.sort_by([
+        ('block_number', 'ascending'),
+        ('address', 'ascending'),
+    ])
+    storage_diffs = add_index_column(storage_diffs)
+
+    loc.write_parquet(
+        'storage_diffs.parquet',
+        storage_diffs,
+        use_dictionary=[],
+        row_group_size=100_000,
+        write_statistics=[
+            '_idx',
+            'block_number',
+        ],
+        **kwargs,
+    )
+
+    LOG.debug('wrote %s', loc.abs('storage_diffs.parquet'))
+
     # Handling Starknet blocks
     blocks = tables['blocks']
     blocks = blocks.sort_by([
-        ('number', 'ascending')
+        ('number', 'ascending'),
     ])
 
     loc.write_parquet(
@@ -206,10 +236,10 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
         use_dictionary=[
             'status',
             'sequencer_address',
-            'starknet_version'
+            'starknet_version',
         ],
         write_statistics=['number'],
-        **kwargs
+        **kwargs,
     )
 
     LOG.debug('wrote %s', loc.abs('blocks.parquet'))

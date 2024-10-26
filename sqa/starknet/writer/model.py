@@ -1,5 +1,4 @@
-from typing import TypedDict, NotRequired
-
+from typing import NotRequired, TypedDict
 
 FELT = str  # NOTE: cairo bytes32
 STD_HASH = FELT
@@ -40,8 +39,10 @@ class WriterBlock(Block):
     # external fields
     writer_txs: list['WriterTransaction']
     writer_events: list['WriterEvent']
-    writer_traces: NotRequired[list['WriterTrace']]
+    writer_call_traces: NotRequired[list['WriterCall']]
+    # NOTE: call messages extracted from call traces
     writer_state_update: NotRequired['WriterBlockStateUpdate']
+    writer_storage_diffs: NotRequired[list['WriterStorageDiffItem']]
 
 
 class ResourceBounds(TypedDict):
@@ -156,10 +157,16 @@ class CallMessage(TypedDict):
     The messages sent by this invocation to L1
     """
 
-    payload: list[FELT]
     from_address: FELT  # l2_address in spec
     to_address: FELT  # l1_address in spec
+    payload: list[FELT]
     order: int
+
+
+class WriterCallMessage(CallMessage):
+    block_number: int
+    transaction_index: int
+    trace_address: list[int]
 
 
 class CallEvent(TypedDict):
@@ -188,6 +195,15 @@ class Call(TypedDict):
     execution_resources: ExecutionResources
 
 
+class WriterCall(Call):
+    block_number: int
+    transaction_index: int
+    trace_type: str
+    invocation_type: str
+
+    trace_address: list[int]
+
+
 class TraceRoot(TypedDict):
     type: str
     execution_resources: ExecutionResources
@@ -202,10 +218,6 @@ class Trace(TypedDict):
     transaction_hash: FELT
 
 
-class WriterTrace(Trace):
-    block_number: int
-    transaction_index: int
-
 class StorageEntry(TypedDict):
     key: FELT
     value: FELT
@@ -214,6 +226,10 @@ class StorageEntry(TypedDict):
 class StorageDiffItem(TypedDict):
     address: FELT
     storage_entries: list[StorageEntry]
+
+
+class WriterStorageDiffItem(StorageDiffItem):
+    block_number: int
 
 
 class DeclaredContractHash(TypedDict):

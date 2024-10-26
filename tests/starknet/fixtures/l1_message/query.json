@@ -1,0 +1,19 @@
+{
+    "type": "starknet",
+    "fromBlock": 0,
+    "fields": {
+        "callMessage": {
+            "fromAddress": true,
+            "toAddress": true,
+            "payload": true,
+            "order": true
+        }
+    },
+    "callMessages": [
+        {
+            "toAddress": [
+                "0x283751a21eafbfcd52297820d27c1f1963d9b5b4"
+            ]
+        }
+    ]
+}
