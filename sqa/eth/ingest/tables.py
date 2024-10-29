@@ -316,7 +316,10 @@ class TraceTableBuilder(TableBuilder):
         for addr, subtraces, frame in _traverse_frame(top, []):
             trace_type: Literal['create', 'call', 'suicide']
             frame_type = frame['type']
-            if frame_type in ('CALL', 'CALLCODE', 'STATICCALL', 'DELEGATECALL', 'INVALID', 'Call'):
+            if frame_type in (
+                'CALL', 'CALLCODE', 'STATICCALL',
+                'DELEGATECALL', 'INVALID', 'Call', 'call'
+            ):
                 trace_type = 'call'
             elif frame_type in ('CREATE', 'CREATE2', 'Create'):
                 trace_type = 'create'
