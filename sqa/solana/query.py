@@ -34,6 +34,7 @@ class TransactionFieldSelection(TypedDict, total=False):
 
 
 class InstructionFieldSelection(TypedDict, total=False):
+    instructionIndex: bool
     programId: bool
     accounts: bool
     data: bool

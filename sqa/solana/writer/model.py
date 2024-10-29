@@ -45,6 +45,7 @@ class Transaction(TypedDict):
 
 class Instruction(TypedDict):
     transactionIndex: int
+    instructionIndex: int
     instructionAddress: list[int]
     programId: Base58Bytes
     accounts: list[Base58Bytes]
