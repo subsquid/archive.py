@@ -10,14 +10,10 @@
             "newRoot": true,
             "oldRoot": true,
             "deprecatedDeclaredClasses": true,
-            "declaredClassesClassHash": true,
-            "declaredClassesCompiledClassHash": true,
-            "deployedContractsAddress": true,
-            "deployedContractsClassHash": true,
-            "replacedClassesContractAddress": true,
-            "replacedClassesClassHash": true,
-            "noncesContractAddress": true,
-            "noncesNonce": true
+            "declaredClasses": true,
+            "deployedContracts": true,
+            "replacedClasses": true,
+            "nonces": true
         }
     },
     "stateUpdates": [{}]

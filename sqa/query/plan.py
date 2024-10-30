@@ -236,11 +236,16 @@ class _ItemDataQuery:
         self.table_name = item.table().name
         self.projected_columns = ['block_number'] + item.selected_columns(fields)
 
-        order = ', '.join(item.table().primary_key) or 'block_number'
+        # Escape field names in the ORDER BY clause
+        order_columns = [f'"{col}"' for col in item.table().primary_key]
+        order = ', '.join(order_columns) or '"block_number"'
 
-        self.sql = (f'SELECT block_number, to_json(list({item.project(fields)} ORDER BY {order})) AS data '
-                    f'FROM items '
-                    f'GROUP BY block_number')
+        self.sql = (
+            f'SELECT block_number, '
+            f'to_json(list({item.project(fields)} ORDER BY {order})) AS data '
+            f'FROM items '
+            f'GROUP BY block_number'
+        )
 
     def fetch(self, partition: Partition, index: pyarrow.Array) -> pyarrow.Table:
         items = _ScanQuery(

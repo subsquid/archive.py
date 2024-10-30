@@ -152,7 +152,7 @@ class WriterEvent(Event):
     event_index: int
 
 
-class CallMessage(TypedDict):
+class Message(TypedDict):
     """
     The messages sent by this invocation to L1
     """
@@ -163,7 +163,7 @@ class CallMessage(TypedDict):
     order: int
 
 
-class WriterCallMessage(CallMessage):
+class WriterMessage(Message):
     block_number: int
     transaction_index: int
     trace_address: list[int]
@@ -191,7 +191,7 @@ class Call(TypedDict):
     result: list[FELT]
     calls: list['Call']
     events: list[CallEvent]
-    messages: list[CallMessage]
+    messages: list[Message]
     execution_resources: ExecutionResources
 
 

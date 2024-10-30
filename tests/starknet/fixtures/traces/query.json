@@ -7,11 +7,11 @@
             "traceType": true,
             "invocationType": true,
             "callerAddress": true,
-            "callContractAddress": true,
+            "contractAddress": true,
             "callType": true,
-            "callClassHash": true,
-            "callEntryPointSelector": true,
-            "callEntryPointType": true,
+            "classHash": true,
+            "entryPointSelector": true,
+            "entryPointType": true,
             "callRevertReason": true,
             "calldata": true,
             "callResult": true
@@ -19,7 +19,7 @@
     },
     "traces": [
         {
-            "callEntryPointSelector": [
+            "entryPointSelector": [
                 "0x17655d3ec0a25c443f877d52bb6b36e9e6aaf8fbeb43608c3b9423bdc0822be"
             ],
             "events": true

@@ -44,38 +44,32 @@ class TraceFieldSelection(TypedDict, total=False):
     traceType: bool
     invocationType: bool
     callerAddress: bool
-    callContractAddress: bool
+    contractAddress: bool
     callType: bool
-    callClassHash: bool
-    callEntryPointSelector: bool
-    callEntryPointType: bool
+    classHash: bool
+    entryPointSelector: bool
+    entryPointType: bool
     callRevertReason: bool
     calldata: bool
     callResult: bool
 
 
-class CallMessageFieldSelection(TypedDict, total=False):
+class MessageFieldSelection(TypedDict, total=False):
     fromAddress: bool
     toAddress: bool
     payload: bool
-    order: bool
 
 
 class StateUpdateFieldSelection(TypedDict, total=False):
     newRoot: bool
     oldRoot: bool
     deprecatedDeclaredClasses: bool
-    declaredClassesClassHash: bool
-    declaredClassesCompiledClassHash: bool
-    deployedContractsAddress: bool
-    deployedContractsClassHash: bool
-    replacedClassesContractAddress: bool
-    replacedClassesClassHash: bool
-    noncesContractAddress: bool
-    noncesNonce: bool
+    declaredClasses: bool
+    deployedContracts: bool
+    replacedClasses: bool
+    nonces: bool
 
 class StorageDiffFieldSelection(TypedDict, total=False):
-    keys: bool
     values: bool
 
 
@@ -84,7 +78,7 @@ class FieldSelection(TypedDict, total=False):
     transaction: TransactionFieldSelection
     event: EventFieldSelection
     trace: TraceFieldSelection
-    callMessage: CallMessageFieldSelection
+    message: MessageFieldSelection
     stateUpdate: StateUpdateFieldSelection
     storageDiff: StorageDiffFieldSelection
 
@@ -94,13 +88,12 @@ class _FieldSelectionSchema(mm.Schema):
     transaction = field_map_schema(TransactionFieldSelection)
     event = field_map_schema(EventFieldSelection)
     trace = field_map_schema(TraceFieldSelection)
-    callMessage = field_map_schema(CallMessageFieldSelection)
+    message = field_map_schema(MessageFieldSelection)
     stateUpdate = field_map_schema(StateUpdateFieldSelection)
     storageDiff = field_map_schema(StorageDiffFieldSelection)
 
 
 class TransactionRequest(TypedDict, total=False):
-    transactionHash: list[str]
     contractAddress: list[str]
     senderAddress: list[str]
     type: list[str]
@@ -150,11 +143,11 @@ class TraceRequest(TypedDict, total=False):
     traceType: list[str]
     invocationType: list[str]
     callerAddress: list[str]
-    callContractAddress: list[str]
-    callClassHash: list[str]
+    contractAddress: list[str]
+    classHash: list[str]
     callType: list[str]
-    callEntryPointSelector: list[str]
-    callEntryPointType: list[str]
+    entryPointSelector: list[str]
+    entryPointType: list[str]
     transaction: bool
     messages: bool
     events: bool
@@ -164,32 +157,30 @@ class _TraceRequestSchema(mm.Schema):
     traceType = mm.fields.List(mm.fields.Str())
     invocationType = mm.fields.List(mm.fields.Str())
     callerAddress = mm.fields.List(mm.fields.Str())
-    callContractAddress = mm.fields.List(mm.fields.Str())
-    callClassHash = mm.fields.List(mm.fields.Str())
+    contractAddress = mm.fields.List(mm.fields.Str())
+    classHash = mm.fields.List(mm.fields.Str())
     callType = mm.fields.List(mm.fields.Str())
-    callEntryPointSelector = mm.fields.List(mm.fields.Str())
-    callEntryPointType = mm.fields.List(mm.fields.Str())
+    entryPointSelector = mm.fields.List(mm.fields.Str())
+    entryPointType = mm.fields.List(mm.fields.Str())
     transaction = mm.fields.Boolean()
     messages = mm.fields.Boolean()
     events = mm.fields.Boolean()
 
 
-class CallMessageRequest(TypedDict, total=False):
+class MessageRequest(TypedDict, total=False):
     fromAddress: list[str]
     toAddress: list[str]
 
-class _CallMessageRequestSchema(mm.Schema):
+class _MessageRequestSchema(mm.Schema):
     fromAddress = mm.fields.List(mm.fields.Str())
     toAddress = mm.fields.List(mm.fields.Str())
 
 class StateUpdateRequest(TypedDict, total=False):
-    newRoot: list[str]
-    oldRoot: list[str]
+    ...
 
 
 class _StateUpdateRequestSchema(mm.Schema):
-    newRoot = mm.fields.List(mm.fields.Str())
-    oldRoot = mm.fields.List(mm.fields.Str())
+    ...
 
 
 class StorageDiffRequest(TypedDict, total=False):
@@ -205,7 +196,7 @@ class _QuerySchema(BaseQuerySchema):
     transactions = mm.fields.List(mm.fields.Nested(_TransactionRequestSchema()))
     events = mm.fields.List(mm.fields.Nested(_EventRequestSchema()))
     traces = mm.fields.List(mm.fields.Nested(_TraceRequestSchema()))
-    callMessages = mm.fields.List(mm.fields.Nested(_CallMessageRequestSchema()))
+    messages = mm.fields.List(mm.fields.Nested(_MessageRequestSchema()))
     stateUpdates = mm.fields.List(mm.fields.Nested(_StateUpdateRequestSchema()))
     storageDiffs = mm.fields.List(mm.fields.Nested(_StorageDiffRequestSchema()))
 
@@ -245,9 +236,9 @@ _traces_table = Table(
     column_weights={},
 )
 
-_call_messages_table = Table(
-    name='call_messages',
-    primary_key=['transaction_index', 'trace_address'],
+_messages_table = Table(
+    name='messages',
+    primary_key=['transaction_index', 'order'],
     column_weights={},
 )
 
@@ -288,7 +279,6 @@ class _TxScan(Scan):
         return 'transactions'
 
     def where(self, req: TransactionRequest) -> Iterable[Expression | None]:
-        yield field_in('transaction_hash', req.get('transactionHash'))
         yield field_in('contract_address', req.get('contractAddress'))
         yield field_in('sender_address', req.get('senderAddress'))
         yield field_in('type', req.get('type'))
@@ -363,11 +353,11 @@ class _TraceScan(Scan):
 
     def where(self, req: TraceRequest) -> Iterable[Expression | None]:
         yield field_in('caller_address', req.get('callerAddress'))
-        yield field_in('call_contract_address', req.get('callContractAddress'))
+        yield field_in('contract_address', req.get('contractAddress'))
         yield field_in('call_type', req.get('callType'))
-        yield field_in('call_class_hash', req.get('callClassHash'))
-        yield field_in('call_entry_point_selector', req.get('callEntryPointSelector'))
-        yield field_in('call_entry_point_type', req.get('callEntryPointType'))
+        yield field_in('class_hash', req.get('classHash'))
+        yield field_in('entry_point_selector', req.get('entryPointSelector'))
+        yield field_in('entry_point_type', req.get('entryPointType'))
         yield field_in('trace_type', req.get('traceType'))
         yield field_in('invocation_type', req.get('invocationType'))
 
@@ -386,27 +376,27 @@ class _TraceItem(Item):
         ])
 
 
-class _CallMessageScan(Scan):
+class _MessageScan(Scan):
     def table(self) -> Table:
-        return _call_messages_table
+        return _messages_table
 
     def request_name(self) -> str:
-        return 'callMessages'
+        return 'messages'
 
-    def where(self, req: CallMessageRequest) -> Iterable[Expression | None]:
+    def where(self, req: MessageRequest) -> Iterable[Expression | None]:
         yield field_in('from_address', req.get('fromAddress'))
         yield field_in('to_address', req.get('toAddress'))
 
 
-class _CallMessageItem(Item):
+class _MessageItem(Item):
     def table(self) -> Table:
-        return _call_messages_table
+        return _messages_table
 
     def name(self) -> str:
-        return 'call_messages'
+        return 'messages'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('callMessage'), ['transactionIndex', 'traceAddress'])
+        return get_selected_fields(fields.get('message'), ['transactionIndex', 'traceAddress', 'order'])
 
 
 class _StateUpdateScan(Scan):
@@ -451,14 +441,14 @@ class _StorageDiffItem(Item):
         return 'storage_diffs'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('storageDiff'), ['address'])
+        return get_selected_fields(fields.get('storageDiff'), ['address', 'keys'])
 
 
 def _build_model() -> Model:
     tx_scan = _TxScan()
     event_scan = _EventScan()
     trace_scan = _TraceScan()
-    call_message_scan = _CallMessageScan()
+    message_scan = _MessageScan()
     state_update_scan = _StateUpdateScan()
     storage_diff_scan = _StorageDiffScan()
 
@@ -466,7 +456,7 @@ def _build_model() -> Model:
     tx_item = _TxItem()
     event_item = _EventItem()
     trace_item = _TraceItem()
-    call_message_item = _CallMessageItem()
+    message_item = _MessageItem()
     state_update_item = _StateUpdateItem()
     storage_diff_item = _StorageDiffItem()
 
@@ -514,13 +504,13 @@ def _build_model() -> Model:
         ),
     ])
 
-    call_message_item.sources.extend([
-        call_message_scan,
+    message_item.sources.extend([
+        message_scan,
         JoinRel(
             scan=trace_scan,
             include_flag_name='messages',
             scan_columns=['transaction_index', 'trace_address'],
-            query='SELECT * FROM call_messages i, s WHERE '
+            query='SELECT * FROM messages i, s WHERE '
                   'i.block_number = s.block_number AND '
                   'i.transaction_index = s.transaction_index AND '
                   'i.trace_address = s.trace_address',
@@ -539,8 +529,8 @@ def _build_model() -> Model:
 
     storage_diff_item.sources.extend([storage_diff_scan])
 
-    return [tx_scan, event_scan, trace_scan, call_message_scan, state_update_scan, storage_diff_scan,
-            block_item, tx_item, event_item, trace_item, call_message_item, state_update_item, storage_diff_item]
+    return [tx_scan, event_scan, trace_scan, message_scan, state_update_scan, storage_diff_scan,
+            block_item, tx_item, event_item, trace_item, message_item, state_update_item, storage_diff_item]
 
 
 MODEL = _build_model()

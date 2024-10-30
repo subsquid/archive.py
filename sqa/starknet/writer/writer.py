@@ -6,7 +6,7 @@ from sqa.fs import Fs
 from sqa.starknet.writer.model import WriterBlock
 from sqa.starknet.writer.tables import (
     BlockTableBuilder,
-    CallMessageTableBuilder,
+    MessageTableBuilder,
     EventTableBuilder,
     StateUpdateTableBuilder,
     StorageDiffTableBuilder,
@@ -24,7 +24,7 @@ class ParquetWriter(BaseParquetWriter):
         self.transactions = TxTableBuilder()
         self.events = EventTableBuilder()
         self.traces = TraceTableBuilder()
-        self.call_messages = CallMessageTableBuilder()
+        self.messages = MessageTableBuilder()
         self.state_updates = StateUpdateTableBuilder()
         self.storage_diffs = StorageDiffTableBuilder()
 
@@ -36,7 +36,7 @@ class ParquetWriter(BaseParquetWriter):
 
         for trace in block.get('writer_call_traces', []):
             self.traces.append_call(trace)
-            self.call_messages.append_from_call(trace)
+            self.messages.append_from_call(trace)
             self.events.append_from_trace(trace)
 
         if 'writer_state_update' in block:
@@ -158,16 +158,17 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
     LOG.debug('wrote %s', loc.abs('traces.parquet'))
 
     # Handling Starknet call messages
-    call_messages = tables['call_messages']
-    call_messages = call_messages.sort_by([
+    messages = tables['messages']
+    messages = messages.sort_by([
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
+        ('order', 'ascending'),
     ])
-    call_messages = add_index_column(call_messages)
+    messages = add_index_column(messages)
 
     loc.write_parquet(
-        'call_messages.parquet',
-        call_messages,
+        'messages.parquet',
+        messages,
         use_dictionary=[],
         row_group_size=50_000,
         write_statistics=[
@@ -178,7 +179,7 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
         **kwargs,
     )
 
-    LOG.debug('wrote %s', loc.abs('call_messages.parquet'))
+    LOG.debug('wrote %s', loc.abs('messages.parquet'))
 
 
     # Handling Starknet state updates

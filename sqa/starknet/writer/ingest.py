@@ -236,7 +236,7 @@ class IngestStarknet:
                 event['event_index'] = event_index[event['transaction_hash']]
                 event_index[event['transaction_hash']] += 1
 
-        # NOTE: Generate WriterCall list and WriterCallMessage list from trace and call tree
+        # NOTE: Generate WriterCall list and WriterMessage list from trace and call tree
         for block in stride:
             if 'traces' not in block:
                 continue

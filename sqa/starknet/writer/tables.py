@@ -143,11 +143,11 @@ class TraceTableBuilder(TableBuilder):
         self.trace_address = Column(pyarrow.list_(pyarrow.int32()))
 
         self.caller_address = Column(pyarrow.string())
-        self.call_contract_address = Column(pyarrow.string())
+        self.contract_address = Column(pyarrow.string())
         self.call_type = Column(pyarrow.string())
-        self.call_class_hash = Column(pyarrow.string())
-        self.call_entry_point_selector = Column(pyarrow.string())
-        self.call_entry_point_type = Column(pyarrow.string())
+        self.class_hash = Column(pyarrow.string())
+        self.entry_point_selector = Column(pyarrow.string())
+        self.entry_point_type = Column(pyarrow.string())
         self.call_revert_reason = Column(pyarrow.string())
         self.calldata = Column(pyarrow.list_(pyarrow.string()))
         self.call_result = Column(pyarrow.list_(pyarrow.string()))
@@ -162,11 +162,11 @@ class TraceTableBuilder(TableBuilder):
 
         # NOTE: fields below are empty for reverted calls
         self.caller_address.append(tx_trace.get('caller_address'))
-        self.call_contract_address.append(tx_trace.get('contract_address'))
+        self.contract_address.append(tx_trace.get('contract_address'))
         self.call_type.append(tx_trace.get('call_type'))
-        self.call_class_hash.append(tx_trace.get('class_hash'))
-        self.call_entry_point_selector.append(tx_trace.get('entry_point_selector'))
-        self.call_entry_point_type.append(tx_trace.get('entry'))
+        self.class_hash.append(tx_trace.get('class_hash'))
+        self.entry_point_selector.append(tx_trace.get('entry_point_selector'))
+        self.entry_point_type.append(tx_trace.get('entry'))
         self.call_revert_reason.append(tx_trace.get('revert_reason'))
         self.calldata.append(tx_trace.get('calldata'))
         self.call_result.append(tx_trace.get('result'))
@@ -174,7 +174,7 @@ class TraceTableBuilder(TableBuilder):
         # NOTE: Call execution resources omitted
 
 
-class CallMessageTableBuilder(TableBuilder):
+class MessageTableBuilder(TableBuilder):
     def __init__(self) -> None:
         self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
@@ -207,14 +207,22 @@ class StateUpdateTableBuilder(TableBuilder):
         self.old_root = Column(pyarrow.string())
 
         self.deprecated_declared_classes = Column(pyarrow.list_(pyarrow.string()))
-        self.declared_classes_class_hash = Column(pyarrow.list_(pyarrow.string()))
-        self.declared_classes_compiled_class_hash = Column(pyarrow.list_(pyarrow.string()))
-        self.deployed_contracts_address = Column(pyarrow.list_(pyarrow.string()))
-        self.deployed_contracts_class_hash = Column(pyarrow.list_(pyarrow.string()))
-        self.replaced_classes_contract_address = Column(pyarrow.list_(pyarrow.string()))
-        self.replaced_classes_class_hash = Column(pyarrow.list_(pyarrow.string()))
-        self.nonces_contract_address = Column(pyarrow.list_(pyarrow.string()))
-        self.nonces_nonce = Column(pyarrow.list_(pyarrow.string()))
+        self.declared_classes = Column(pyarrow.list_(pyarrow.struct([
+            ('class_hash', pyarrow.string()),
+            ('compiled_class_hash', pyarrow.string())
+        ])))
+        self.deployed_contracts = Column(pyarrow.list_(pyarrow.struct([
+            ('address', pyarrow.string()),
+            ('class_hash', pyarrow.string())
+        ])))
+        self.replaced_classes = Column(pyarrow.list_(pyarrow.struct([
+            ('contract_address', pyarrow.string()),
+            ('class_hash', pyarrow.string())
+        ])))
+        self.nonces = Column(pyarrow.list_(pyarrow.struct([
+            ('contract_address', pyarrow.string()),
+            ('nonce', pyarrow.string())
+        ])))
 
     def append(self, state_update: WriterBlockStateUpdate) -> None:
         self.block_number.append(state_update['block_number'])
@@ -224,14 +232,10 @@ class StateUpdateTableBuilder(TableBuilder):
 
         state_diff = state_update['state_diff']
         self.deprecated_declared_classes.append(state_diff['deprecated_declared_classes'])
-        self.declared_classes_class_hash.append([d['class_hash'] for d in state_diff['declared_classes']])
-        self.declared_classes_compiled_class_hash.append([d['compiled_class_hash'] for d in state_diff['declared_classes']])
-        self.deployed_contracts_address.append([d['address'] for d in state_diff['deployed_contracts']])
-        self.deployed_contracts_class_hash.append([d['class_hash'] for d in state_diff['deployed_contracts']])
-        self.replaced_classes_contract_address.append([d['contract_address'] for d in state_diff['replaced_classes']])
-        self.replaced_classes_class_hash.append([d['class_hash'] for d in state_diff['replaced_classes']])
-        self.nonces_contract_address.append([d['contract_address'] for d in state_diff['nonces']])
-        self.nonces_nonce.append([d['nonce'] for d in state_diff['nonces']])
+        self.declared_classes.append(state_diff['declared_classes'])
+        self.deployed_contracts.append(state_diff['deployed_contracts'])
+        self.replaced_classes.append(state_diff['replaced_classes'])
+        self.nonces.append(state_diff['nonces'])
 
 
 class StorageDiffTableBuilder(TableBuilder):

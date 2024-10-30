@@ -7,7 +7,6 @@
       "timestamp": true
     },
     "storageDiff": {
-      "keys": true,
       "values": true
     }
   },
