@@ -70,7 +70,7 @@ class StateUpdateFieldSelection(TypedDict, total=False):
     nonces: bool
 
 class StorageDiffFieldSelection(TypedDict, total=False):
-    values: bool
+    value: bool
 
 
 class FieldSelection(TypedDict, total=False):
@@ -185,10 +185,12 @@ class _StateUpdateRequestSchema(mm.Schema):
 
 class StorageDiffRequest(TypedDict, total=False):
     address: list[str]
+    key: list[str]
 
 
 class _StorageDiffRequestSchema(mm.Schema):
     address = mm.fields.List(mm.fields.Str())
+    key = mm.fields.List(mm.fields.Str())
 
 
 class _QuerySchema(BaseQuerySchema):
@@ -251,7 +253,7 @@ _state_updates_table = Table(
 
 _storage_diffs_table = Table(
     name='storage_diffs',
-    primary_key=['address'],
+    primary_key=['address', 'key'],
     column_weights={},
 )
 
@@ -407,8 +409,7 @@ class _StateUpdateScan(Scan):
         return 'stateUpdates'
 
     def where(self, req: StateUpdateRequest) -> Iterable[Expression | None]:
-        yield field_in('new_root', req.get('newRoot'))
-        yield field_in('old_root', req.get('oldRoot'))
+        return []
 
 
 class _StateUpdateItem(Item):
@@ -431,6 +432,7 @@ class _StorageDiffScan(Scan):
 
     def where(self, req: StorageDiffRequest) -> Iterable[Expression | None]:
         yield field_in('address', req.get('address'))
+        yield field_in('key', req.get('key'))
 
 
 class _StorageDiffItem(Item):
@@ -441,7 +443,7 @@ class _StorageDiffItem(Item):
         return 'storage_diffs'
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
-        return get_selected_fields(fields.get('storageDiff'), ['address', 'keys'])
+        return get_selected_fields(fields.get('storageDiff'), ['address', 'key'])
 
 
 def _build_model() -> Model:

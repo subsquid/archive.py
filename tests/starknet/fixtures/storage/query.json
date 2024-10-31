@@ -7,12 +7,12 @@
       "timestamp": true
     },
     "storageDiff": {
-      "values": true
+      "value": true
     }
   },
   "storageDiffs": [
     {
-      "address": ["0x314341cc731260254db9efd6a309cd31af03cde435869d6ad7ad9d5b3552866"]
+      "key": ["0x87d7d9120d0b8ee18d727b9e95b5d5f2225b9d43d051332763b7e84282064f"]
     }
   ]
 }

@@ -208,6 +208,7 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
     storage_diffs = storage_diffs.sort_by([
         ('block_number', 'ascending'),
         ('address', 'ascending'),
+        ('key', 'ascending'),
     ])
     storage_diffs = add_index_column(storage_diffs)
 

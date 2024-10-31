@@ -243,12 +243,13 @@ class StorageDiffTableBuilder(TableBuilder):
         self.block_number = Column(pyarrow.int32())
         self.address = Column(pyarrow.string())
 
-        self.keys = Column(pyarrow.list_(pyarrow.string()))
-        self.values = Column(pyarrow.list_(pyarrow.string()))
+        self.key = Column(pyarrow.string())
+        self.value = Column(pyarrow.string())
 
     def append(self, storage_diff: WriterStorageDiffItem) -> None:
-        self.block_number.append(storage_diff['block_number'])
-        self.address.append(storage_diff['address'])
+        for e in storage_diff['storage_entries']:
+            self.block_number.append(storage_diff['block_number'])
+            self.address.append(storage_diff['address'])
 
-        self.keys.append([e['key'] for e in storage_diff['storage_entries']])
-        self.values.append([e['value'] for e in storage_diff['storage_entries']])
+            self.key.append(e['key'])
+            self.value.append(e['value'])
