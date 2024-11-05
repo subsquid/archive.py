@@ -6,8 +6,8 @@ from sqa.fs import Fs
 from sqa.starknet.writer.model import WriterBlock
 from sqa.starknet.writer.tables import (
     BlockTableBuilder,
-    MessageTableBuilder,
     EventTableBuilder,
+    MessageTableBuilder,
     StateUpdateTableBuilder,
     StorageDiffTableBuilder,
     TraceTableBuilder,
@@ -78,6 +78,9 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
     transactions = transactions.sort_by([
         ('contract_address', 'ascending'),
         ('sender_address', 'ascending'),
+        ('type', 'ascending'),
+        ('nonce', 'ascending'),
+
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
     ])
@@ -90,10 +93,12 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
         row_group_size=50000,
         write_statistics=[
             '_idx',
-            'contract_address',
-            'sender_address',
             'block_number',
             'transaction_index',
+            'contract_address',
+            'sender_address',
+            'type',
+            'nonce',
         ],
         **kwargs,
     )
@@ -103,11 +108,12 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
     # Handling Starknet events
     events = tables['events']
     events = events.sort_by([
+        ('from_address', 'ascending'),
+        ('key0', 'ascending'),
+
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
         ('event_index', 'ascending'),
-        ('key0', 'ascending'),
-        ('from_address', 'ascending'),
     ])
     events = add_index_column(events)
 
@@ -118,11 +124,10 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
         row_group_size=100_000,
         write_statistics=[
             '_idx',
-            'key0',
-            'from_address',
             'block_number',
             'transaction_index',
-            'event_index',
+            'from_address',
+            'key0',
         ],
         **kwargs,
     )
@@ -132,6 +137,15 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
     # Handling Starknet traces
     traces = tables['traces']
     traces = traces.sort_by([
+        ('trace_type', 'ascending'),
+        ('invocation_type', 'ascending'),
+        ('caller_address', 'ascending'),
+        ('contract_address', 'ascending'),
+        ('class_hash', 'ascending'),
+        ('call_type', 'ascending'),
+        ('entry_point_selector', 'ascending'),
+        ('entry_point_type', 'ascending'),
+
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
     ])
@@ -151,6 +165,14 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
             '_idx',
             'block_number',
             'transaction_index',
+            'trace_type',
+            'invocation_type',
+            'caller_address',
+            'contract_address',
+            'class_hash',
+            'call_type',
+            'entry_point_selector',
+            'entry_point_type',
         ],
         **kwargs,
     )
@@ -160,6 +182,9 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
     # Handling Starknet call messages
     messages = tables['messages']
     messages = messages.sort_by([
+        ('from_address', 'ascending'),
+        ('to_address', 'ascending'),
+
         ('block_number', 'ascending'),
         ('transaction_index', 'ascending'),
         ('order', 'ascending'),
@@ -175,6 +200,9 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
             '_idx',
             'block_number',
             'transaction_index',
+            'order',
+            'from_address',
+            'to_address',
         ],
         **kwargs,
     )
@@ -206,9 +234,10 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
     # Handling Starknet storage diffs
     storage_diffs = tables['storage_diffs']
     storage_diffs = storage_diffs.sort_by([
-        ('block_number', 'ascending'),
         ('address', 'ascending'),
         ('key', 'ascending'),
+
+        ('block_number', 'ascending'),
     ])
     storage_diffs = add_index_column(storage_diffs)
 
@@ -220,6 +249,8 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
         write_statistics=[
             '_idx',
             'block_number',
+            'address',
+            'key',
         ],
         **kwargs,
     )
@@ -235,11 +266,7 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
     loc.write_parquet(
         'blocks.parquet',
         blocks,
-        use_dictionary=[
-            'status',
-            'sequencer_address',
-            'starknet_version',
-        ],
+        use_dictionary=[],
         write_statistics=['number'],
         **kwargs,
     )

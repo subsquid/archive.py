@@ -209,19 +209,19 @@ class StateUpdateTableBuilder(TableBuilder):
         self.deprecated_declared_classes = Column(pyarrow.list_(pyarrow.string()))
         self.declared_classes = Column(pyarrow.list_(pyarrow.struct([
             ('class_hash', pyarrow.string()),
-            ('compiled_class_hash', pyarrow.string())
+            ('compiled_class_hash', pyarrow.string()),
         ])))
         self.deployed_contracts = Column(pyarrow.list_(pyarrow.struct([
             ('address', pyarrow.string()),
-            ('class_hash', pyarrow.string())
+            ('class_hash', pyarrow.string()),
         ])))
         self.replaced_classes = Column(pyarrow.list_(pyarrow.struct([
             ('contract_address', pyarrow.string()),
-            ('class_hash', pyarrow.string())
+            ('class_hash', pyarrow.string()),
         ])))
         self.nonces = Column(pyarrow.list_(pyarrow.struct([
             ('contract_address', pyarrow.string()),
-            ('nonce', pyarrow.string())
+            ('nonce', pyarrow.string()),
         ])))
 
     def append(self, state_update: WriterBlockStateUpdate) -> None:

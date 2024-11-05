@@ -408,7 +408,7 @@ class _StateUpdateScan(Scan):
     def request_name(self) -> str:
         return 'stateUpdates'
 
-    def where(self, req: StateUpdateRequest) -> Iterable[Expression | None]:
+    def where(self, req: StateUpdateRequest) -> Iterable[Expression | None]:  # noqa: ARG002
         return []
 
 
