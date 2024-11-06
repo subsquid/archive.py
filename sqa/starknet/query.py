@@ -240,7 +240,7 @@ _traces_table = Table(
 
 _messages_table = Table(
     name='messages',
-    primary_key=['order'],
+    primary_key=['transaction_index', 'order'],
     column_weights={},
 )
 
