@@ -186,7 +186,6 @@ def write_parquet(loc: Fs, tables: dict[str, pyarrow.Table]) -> None:
         ('to_address', 'ascending'),
 
         ('block_number', 'ascending'),
-        ('transaction_index', 'ascending'),
         ('order', 'ascending'),
     ])
     messages = add_index_column(messages)
