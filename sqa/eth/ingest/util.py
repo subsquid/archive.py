@@ -184,17 +184,16 @@ def transactions_root(transactions: list[Transaction]) -> str:
             # ])
         elif tx['type'] == '0x66':
             # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L104
-            raise NotImplementedError('cannot encode tx with type 0x66')
-            # trie[path] = b'\x66' + rlp.encode([
-            #     qty2int(tx['chainId']),
-            #     decode_hex(tx['requestId']),
-            #     decode_hex(tx['from']),
-            #     qty2int(tx['gasPrice']),
-            #     qty2int(tx['gas']),
-            #     decode_hex(tx['to']) if tx['to'] else b'',
-            #     qty2int(tx['value']),
-            #     decode_hex(tx['input'])
-            # ])
+            trie[path] = b'\x66' + rlp.encode([
+                qty2int(tx['chainId']),
+                decode_hex(tx['requestId']),
+                decode_hex(tx['from']),
+                qty2int(tx['gasPrice']),
+                qty2int(tx['gas']),
+                decode_hex(tx['to']) if tx['to'] else b'',
+                qty2int(tx['value']),
+                decode_hex(tx['input'])
+            ])
         elif tx['type'] == '0x68':
             # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L161
             trie[path] = b'\x68' + rlp.encode([
