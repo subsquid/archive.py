@@ -1,0 +1,18 @@
+{
+    "type": "starknet",
+    "fromBlock": 0,
+    "fields": {
+        "message": {
+            "fromAddress": true,
+            "toAddress": true,
+            "payload": true
+        }
+    },
+    "messages": [
+        {
+            "toAddress": [
+                "0x283751a21eafbfcd52297820d27c1f1963d9b5b4"
+            ]
+        }
+    ]
+}

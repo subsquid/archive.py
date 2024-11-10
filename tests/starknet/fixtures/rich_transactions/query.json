@@ -1,0 +1,24 @@
+{
+    "type": "starknet",
+    "fromBlock": 0,
+    "fields": {
+        "transaction": {
+            "transactionHash": true
+        },
+        "event": {
+            "keys": true
+        },
+        "trace": {
+            "contractAddress": true
+        }
+    },
+    "transactions": [
+        {
+            "senderAddress": [
+                "0x1a543caaa4552c557dc5881f347d05362f480b2bc220696e16d9152aec371db"
+            ],
+            "traces": true,
+            "events": true
+        }
+    ]
+}

@@ -194,7 +194,8 @@ class _ItemSelectionQuery:
 
         self.sql = (f'SELECT _idx AS idx, block_number, ({weight_exp}) AS weight '
                     f'FROM read_parquet({self.params.new_variable("file")}) i '
-                    f'SEMI JOIN keys ON i.block_number = keys.block_number AND ')
+                    f'SEMI JOIN keys ON i.block_number = keys.block_number'
+                    f'{" AND " if item.table().primary_key else ""}')
 
         self.sql += join_condition(item.table().primary_key, 'i', 'keys')
 
@@ -235,11 +236,16 @@ class _ItemDataQuery:
         self.table_name = item.table().name
         self.projected_columns = ['block_number'] + item.selected_columns(fields)
 
-        order = ', '.join(item.table().primary_key)
+        # Escape field names in the ORDER BY clause
+        order_columns = [f'"{col}"' for col in item.table().primary_key]
+        order = ', '.join(order_columns) or '"block_number"'
 
-        self.sql = (f'SELECT block_number, to_json(list({item.project(fields)} ORDER BY {order})) AS data '
-                    f'FROM items '
-                    f'GROUP BY block_number')
+        self.sql = (
+            f'SELECT block_number, '
+            f'to_json(list({item.project(fields)} ORDER BY {order})) AS data '
+            f'FROM items '
+            f'GROUP BY block_number'
+        )
 
     def fetch(self, partition: Partition, index: pyarrow.Array) -> pyarrow.Table:
         items = _ScanQuery(

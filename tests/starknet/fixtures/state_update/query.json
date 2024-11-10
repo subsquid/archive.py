@@ -1,0 +1,21 @@
+{
+    "type": "starknet",
+    "fromBlock": 702012,
+    "toBlock": 702012,
+    "fields": {
+        "block": {
+            "timestamp": true
+        },
+        "stateUpdate": {
+            "newRoot": true,
+            "oldRoot": true,
+            "deprecatedDeclaredClasses": true,
+            "declaredClasses": true,
+            "deployedContracts": true,
+            "replacedClasses": true,
+            "nonces": true
+        }
+    },
+    "stateUpdates": [{}]
+}
+  

@@ -1,8 +1,7 @@
-from typing import Optional, TypedDict, NotRequired
-
+from typing import NotRequired, TypedDict
 
 FELT = str  # NOTE: cairo bytes32
-Hash32 = FELT
+STD_HASH = FELT
 Qty = str  # For numerical quantities, represented as strings for precision
 
 
@@ -13,11 +12,11 @@ class _ResourcePrice(TypedDict):
 
 class Block(TypedDict):
     block_number: int
-    block_hash: Hash32
-    parent_hash: Hash32
+    block_hash: STD_HASH
+    parent_hash: STD_HASH
 
     status: str  # status enum
-    new_root: Hash32
+    new_root: STD_HASH
     timestamp: int
     sequencer_address: FELT
 
@@ -29,15 +28,21 @@ class Block(TypedDict):
 
     # external fields
     events: NotRequired[list['Event']]
+    traces: NotRequired[list['Trace']]
+    state_update: NotRequired['BlockStateUpdate']
 
 
 class WriterBlock(Block):
     number: int  # renamed from block_number for consistency
-    hash: Hash32  # renamed from block_hash for consistency
+    hash: STD_HASH  # renamed from block_hash for consistency
 
     # external fields
     writer_txs: list['WriterTransaction']
     writer_events: list['WriterEvent']
+    writer_call_traces: NotRequired[list['WriterCall']]
+    # NOTE: call messages extracted from call traces
+    writer_state_update: NotRequired['WriterBlockStateUpdate']
+    writer_storage_diffs: NotRequired[list['WriterStorageDiffItem']]
 
 
 class ResourceBounds(TypedDict):
@@ -52,28 +57,28 @@ class _ResourceBoundsMap(TypedDict):
 
 
 class Transaction(TypedDict):
-    transaction_hash: Hash32
+    transaction_hash: STD_HASH
 
-    contract_address: Optional[FELT]  # Address of the contract for contract-related transactions
-    entry_point_selector: Optional[FELT]
-    calldata: Optional[list[FELT]]
-    max_fee: Optional[FELT]
+    contract_address: NotRequired[FELT]  # Address of the contract for contract-related transactions
+    entry_point_selector: NotRequired[FELT]
+    calldata: NotRequired[list[FELT]]
+    max_fee: NotRequired[FELT]
     version: str
-    signature: Optional[list[FELT]]
-    nonce: Optional[FELT]
+    signature: NotRequired[list[FELT]]
+    nonce: NotRequired[FELT]
     type: str  # transaction type enum
-    sender_address: Optional[FELT]
-    class_hash: Optional[Hash32]
-    compiled_class_hash: Optional[Hash32]
-    contract_address_salt: Optional[FELT]
-    constructor_calldata: Optional[list[str]]
+    sender_address: NotRequired[FELT]
+    class_hash: NotRequired[STD_HASH]
+    compiled_class_hash: NotRequired[STD_HASH]
+    contract_address_salt: NotRequired[FELT]
+    constructor_calldata: NotRequired[list[str]]
     # NOTE: fields below from schema, havent been received from node at the time of writing
-    resource_bounds: Optional[_ResourceBoundsMap]
-    tip: Optional[FELT]
-    paymaster_data: Optional[list[FELT]]
-    account_deployment_data: Optional[list[FELT]]
-    nonce_data_availability_mode: Optional[str]  # Nonce DA mode enum
-    fee_data_availability_mode: Optional[str]  # Fee DA mode enum
+    resource_bounds: NotRequired[_ResourceBoundsMap]
+    tip: NotRequired[FELT]
+    paymaster_data: NotRequired[list[FELT]]
+    account_deployment_data: NotRequired[list[FELT]]
+    nonce_data_availability_mode: NotRequired[str]  # Nonce DA mode enum
+    fee_data_availability_mode: NotRequired[str]  # Fee DA mode enum
 
 
 class WriterTransaction(Transaction):
@@ -112,25 +117,25 @@ class ExecutionResources(TypedDict):
 
 
 class Receipt(TypedDict, total=False):
-    transaction_hash: Hash32
+    transaction_hash: STD_HASH
     actual_fee: ActualFee
     execution_status: str  # Enum: SUCCEEDED, REVERTED
     finality_status: str  # Enum: ACCEPTED_ON_L2, ACCEPTED_ON_L1
-    block_hash: Hash32
+    block_hash: STD_HASH
     block_number: int
     messages_sent: list[MessageToL1]
-    revert_reason: Optional[str]
+    revert_reason: NotRequired[str]
     events: list[EventContent]
     execution_resources: ExecutionResources
     type: str  # Enum: INVOKE, L1_HANDLER, DECLARE, DEPLOY_ACCOUNT
-    contract_address: Optional[FELT]  # For DEPLOY_ACCOUNT receipts
-    message_hash: Optional[Hash32]  # For L1_HANDLER receipts
+    contract_address: NotRequired[FELT]  # For DEPLOY_ACCOUNT receipts
+    message_hash: NotRequired[STD_HASH]  # For L1_HANDLER receipts
 
 
 class Event(TypedDict):
     block_number: int
-    block_hash: Hash32
-    transaction_hash: Hash32
+    block_hash: STD_HASH
+    transaction_hash: STD_HASH
 
     from_address: FELT
     keys: list[FELT]
@@ -139,9 +144,129 @@ class Event(TypedDict):
 
 class EventPage(TypedDict):
     events: list[Event]
-    continuation_token: Optional[str]
+    continuation_token: NotRequired[str]
 
 
 class WriterEvent(Event):
     transaction_index: int
     event_index: int
+
+
+class Message(TypedDict):
+    """
+    The messages sent by this invocation to L1
+    """
+
+    from_address: FELT  # l2_address in spec
+    to_address: FELT  # l1_address in spec
+    payload: list[FELT]
+    order: int
+
+
+class WriterMessage(Message):
+    block_number: int
+    transaction_index: int
+    trace_address: list[int]
+
+
+class CallEvent(TypedDict):
+    """
+    The events emitted in this invocation
+    """
+
+    keys: list[FELT]
+    data: list[FELT]
+    order: int
+
+
+class Call(TypedDict):
+    caller_address: NotRequired[FELT]
+    contract_address: NotRequired[FELT]
+    call_type: NotRequired[str]
+    class_hash: NotRequired[FELT]
+    entry_point_selector: NotRequired[FELT]
+    entry_point_type: NotRequired[str]
+    revert_reason: NotRequired[str]
+    calldata: list[FELT]
+    result: list[FELT]
+    calls: list['Call']
+    events: list[CallEvent]
+    messages: list[Message]
+    execution_resources: ExecutionResources
+
+
+class WriterCall(Call):
+    block_number: int
+    transaction_index: int
+    trace_type: str
+    invocation_type: str
+
+    trace_address: list[int]
+
+
+class TraceRoot(TypedDict):
+    type: str
+    execution_resources: ExecutionResources
+    execute_invocation: NotRequired[Call]
+    constructor_invocation: NotRequired[Call]
+    validate_invocation: NotRequired[Call]
+    fee_transfer_invocation: NotRequired[Call]
+
+
+class Trace(TypedDict):
+    trace_root: TraceRoot
+    transaction_hash: FELT
+
+
+class StorageEntry(TypedDict):
+    key: FELT
+    value: FELT
+
+
+class StorageDiffItem(TypedDict):
+    address: FELT
+    storage_entries: list[StorageEntry]
+
+
+class WriterStorageDiffItem(StorageDiffItem):
+    block_number: int
+
+
+class DeclaredContractHash(TypedDict):
+    class_hash: FELT
+    compiled_class_hash: FELT
+
+
+class DeployedContract(TypedDict):
+    address: FELT
+    class_hash: FELT
+
+
+class ReplacedClass(TypedDict):
+    contract_address: FELT
+    class_hash: FELT
+
+
+class ContractsNonce(TypedDict):
+    contract_address: FELT
+    nonce: FELT
+
+
+class StateDiff(TypedDict):
+    storage_diffs: list[StorageDiffItem]
+    deprecated_declared_classes: list[FELT]
+    declared_classes: list[DeclaredContractHash]
+    deployed_contracts: list[DeployedContract]
+    replaced_classes: list[ReplacedClass]
+    nonces: list[ContractsNonce]
+
+
+class BlockStateUpdate(TypedDict):
+    block_hash: NotRequired[STD_HASH]
+    new_root: NotRequired[FELT]
+    old_root: FELT
+    state_diff: StateDiff
+
+
+class WriterBlockStateUpdate(BlockStateUpdate):
+    block_number: int
