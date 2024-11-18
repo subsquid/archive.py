@@ -12,9 +12,9 @@
             "classHash": true,
             "entryPointSelector": true,
             "entryPointType": true,
-            "callRevertReason": true,
+            "revertReason": true,
             "calldata": true,
-            "callResult": true
+            "result": true
         }
     },
     "traces": [

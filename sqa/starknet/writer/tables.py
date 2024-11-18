@@ -148,9 +148,9 @@ class TraceTableBuilder(TableBuilder):
         self.class_hash = Column(pyarrow.string())
         self.entry_point_selector = Column(pyarrow.string())
         self.entry_point_type = Column(pyarrow.string())
-        self.call_revert_reason = Column(pyarrow.string())
+        self.revert_reason = Column(pyarrow.string())
         self.calldata = Column(pyarrow.list_(pyarrow.string()))
-        self.call_result = Column(pyarrow.list_(pyarrow.string()))
+        self.result = Column(pyarrow.list_(pyarrow.string()))
 
     def append_call(self, tx_trace: WriterCall) -> None:
         self.block_number.append(tx_trace['block_number'])
@@ -167,9 +167,9 @@ class TraceTableBuilder(TableBuilder):
         self.class_hash.append(tx_trace.get('class_hash'))
         self.entry_point_selector.append(tx_trace.get('entry_point_selector'))
         self.entry_point_type.append(tx_trace.get('entry'))
-        self.call_revert_reason.append(tx_trace.get('revert_reason'))
+        self.revert_reason.append(tx_trace.get('revert_reason'))
         self.calldata.append(tx_trace.get('calldata'))
-        self.call_result.append(tx_trace.get('result'))
+        self.result.append(tx_trace.get('result'))
 
         # NOTE: Call execution resources omitted
 

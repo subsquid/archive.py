@@ -49,9 +49,9 @@ class TraceFieldSelection(TypedDict, total=False):
     classHash: bool
     entryPointSelector: bool
     entryPointType: bool
-    callRevertReason: bool
+    revertReason: bool
     calldata: bool
-    callResult: bool
+    result: bool
 
 
 class MessageFieldSelection(TypedDict, total=False):
