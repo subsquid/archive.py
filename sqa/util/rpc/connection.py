@@ -237,7 +237,7 @@ class RpcConnection:
 
     def _is_retryable_error(self, e: Exception) -> bool:
         if isinstance(e, httpx.HTTPStatusError):
-            if e.response.status_code in (429, 502, 503, 504, 524, 530):
+            if e.response.status_code in (402, 429, 502, 503, 504, 524, 530):
                 return True
             else:
                 return self._errors_in_row <= 20
