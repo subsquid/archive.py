@@ -157,7 +157,7 @@ class Message(TypedDict):
     The messages sent by this invocation to L1
     """
 
-    from_address: FELT  # l2_address in spec
+    from_address: NotRequired[FELT]  # l2_address in spec
     to_address: FELT  # l1_address in spec
     payload: list[FELT]
     order: int
