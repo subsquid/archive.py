@@ -193,7 +193,7 @@ class MessageTableBuilder(TableBuilder):
             self.transaction_index.append(trace_call['transaction_index'])
             self.trace_address.append(trace_call['trace_address'])
 
-            from_address = m['from_address'].lower() if m['from_address'] else None
+            from_address = m['from_address'].lower() if 'from_address' in m else None
             self.from_address.append(from_address)
             self.to_address.append(m['to_address'].lower())
             self.payload.append(m['payload'])
