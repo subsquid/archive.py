@@ -51,7 +51,7 @@ def remove_camel_prefix(name: str, prefix: str) -> str:
 
 def project(columns: Iterable[str], prefix: str = '') -> str:
     return ', '.join(
-        prefix + c for c in columns
+        f'{prefix}"{c}"' for c in columns
     )
 
 
