@@ -1,4 +1,5 @@
 import asyncio
+from json import JSONDecodeError
 import logging
 import sys
 import time
@@ -250,6 +251,8 @@ class RpcConnection:
         elif isinstance(e, RpcResultIsInvalid):
             return True
         elif isinstance(e, RpcResultNoId):
+            return True
+        elif isinstance(e, JSONDecodeError) and e.doc == 'rate limited':
             return True
         elif isinstance(e, RpcError) and isinstance(e.info, dict):
             code = e.info.get('code')
