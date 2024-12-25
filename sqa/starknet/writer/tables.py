@@ -166,7 +166,7 @@ class TraceTableBuilder(TableBuilder):
         self.call_type.append(tx_trace.get('call_type'))
         self.class_hash.append(tx_trace.get('class_hash'))
         self.entry_point_selector.append(tx_trace.get('entry_point_selector'))
-        self.entry_point_type.append(tx_trace.get('entry'))
+        self.entry_point_type.append(tx_trace.get('entry_point_type'))
         self.revert_reason.append(tx_trace.get('revert_reason'))
         self.calldata.append(tx_trace.get('calldata'))
         self.result.append(tx_trace.get('result'))
