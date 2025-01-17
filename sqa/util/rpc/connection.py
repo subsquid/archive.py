@@ -256,7 +256,7 @@ class RpcConnection:
             return True
         elif isinstance(e, RpcError) and isinstance(e.info, dict):
             code = e.info.get('code')
-            return code in (63, 429, -32000, -32002, -32007, -32602, -32603)
+            return code in (63, 429, -32000, -32002, -32007, -32017, -32602, -32603)
         else:
             return False
 

@@ -267,12 +267,24 @@ def receipts_root(receipts: list[Receipt]) -> str:
     for receipt in receipts:
         path = rlp.encode(qty2int(receipt['transactionIndex']))
         type_ = b'' if receipt['type'] == '0x0' else rlp.encode(qty2int(receipt['type']))
-        trie[path] = type_ + rlp.encode([
-            qty2int(receipt['status']),
-            qty2int(receipt['cumulativeGasUsed']),
-            decode_hex(logs_bloom(receipt['logs'])),
-            _encode_logs(receipt['logs']),
-        ])
+        if receipt['type'] == '0x7e':
+            # https://github.com/ethereum-optimism/specs/blob/main/specs/protocol/deposits.md#deposit-receipt
+            receipt_trie = rlp.encode([
+                qty2int(receipt['status']),
+                qty2int(receipt['cumulativeGasUsed']),
+                decode_hex(logs_bloom(receipt['logs'])),
+                _encode_logs(receipt['logs']),
+                qty2int(receipt['depositNonce']),
+                int('depositReceiptVersion' in receipt),
+            ])
+        else:
+            receipt_trie = rlp.encode([
+                qty2int(receipt['status']),
+                qty2int(receipt['cumulativeGasUsed']),
+                decode_hex(logs_bloom(receipt['logs'])),
+                _encode_logs(receipt['logs']),
+            ])
+        trie[path] = type_ + receipt_trie
     return encode_hex(trie.root_hash)
 
 
@@ -306,7 +318,7 @@ def _serialize_transaction(tx: Transaction):
             decode_hex(tx['to']) if tx['to'] else b'',
             qty2int(tx['value']),
             decode_hex(tx['input']),
-            _encode_access_list(tx['accessList']),
+            _encode_access_list(tx.get('accessList', [])),
         ])
     elif tx['type'] == '0x2':
         return b'\x02' + rlp.encode([
@@ -318,7 +330,7 @@ def _serialize_transaction(tx: Transaction):
             decode_hex(tx['to']) if tx['to'] else b'',
             qty2int(tx['value']),
             decode_hex(tx['input']),
-            _encode_access_list(tx['accessList']),
+            _encode_access_list(tx.get('accessList', [])),
         ])
     elif tx['type'] == '0x3':
         return b'\x03' + rlp.encode([
@@ -330,10 +342,31 @@ def _serialize_transaction(tx: Transaction):
             decode_hex(tx['to']) if tx['to'] else b'',
             qty2int(tx['value']),
             decode_hex(tx['input']),
-            _encode_access_list(tx['accessList']),
+            _encode_access_list(tx.get('accessList', [])),
             qty2int(tx['maxFeePerBlobGas']),
             [decode_hex(h) for h in tx['blobVersionedHashes']],
         ])
+    elif tx['type'] == '0x64':
+        # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L338
+        raise NotImplementedError('cannot encode tx with type 0x64')
+    elif tx['type'] == '0x65':
+        # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L43
+        raise NotImplementedError('cannot encode tx with type 0x65')
+    elif tx['type'] == '0x66':
+        # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L104
+        raise NotImplementedError('cannot encode tx with type 0x66')
+    elif tx['type'] == '0x68':
+        # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L161
+        raise NotImplementedError('cannot encode tx with type 0x68')
+    elif tx['type'] == '0x69':
+        # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L232
+        raise NotImplementedError('cannot encode tx with type 0x69')
+    elif tx['type'] == '0x6a':
+        # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L387
+        raise NotImplementedError('cannot encode tx with type 0x6a')
+    elif tx['type'] == '0x7e':
+        # https://github.com/ethereum-optimism/optimism/blob/9ff3ebb3983be52c3ca189423ae7b4aec94e0fde/specs/deposits.md#the-deposited-transaction-type
+        raise NotImplementedError('cannot encode tx with type 0x7e')
     else:
         raise Exception(f'Unknown tx type {tx["type"]}')
 
@@ -352,6 +385,9 @@ def _create_signature(tx: Transaction):
 
 
 def recover_tx_sender(tx: Transaction):
+    if tx['type'] == '0x7e':
+        # https://github.com/ethereum-optimism/specs/blob/main/specs/protocol/deposits.md#the-deposited-transaction-type
+        return tx['from']
     message = _serialize_transaction(tx)
     signature = _create_signature(tx)
     public_key = signature.recover_public_key_from_msg(message)
