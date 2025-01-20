@@ -385,9 +385,6 @@ def _create_signature(tx: Transaction):
 
 
 def recover_tx_sender(tx: Transaction):
-    if tx['type'] == '0x7e':
-        # https://github.com/ethereum-optimism/specs/blob/main/specs/protocol/deposits.md#the-deposited-transaction-type
-        return tx['from']
     message = _serialize_transaction(tx)
     signature = _create_signature(tx)
     public_key = signature.recover_public_key_from_msg(message)

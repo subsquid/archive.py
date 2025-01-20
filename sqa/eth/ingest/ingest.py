@@ -242,6 +242,12 @@ class Ingest:
         if self._validate_tx_sender:
             for block in blocks:
                 for tx in block['transactions']:
+                    if tx['type'] == '0x7e':
+                        # https://github.com/ethereum-optimism/specs/blob/main/specs/protocol/deposits.md#the-deposited-transaction-type
+                        continue
+                    if tx['type'] in ['0x64', '0x65', '0x66', '0x68', '0x69', '0x6a']:
+                        # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arbitrum_signer.go#L49
+                        continue
                     assert tx['from'] == recover_tx_sender(tx)
 
         return blocks
