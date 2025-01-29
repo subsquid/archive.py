@@ -38,6 +38,7 @@ class EventFieldSelection(TypedDict, total=False):
     fromAddress: bool
     keys: bool
     data: bool
+    traceAddress: bool
 
 
 class TraceFieldSelection(TypedDict, total=False):
