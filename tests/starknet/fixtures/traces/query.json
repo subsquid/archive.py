@@ -15,6 +15,9 @@
             "revertReason": true,
             "calldata": true,
             "result": true
+        },
+        "event": {
+            "traceAddress": true
         }
     },
     "traces": [
