@@ -32,7 +32,16 @@ class TransactionFieldSelection(TypedDict, total=False):
     compiledClassHash: bool
     contractAddressSalt: bool
     constructorCalldata: bool
-
+    resourceBounds: bool
+    tip: bool
+    paymasterData: bool
+    accountDeploymentData: bool
+    nonceDataAvailabilityMode: bool
+    feeDataAvailabilityMode: bool
+    receiptContractAddress: bool
+    receiptMessageHash: bool
+    receiptActualFee: bool
+    receiptFinalityStatus: bool
 
 class EventFieldSelection(TypedDict, total=False):
     fromAddress: bool
@@ -299,6 +308,45 @@ class _TxItem(Item):
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
         return get_selected_fields(fields.get('transaction'), ['transactionIndex'])
 
+    def selected_columns(self, fields: FieldSelection) -> list[str]:
+        columns = []
+        for name in self.get_selected_fields(fields):
+            if name == 'resourceBounds':
+                columns.append('resource_bounds_l1_gas_max_amount')
+                columns.append('resource_bounds_l1_gas_max_price_per_unit')
+                columns.append('resource_bounds_l2_gas_max_amount')
+                columns.append('resource_bounds_l2_gas_max_price_per_unit')
+            elif name == 'receiptActualFee':
+                columns.append('receipt_actual_fee_amount')
+                columns.append('receipt_actual_fee_unit')
+            else:
+                columns.append(to_snake_case(name))
+        return columns
+
+    def project(self, fields: FieldSelection) -> str:
+        # Build a rewrite map for fields that need to become JSON objects
+        rewrite = {}
+
+        # If resourceBounds is selected, create a JSON object with the four subfields
+        if fields.get('transaction', {}).get('resourceBounds'):
+            rewrite['resourceBounds'] = (
+                "json_object("
+                "'l1GasMaxAmount', resource_bounds_l1_gas_max_amount, "
+                "'l1GasMaxPricePerUnit', resource_bounds_l1_gas_max_price_per_unit, "
+                "'l2GasMaxAmount', resource_bounds_l2_gas_max_amount, "
+                "'l2GasMaxPricePerUnit', resource_bounds_l2_gas_max_price_per_unit)"
+            )
+
+        # If receiptActualFee is selected, create a JSON object with amount & unit
+        if fields.get('transaction', {}).get('receiptActualFee'):
+            rewrite['receiptActualFee'] = (
+                "json_object("
+                "'amount', receipt_actual_fee_amount, "
+                "'unit', receipt_actual_fee_unit)"
+            )
+
+        # Use json_project to build the final JSON with our rewrite rules
+        return json_project(self.get_selected_fields(fields), rewrite=rewrite)
 
 class _EventScan(Scan):
     def table(self) -> Table:
@@ -374,8 +422,8 @@ class _TraceItem(Item):
 
     def get_selected_fields(self, fields: FieldSelection) -> list[str]:
         return get_selected_fields(fields.get('trace'), [
-            'transaction_index',
-            'trace_address',
+            'transactionIndex',
+            'traceAddress',
         ])
 
 
