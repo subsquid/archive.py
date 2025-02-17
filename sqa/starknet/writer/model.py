@@ -10,6 +10,11 @@ class _ResourcePrice(TypedDict):
     price_in_wei: FELT
 
 
+class TxWithReceipt(TypedDict):
+    transaction: 'Transaction'
+    receipt: 'Receipt'
+
+
 class Block(TypedDict):
     block_number: int
     block_hash: STD_HASH
@@ -20,7 +25,7 @@ class Block(TypedDict):
     timestamp: int
     sequencer_address: FELT
 
-    transactions: list['Transaction']
+    transactions: list['TxWithReceipt']
 
     # NOTE: fields below from schema, havent been received from node at the time of writing
     starknet_version: str
@@ -85,6 +90,8 @@ class WriterTransaction(Transaction):
     transaction_index: int
     block_number: int
 
+    receipt: 'Receipt'
+
 
 class ActualFee(TypedDict):
     amount: Qty
@@ -117,19 +124,19 @@ class ExecutionResources(TypedDict):
 
 
 class Receipt(TypedDict, total=False):
+    type: str  # Enum: INVOKE, DECLARE, DEPLOY_ACCOUNT, DEPLOY, L1_HANDLER
+    contract_address: NotRequired[FELT]  # For DEPLOY_ACCOUNT, DEPLOY receipts
+    message_hash: NotRequired[STD_HASH]  # For L1_HANDLER receipts
+
     transaction_hash: STD_HASH
     actual_fee: ActualFee
-    execution_status: str  # Enum: SUCCEEDED, REVERTED
     finality_status: str  # Enum: ACCEPTED_ON_L2, ACCEPTED_ON_L1
-    block_hash: STD_HASH
-    block_number: int
     messages_sent: list[MessageToL1]
-    revert_reason: NotRequired[str]
     events: list[EventContent]
     execution_resources: ExecutionResources
-    type: str  # Enum: INVOKE, L1_HANDLER, DECLARE, DEPLOY_ACCOUNT
-    contract_address: NotRequired[FELT]  # For DEPLOY_ACCOUNT receipts
-    message_hash: NotRequired[STD_HASH]  # For L1_HANDLER receipts
+
+    execution_status: str  # Enum: SUCCEEDED, REVERTED
+    revert_reason: NotRequired[str]
 
 
 class Event(TypedDict):

@@ -2,6 +2,16 @@
     "type": "starknet",
     "fromBlock": 0,
     "fields": {
+        "block": {
+            "parentHash": true,
+            "status": true,
+            "newRoot": true,
+            "timestamp": true,
+            "sequencerAddress": true,
+            "starknetVersion": true,
+            "l1GasPriceInFri": true,
+            "l1GasPriceInWei": true
+        },
         "message": {
             "fromAddress": true,
             "toAddress": true,
