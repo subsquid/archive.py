@@ -15,6 +15,9 @@ class BlockFieldSelection(TypedDict, total=False):
     newRoot: bool
     timestamp: bool
     sequencerAddress: bool
+    starknetVersion: bool
+    l1GasPriceInFri: bool
+    l1GasPriceInWei: bool
 
 
 class TransactionFieldSelection(TypedDict, total=False):
