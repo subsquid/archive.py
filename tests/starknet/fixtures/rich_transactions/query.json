@@ -10,10 +10,9 @@
             "accountDeploymentData": true,
             "nonceDataAvailabilityMode": true,
             "feeDataAvailabilityMode": true,
-            "receiptContractAddress": true,
-            "receiptMessageHash": true,
-            "receiptActualFee": true,
-            "receiptFinalityStatus": true
+            "messageHash": true,
+            "actualFee": true,
+            "finalityStatus": true
         },
         "event": {
             "keys": true

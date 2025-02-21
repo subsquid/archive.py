@@ -41,10 +41,9 @@ class TransactionFieldSelection(TypedDict, total=False):
     accountDeploymentData: bool
     nonceDataAvailabilityMode: bool
     feeDataAvailabilityMode: bool
-    receiptContractAddress: bool
-    receiptMessageHash: bool
-    receiptActualFee: bool
-    receiptFinalityStatus: bool
+    messageHash: bool
+    actualFee: bool
+    finalityStatus: bool
 
 class EventFieldSelection(TypedDict, total=False):
     fromAddress: bool
@@ -319,9 +318,9 @@ class _TxItem(Item):
                 columns.append('resource_bounds_l1_gas_max_price_per_unit')
                 columns.append('resource_bounds_l2_gas_max_amount')
                 columns.append('resource_bounds_l2_gas_max_price_per_unit')
-            elif name == 'receiptActualFee':
-                columns.append('receipt_actual_fee_amount')
-                columns.append('receipt_actual_fee_unit')
+            elif name == 'actualFee':
+                columns.append('actual_fee_amount')
+                columns.append('actual_fee_unit')
             else:
                 columns.append(to_snake_case(name))
         return columns
@@ -340,12 +339,12 @@ class _TxItem(Item):
                 "'l2GasMaxPricePerUnit', resource_bounds_l2_gas_max_price_per_unit)"
             )
 
-        # If receiptActualFee is selected, create a JSON object with amount & unit
-        if fields.get('transaction', {}).get('receiptActualFee'):
-            rewrite['receiptActualFee'] = (
+        # If actualFee is selected, create a JSON object with amount & unit
+        if fields.get('transaction', {}).get('actualFee'):
+            rewrite['actualFee'] = (
                 "json_object("
-                "'amount', receipt_actual_fee_amount, "
-                "'unit', receipt_actual_fee_unit)"
+                "'amount', actual_fee_amount, "
+                "'unit', actual_fee_unit)"
             )
 
         # Use json_project to build the final JSON with our rewrite rules

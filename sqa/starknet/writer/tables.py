@@ -70,11 +70,12 @@ class TxTableBuilder(TableBuilder):
 
         # receipt
         # NOTE: fields duplicated in transactions, events, calls and messages are omitted
-        self.receipt_contract_address = Column(pyarrow.string())
-        self.receipt_message_hash = Column(pyarrow.string())
-        self.receipt_actual_fee_amount = Column(pyarrow.string())
-        self.receipt_actual_fee_unit = Column(pyarrow.string())
-        self.receipt_finality_status = Column(pyarrow.string())
+        # NOTE: We omit receipt.contract_address because tx.contract_address covers both deployments and invokes:
+        # for deploy transactions, its the deployed contract address; for invoke, its the senders address.
+        self.message_hash = Column(pyarrow.string())
+        self.actual_fee_amount = Column(pyarrow.string())
+        self.actual_fee_unit = Column(pyarrow.string())
+        self.finality_status = Column(pyarrow.string())
         # TODO: do execution resources required?
         # TODO: execution_status and revert_reason duplicated in calls?
 
@@ -109,11 +110,10 @@ class TxTableBuilder(TableBuilder):
         self.nonce_data_availability_mode.append(tx.get('nonce_data_availability_mode'))
         self.fee_data_availability_mode.append(tx.get('fee_data_availability_mode'))
 
-        self.receipt_contract_address.append(tx['receipt'].get('contract_address'))
-        self.receipt_message_hash.append(tx['receipt'].get('message_hash'))
-        self.receipt_actual_fee_amount.append(tx['receipt'].get('actual_fee', {}).get('amount'))
-        self.receipt_actual_fee_unit.append(tx['receipt'].get('actual_fee', {}).get('unit'))
-        self.receipt_finality_status.append(tx['receipt'].get('finality_status'))
+        self.message_hash.append(tx['receipt'].get('message_hash'))
+        self.actual_fee_amount.append(tx['receipt'].get('actual_fee', {}).get('amount'))
+        self.actual_fee_unit.append(tx['receipt'].get('actual_fee', {}).get('unit'))
+        self.finality_status.append(tx['receipt'].get('finality_status'))
 
 class EventTableBuilder(TableBuilder):
 
