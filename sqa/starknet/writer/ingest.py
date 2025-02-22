@@ -34,14 +34,12 @@ class IngestStarknet:
         rpc: RpcClient,
         from_block: int = 0,
         to_block: int | None = None,
-        with_receipts: bool = False,
         with_traces: bool = False,
         with_statediffs: bool = False,
         validate_tx_root: bool = False,
     ) -> None:
         self._rpc = rpc
         self._finality_confirmation = STARKNET_FINALITY
-        self._with_receipts = with_receipts
         self._with_traces = with_traces
         self._with_statediffs = with_statediffs
         self._validate_tx_root = validate_tx_root
@@ -121,10 +119,7 @@ class IngestStarknet:
         return strides
 
     def _starknet_stride_subtasks(self, blocks: list[Block]) -> Generator[None]:
-        if self._with_receipts:
-            yield self._fetch_starknet_receipts(blocks)
-        else:
-            yield self._fetch_starknet_logs(blocks)
+        yield self._fetch_starknet_logs(blocks)
 
         if self._with_traces:
             yield self._fetch_starknet_traces(blocks)
@@ -200,7 +195,7 @@ class IngestStarknet:
     async def _fetch_starknet_blocks(self, from_block: int, to_block: int) -> list[Block]:
         return await self._rpc.batch_call(
             [
-                ('starknet_getBlockWithTxs', [{'block_number': i}])
+                ('starknet_getBlockWithReceipts', [{'block_number': i}])
                 for i in range(from_block, to_block + 1)
             ],
             priority=from_block,
@@ -211,7 +206,7 @@ class IngestStarknet:
         return max(height - self._finality_confirmation, 0)
 
     @staticmethod
-    def make_writer_ready_blocks(blocks: list[Block]) -> list[WriterBlock]:  # noqa: C901
+    def make_writer_ready_blocks(blocks: list[Block]) -> list[WriterBlock]:  # noqa: C901, PLR0912
         # NOTE: care for efficiency function modify existing list as well as returning it with different typing
         stride: list[WriterBlock] = cast(list[WriterBlock], blocks)  # cast ahead for less mypy problems
         # NOTE: This function transform exact RPC node objects to Writer object with all extra fields for writing to table
@@ -220,10 +215,13 @@ class IngestStarknet:
             block['number'] = block['block_number']
             block['hash'] = block['block_hash']
 
-            block['writer_txs'] = cast(list[WriterTransaction], block['transactions'])
+            block['writer_txs'] = cast(list[WriterTransaction], [txs['transaction'] for txs in block['transactions']])
             for transaction_index, tx in enumerate(block['writer_txs']):
                 tx['transaction_index'] = transaction_index
                 tx['block_number'] = block['block_number']
+                if block['transactions'][transaction_index]['receipt']['transaction_hash'] != tx['transaction_hash']:
+                    raise RuntimeError('Receipt transaction hash does not match transaction hash')
+                tx['receipt'] = block['transactions'][transaction_index]['receipt']
 
                 transaction_hash_to_index[tx['transaction_hash']] = tx['transaction_index']
 

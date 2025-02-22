@@ -57,7 +57,28 @@ class TxTableBuilder(TableBuilder):
         self.compiled_class_hash = Column(pyarrow.string())
         self.contract_address_salt = Column(pyarrow.string())
         self.constructor_calldata = Column(pyarrow.list_(pyarrow.string()))
-        # TODO: 6 Fields that havent been received left unmatched for a moment
+
+        self.resource_bounds_l1_gas_max_amount = Column(pyarrow.string())
+        self.resource_bounds_l1_gas_max_price_per_unit = Column(pyarrow.string())
+        self.resource_bounds_l2_gas_max_amount = Column(pyarrow.string())
+        self.resource_bounds_l2_gas_max_price_per_unit = Column(pyarrow.string())
+        self.tip = Column(pyarrow.string())
+        self.paymaster_data = Column(pyarrow.list_(pyarrow.string()))
+        self.account_deployment_data = Column(pyarrow.list_(pyarrow.string()))
+        self.nonce_data_availability_mode = Column(pyarrow.string())
+        self.fee_data_availability_mode = Column(pyarrow.string())
+
+        # receipt
+        # NOTE: fields duplicated in transactions, events, calls and messages are omitted
+        # NOTE: We omit receipt.contract_address because tx.contract_address covers both deployments and invokes:
+        # for deploy transactions, its the deployed contract address; for invoke, its the senders address.
+        self.message_hash = Column(pyarrow.string())
+        self.actual_fee_amount = Column(pyarrow.string())
+        self.actual_fee_unit = Column(pyarrow.string())
+        self.finality_status = Column(pyarrow.string())
+        # TODO: do execution resources required?
+        # TODO: execution_status and revert_reason duplicated in calls?
+
 
     def append(self, tx: WriterTransaction) -> None:
         self.block_number.append(tx['block_number'])
@@ -79,6 +100,20 @@ class TxTableBuilder(TableBuilder):
         self.contract_address_salt.append(tx.get('contract_address_salt'))
         self.constructor_calldata.append(tx.get('constructor_calldata'))
 
+        self.resource_bounds_l1_gas_max_amount.append(tx.get('resource_bounds', {}).get('l1_gas', {}).get('max_amount'))
+        self.resource_bounds_l1_gas_max_price_per_unit.append(tx.get('resource_bounds', {}).get('l1_gas', {}).get('max_price_per_unit'))
+        self.resource_bounds_l2_gas_max_amount.append(tx.get('resource_bounds', {}).get('l2_gas', {}).get('max_amount'))
+        self.resource_bounds_l2_gas_max_price_per_unit.append(tx.get('resource_bounds', {}).get('l2_gas', {}).get('max_price_per_unit'))
+        self.tip.append(tx.get('tip'))
+        self.paymaster_data.append(tx.get('paymaster_data'))
+        self.account_deployment_data.append(tx.get('account_deployment_data'))
+        self.nonce_data_availability_mode.append(tx.get('nonce_data_availability_mode'))
+        self.fee_data_availability_mode.append(tx.get('fee_data_availability_mode'))
+
+        self.message_hash.append(tx['receipt'].get('message_hash'))
+        self.actual_fee_amount.append(tx['receipt'].get('actual_fee', {}).get('amount'))
+        self.actual_fee_unit.append(tx['receipt'].get('actual_fee', {}).get('unit'))
+        self.finality_status.append(tx['receipt'].get('finality_status'))
 
 class EventTableBuilder(TableBuilder):
 

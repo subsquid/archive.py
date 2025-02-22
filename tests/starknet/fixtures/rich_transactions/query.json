@@ -3,7 +3,16 @@
     "fromBlock": 0,
     "fields": {
         "transaction": {
-            "transactionHash": true
+            "transactionHash": true,
+            "resourceBounds": true,
+            "tip": true,
+            "paymasterData": true,
+            "accountDeploymentData": true,
+            "nonceDataAvailabilityMode": true,
+            "feeDataAvailabilityMode": true,
+            "messageHash": true,
+            "actualFee": true,
+            "finalityStatus": true
         },
         "event": {
             "keys": true
