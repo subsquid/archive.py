@@ -8,7 +8,7 @@ import rlp
 from eth_utils.encoding import int_to_big_endian
 from eth_keys.datatypes import Signature
 
-from sqa.eth.ingest.model import Qty, Hash32, Transaction, Address20, Block, Log, Receipt
+from sqa.eth.ingest.model import Qty, Hash32, Transaction, Address20, Block, Log, Receipt, EIP7702Authorization
 
 
 def qty2int(v: Qty) -> int:
@@ -97,6 +97,20 @@ def _encode_access_list(access_list: list) -> list[list[bytes | list[bytes]]]:
     return encoded
 
 
+def _encode_authorization_list(authorization_list: list[EIP7702Authorization]) -> list[list]:
+    encoded = []
+    for item in authorization_list:
+        encoded.append([
+            qty2int(item['chainId']),
+            decode_hex(item['address']),
+            qty2int(item['nonce']),
+            qty2int(item['yParity']),
+            qty2int(item['r']),
+            qty2int(item['s'])
+        ])
+    return encoded
+
+
 def transactions_root(transactions: list[Transaction]) -> str:
     trie = HexaryTrie({})
     for tx in transactions:
@@ -156,6 +170,23 @@ def transactions_root(transactions: list[Transaction]) -> str:
                 _encode_access_list(tx.get('accessList', [])),
                 qty2int(tx['maxFeePerBlobGas']),
                 [decode_hex(h) for h in tx['blobVersionedHashes']],
+                qty2int(tx['yParity']) if 'yParity' in tx else qty2int(tx['v']),
+                qty2int(tx['r']),
+                qty2int(tx['s']),
+            ])
+        elif tx['type'] == '0x4':
+            # https://eips.ethereum.org/EIPS/eip-7702
+            trie[path] = b'\x04' + rlp.encode([
+                qty2int(tx['chainId']),
+                qty2int(tx['nonce']),
+                qty2int(tx['maxPriorityFeePerGas']),
+                qty2int(tx['maxFeePerGas']),
+                qty2int(tx['gas']),
+                decode_hex(tx['to']) if tx['to'] else b'',
+                qty2int(tx['value']),
+                decode_hex(tx['input']),
+                _encode_access_list(tx.get('accessList', [])),
+                _encode_authorization_list(tx['authorizationList']),
                 qty2int(tx['yParity']) if 'yParity' in tx else qty2int(tx['v']),
                 qty2int(tx['r']),
                 qty2int(tx['s']),
@@ -346,6 +377,19 @@ def _serialize_transaction(tx: Transaction):
             qty2int(tx['maxFeePerBlobGas']),
             [decode_hex(h) for h in tx['blobVersionedHashes']],
         ])
+    elif tx['type'] == '0x4':
+        return b'\x04' + rlp.encode([
+            qty2int(tx['chainId']),
+            qty2int(tx['nonce']),
+            qty2int(tx['maxPriorityFeePerGas']),
+            qty2int(tx['maxFeePerGas']),
+            qty2int(tx['gas']),
+            decode_hex(tx['to']) if tx['to'] else b'',
+            qty2int(tx['value']),
+            decode_hex(tx['input']),
+            _encode_access_list(tx.get('accessList', [])),
+            _encode_authorization_list(tx['authorizationList']),
+        ])
     elif tx['type'] == '0x64':
         # https://github.com/OffchainLabs/go-ethereum/blob/7503143fd13f73e46a966ea2c42a058af96f7fcf/core/types/arb_types.go#L338
         raise NotImplementedError('cannot encode tx with type 0x64')
@@ -427,6 +471,10 @@ def block_hash(block: Block) -> str:
     # https://eips.ethereum.org/EIPS/eip-4788#block-structure-and-validity
     if 'parentBeaconBlockRoot' in block:
         fields.append(decode_hex(block['parentBeaconBlockRoot']))
+
+    # https://eips.ethereum.org/EIPS/eip-7685
+    if 'requestsHash' in block:
+        fields.append(decode_hex(block['requestsHash']))
 
     encoded = rlp.encode(fields)
     return encode_hex(keccak256(encoded))

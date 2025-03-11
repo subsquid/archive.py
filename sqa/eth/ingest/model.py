@@ -34,11 +34,21 @@ class Block(TypedDict):
     blobGasUsed: NotRequired[Qty]
     excessBlobGas: NotRequired[Qty]
     parentBeaconBlockRoot: NotRequired[Bytes]
+    requestsHash: NotRequired[Bytes]
     uncles: list[Hash32]
     transactions: list['Transaction']
     l1BlockNumber: NotRequired[Qty]
     logs_: NotRequired[list['Log']]
     unknownTraceReplays_: NotRequired[list]
+
+
+class EIP7702Authorization(TypedDict):
+    chainId: Qty
+    address: Address20
+    nonce: Qty
+    yParity: Qty
+    r: Bytes32
+    s: Bytes32
 
 
 # Alternative syntax allows to use reserved keywords as keys
@@ -65,6 +75,7 @@ Transaction = TypedDict('Transaction', {
     'chainId': NotRequired[Qty],
     'maxFeePerBlobGas': NotRequired[Qty],
     'blobVersionedHashes': NotRequired[list[Hash32]],
+    'authorizationList': NotRequired[list[EIP7702Authorization]],
     'receipt_': NotRequired['Receipt'],
     'debugFrame_': NotRequired['DebugFrameResult'],
     'debugStateDiff_': NotRequired['DebugStateDiffResult'],
