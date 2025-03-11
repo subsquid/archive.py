@@ -659,7 +659,7 @@ def _build_model():
             scan=tx_scan,
             include_flag_name='balances',
             query='SELECT * FROM balances i, s WHERE '
-                  'i.block_number = s.block.number AND '
+                  'i.block_number = s.block_number AND '
                   'i.transaction_index = s.transaction_index'
         ),
         JoinRel(
@@ -677,7 +677,7 @@ def _build_model():
             scan=tx_scan,
             include_flag_name='tokenBalances',
             query='SELECT * FROM token_balances i, s WHERE '
-                  'i.block_number = s.block.number AND '
+                  'i.block_number = s.block_number AND '
                   'i.transaction_index = s.transaction_index'
         ),
         JoinRel(
