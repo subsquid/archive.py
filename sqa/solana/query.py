@@ -104,12 +104,16 @@ class TransactionRequest(TypedDict, total=False):
     feePayer: list[Base58Bytes]
     instructions: bool
     logs: bool
+    balances: bool
+    tokenBalances: bool
 
 
 class _TransactionRequestSchema(mm.Schema):
     feePayer = mm.fields.List(mm.fields.Str())
     instructions = mm.fields.Boolean()
     logs = mm.fields.Boolean()
+    balances = mm.fields.Boolean()
+    tokenBalances = mm.fields.Boolean()
 
 
 class InstructionRequest(TypedDict, total=False):
@@ -652,6 +656,13 @@ def _build_model():
     balance_item.sources.extend([
         balance_scan,
         JoinRel(
+            scan=tx_scan,
+            include_flag_name='balances',
+            query='SELECT * FROM balances i, s WHERE '
+                  'i.block_number = s.block.number AND '
+                  'i.transaction_index = s.transaction_index'
+        ),
+        JoinRel(
             scan=ins_scan,
             include_flag_name='transactionBalances',
             query='SELECT * FROM balances i, s WHERE '
@@ -662,6 +673,13 @@ def _build_model():
 
     token_balance_item.sources.extend([
         token_balance_scan,
+        JoinRel(
+            scan=tx_scan,
+            include_flag_name='tokenBalances',
+            query='SELECT * FROM token_balances i, s WHERE '
+                  'i.block_number = s.block.number AND '
+                  'i.transaction_index = s.transaction_index'
+        ),
         JoinRel(
             scan=ins_scan,
             include_flag_name='transactionTokenBalances',
