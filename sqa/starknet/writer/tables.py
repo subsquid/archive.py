@@ -83,7 +83,7 @@ class TxTableBuilder(TableBuilder):
     def append(self, tx: WriterTransaction) -> None:
         self.block_number.append(tx['block_number'])
         self.transaction_index.append(tx['transaction_index'])
-        self.transaction_hash.append(tx['transaction_hash'])
+        self.transaction_hash.append(tx['receipt']['transaction_hash'])
         self.contract_address.append(tx.get('contract_address'))
         self.entry_point_selector.append(tx.get('entry_point_selector'))
         self.calldata.append(tx.get('calldata'))

@@ -62,7 +62,7 @@ class _ResourceBoundsMap(TypedDict):
 
 
 class Transaction(TypedDict):
-    transaction_hash: STD_HASH
+    transaction_hash: NotRequired[STD_HASH]
 
     contract_address: NotRequired[FELT]  # Address of the contract for contract-related transactions
     entry_point_selector: NotRequired[FELT]

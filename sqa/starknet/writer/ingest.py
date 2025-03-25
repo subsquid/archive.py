@@ -219,11 +219,13 @@ class IngestStarknet:
             for transaction_index, tx in enumerate(block['writer_txs']):
                 tx['transaction_index'] = transaction_index
                 tx['block_number'] = block['block_number']
-                if block['transactions'][transaction_index]['receipt']['transaction_hash'] != tx['transaction_hash']:
-                    raise RuntimeError('Receipt transaction hash does not match transaction hash')
+                tx_hash = block['transactions'][transaction_index]['receipt']['transaction_hash']
+                if 'transaction_hash' in tx:
+                    if tx_hash != tx['transaction_hash']:
+                        raise RuntimeError('Receipt transaction hash does not match transaction hash')
                 tx['receipt'] = block['transactions'][transaction_index]['receipt']
 
-                transaction_hash_to_index[tx['transaction_hash']] = tx['transaction_index']
+                transaction_hash_to_index[tx_hash] = tx['transaction_index']
 
         # could be done with one dict, but i thought its nicer with two
         for block in stride:
