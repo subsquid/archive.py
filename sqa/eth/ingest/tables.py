@@ -318,7 +318,8 @@ class TraceTableBuilder(TableBuilder):
             frame_type = frame['type']
             if frame_type in (
                 'CALL', 'CALLCODE', 'STATICCALL',
-                'DELEGATECALL', 'INVALID', 'Call', 'call',
+                'DELEGATECALL', 'delegateCall',
+                'INVALID', 'Call', 'call',
             ):
                 trace_type = 'call'
             elif frame_type in ('CREATE', 'CREATE2', 'Create', 'create'):
