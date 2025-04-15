@@ -587,11 +587,11 @@ def _is_trace_from_tx(trace: DebugFrame, tx: Transaction):
         return False
     return trace['value'] == tx['value']
 
-def _delete_extra_traces(transactions: list[Transaction], traces: list[DebugFrame]):
+def _delete_extra_traces(transactions: list[Transaction], traces: list[DebugFrameResult | DebugFrame]):
     for idx, tx in enumerate(transactions):
         while True:
             trace = traces[idx]
-            if _is_trace_from_tx(trace, tx):
+            if _is_trace_from_tx(trace['result'] if 'result' in trace else trace, tx):
                 break
             else:
                 del traces[idx]
