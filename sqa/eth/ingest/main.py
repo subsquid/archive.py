@@ -299,11 +299,15 @@ async def run(args):
 
     # set up prometheus metrics
     if args.prom_port:
+        # create metrics instance and make it accessible as a module variable
+        global metrics
         metrics = Metrics()
         metrics.add_progress(write_service.progress, write_service._chunk_writer)
         if rpc:
             metrics.add_rpc_metrics(rpc)
         metrics.serve(args.prom_port)
+        # set metrics reference in write service
+        write_service.metrics = metrics
 
     if args.raw_src:
         assert not args.raw, '--raw and --raw-src are mutually excluded args'
@@ -402,6 +406,7 @@ class WriteOptions(NamedTuple):
 class WriteService:
     def __init__(self, options: WriteOptions):
         self.options = options
+        self.metrics = None
 
     @cached_property
     def fs(self) -> Fs:
@@ -464,6 +469,18 @@ class WriteService:
                     raise Exception(f'broken chain: block {block_hash} is not a direct child of {last_hash}')
                 last_hash = block_hash
 
+            if self.metrics and blocks:
+                last_received_block = blocks[-1]
+                block_timestamp = qty2int(last_received_block['timestamp'])
+
+                if hasattr(block_timestamp, 'timestamp'):
+                    block_timestamp = int(block_timestamp.timestamp())
+                self.metrics.set_latest_block_metrics(
+                    last_block,
+                    block_timestamp
+                )
+                LOG.debug(f'Received block {last_block} with timestamp {block_timestamp}')
+
             yield Batch(blocks=blocks, extra=extra)
 
             current_time = time.time()
@@ -504,6 +521,8 @@ class WriteService:
         while True:
             written = 0
             first_block = math.inf
+            last_processed_block = None
+            last_processed_timestamp = 0
             tmp = tempfile.NamedTemporaryFile(delete=False)
             try:
                 with tmp, pyarrow.CompressedOutputStream(tmp, 'gzip') as out:
@@ -511,6 +530,8 @@ class WriteService:
                         first_block = min(first_block, qty2int(bb.blocks[0]['number']))
                         last_block = qty2int(bb.blocks[-1]['number'])
                         last_hash = bb.blocks[-1]['hash']
+                        last_processed_block = bb.blocks[-1]
+                        last_processed_timestamp = qty2int(last_processed_block['timestamp'])
 
                         for block in bb.blocks:
                             line = json.dumps(block).encode('utf-8')
@@ -529,17 +550,31 @@ class WriteService:
                         loc = self.fs.abs(dest)
                         os.makedirs(os.path.dirname(loc), exist_ok=True)
                         os.rename(tmp.name, loc)
+                        
+                        if self.metrics and last_processed_block:
+                            current_time = int(time.time())
+                            processing_time = current_time - last_processed_timestamp
+                            self.metrics.set_processing_metrics(last_processed_timestamp, processing_time)
+                            LOG.debug(f'Processed block {last_block} with timestamp {last_processed_timestamp}, processing time: {processing_time}s')
                     else:
-                        yield self._upload_temp_file, tmp.name, dest
+                        yield self._upload_temp_file, tmp.name, dest, last_block, last_processed_timestamp
                 else:
                     return
             except:
                 os.remove(tmp.name)
                 raise
 
-    def _upload_temp_file(self, tmp: str, dest: str):
+    def _upload_temp_file(self, tmp: str, dest: str, last_block=None, block_timestamp=None):
         try:
             self.fs.upload(tmp, dest)
+            
+            if self.metrics and last_block is not None and block_timestamp is not None:
+                if hasattr(block_timestamp, 'timestamp'):
+                    block_timestamp = int(block_timestamp.timestamp())
+                current_time = int(time.time())
+                processing_time = current_time - block_timestamp
+                self.metrics.set_processing_metrics(block_timestamp, processing_time)
+                LOG.debug(f'Processed block {last_block} with timestamp {block_timestamp}, processing time: {processing_time}s')
         finally:
             os.remove(tmp)
 
@@ -552,7 +587,8 @@ class WriteService:
             self._chunk_writer,
             with_traces=self.options.with_traces,
             with_statediffs=self.options.with_statediffs,
-            with_metadata=self.options.with_metadata
+            with_metadata=self.options.with_metadata,
+            metrics=self.metrics
         )
 
         async for blocks, extra in batches:

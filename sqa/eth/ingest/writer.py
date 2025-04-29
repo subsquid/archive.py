@@ -3,6 +3,7 @@ from typing import TypedDict, NotRequired
 import tempfile
 import json
 import os
+import time
 
 import pyarrow
 
@@ -103,13 +104,14 @@ class ParquetWriter:
         with_traces: bool,
         with_statediffs: bool,
         with_metadata: bool,
+        metrics=None
     ):
         self.fs = fs
         self.chunk_writer = chunk_writer
         self.with_traces = with_traces
         self.with_statediffs = with_statediffs
         self.with_metadata = with_metadata
-
+        self.metrics = metrics
     def write(self, batch: ArrowDataBatch) -> None:
         blocks = batch['blocks']
         block_numbers: pyarrow.ChunkedArray = blocks.column('number')
@@ -124,6 +126,16 @@ class ParquetWriter:
             if self.with_metadata:
                 write_metadata(loc, self.with_traces, self.with_statediffs)
             write_parquet(loc, batch)
+            
+        if self.metrics:
+            last_block_timestamp = blocks.column('timestamp')[-1].as_py()
+            if hasattr(last_block_timestamp, 'timestamp'):
+                last_block_timestamp = int(last_block_timestamp.timestamp())
+            current_time = int(time.time())
+            processing_time = current_time - last_block_timestamp
+            
+            self.metrics.set_processing_metrics(last_block_timestamp, processing_time)
+            LOG.debug(f'Processed block {last_block} with timestamp {last_block_timestamp}, processing time: {processing_time}s')
 
 
 def write_metadata(loc: Fs, with_traces: bool, with_statediffs: bool):
