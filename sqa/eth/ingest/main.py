@@ -472,9 +472,6 @@ class WriteService:
             if self.metrics and blocks:
                 last_received_block = blocks[-1]
                 block_timestamp = qty2int(last_received_block['timestamp'])
-
-                if hasattr(block_timestamp, 'timestamp'):
-                    block_timestamp = int(block_timestamp.timestamp())
                 self.metrics.set_latest_block_metrics(
                     last_block,
                     block_timestamp
@@ -569,8 +566,6 @@ class WriteService:
             self.fs.upload(tmp, dest)
             
             if self.metrics and last_block is not None and block_timestamp is not None:
-                if hasattr(block_timestamp, 'timestamp'):
-                    block_timestamp = int(block_timestamp.timestamp())
                 current_time = int(time.time())
                 processing_time = current_time - block_timestamp
                 self.metrics.set_processing_metrics(block_timestamp, processing_time)
