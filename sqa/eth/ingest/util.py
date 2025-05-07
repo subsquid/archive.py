@@ -270,7 +270,7 @@ def transactions_root(transactions: list[Transaction]) -> str:
                 decode_hex(tx['sourceHash']),
                 decode_hex(tx['from']),
                 decode_hex(tx['to']) if tx['to'] else b'',
-                qty2int(tx['mint']),
+                qty2int(tx['mint'] or b'0x0'),
                 qty2int(tx['value']),
                 qty2int(tx['gas']),
                 False,
