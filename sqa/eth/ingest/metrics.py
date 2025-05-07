@@ -93,6 +93,13 @@ class _ProgressCollector(Collector):
             'Timestamp of latest received block',
             self._metrics.get_latest_received_block_timestamp()
         )
+
+        # Duplicate metric of sqd_last_saved_block for compatibility with squid-sdk dumper
+        latest_processed_block = GaugeMetricFamily(
+            'sqd_latest_processed_block_number',
+            'Last processed block number',
+            self._writer.next_block - 1
+        )
         
         latest_processed_timestamp = GaugeMetricFamily(
             'sqd_latest_processed_block_timestamp',
@@ -110,9 +117,9 @@ class _ProgressCollector(Collector):
             progress, 
             last_block, 
             last_saved_block, 
-            last_written_block,
             latest_received_block,
             latest_received_timestamp,
+            latest_processed_block,
             latest_processed_timestamp,
             blocks_processing_time
         ]
