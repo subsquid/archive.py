@@ -82,12 +82,6 @@ class _ProgressCollector(Collector):
             self._writer.next_block - 1
         )
         
-        last_written_block = GaugeMetricFamily(
-            'sqd_dump_last_written_block',
-            'Last written block',
-            self._writer.next_block - 1
-        )
-        
         latest_received_block = GaugeMetricFamily(
             'sqd_latest_received_block_number',
             'Latest block number received',
