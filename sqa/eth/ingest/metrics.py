@@ -1,4 +1,5 @@
 from typing import Iterable
+import time
 
 from prometheus_client import start_wsgi_server
 from prometheus_client.metrics_core import Metric, GaugeMetricFamily, CounterMetricFamily
@@ -16,7 +17,8 @@ class Metrics:
         self._latest_received_block_timestamp = 0
         self._latest_processed_block_timestamp = 0
         self._blocks_processing_time = 0
-
+        self._blocks_delivery_delay = 0
+        
     def add_progress(self, progress: Progress, writer: ChunkWriter):
         self._add('progress')
         collector = _ProgressCollector(progress, writer, self)
@@ -39,6 +41,8 @@ class Metrics:
     def set_latest_block_metrics(self, block_number: int, block_timestamp: int):
         self._latest_received_block_number = block_number
         self._latest_received_block_timestamp = block_timestamp
+        current_time = int(time.time())
+        self._blocks_delivery_delay = current_time - block_timestamp
         
     def set_processing_metrics(self, block_timestamp: int, processing_time: int):
         self._latest_processed_block_timestamp = block_timestamp
@@ -55,6 +59,9 @@ class Metrics:
         
     def get_blocks_processing_time(self):
         return self._blocks_processing_time
+
+    def get_blocks_delivery_delay(self):
+        return self._blocks_delivery_delay
 
 
 class _ProgressCollector(Collector):
@@ -80,6 +87,12 @@ class _ProgressCollector(Collector):
             'sqd_last_saved_block',
             'Last saved block',
             self._writer.next_block - 1
+        )
+
+        blocks_delivery_delay = GaugeMetricFamily(
+            'sqd_blocks_delivery_delay',
+            'Delay in seconds between block minted and received',
+            self._metrics.get_blocks_delivery_delay()
         )
         
         latest_received_block = GaugeMetricFamily(
@@ -121,7 +134,8 @@ class _ProgressCollector(Collector):
             latest_received_timestamp,
             latest_processed_block,
             latest_processed_timestamp,
-            blocks_processing_time
+            blocks_processing_time,
+            blocks_delivery_delay
         ]
 
 
