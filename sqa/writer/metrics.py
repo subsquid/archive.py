@@ -27,3 +27,13 @@ class SinkMetricsCollector(Collector):
             'Last saved block',
             self.sink.get_last_flushed_block(),
         )
+        yield GaugeMetricFamily(
+            'sqd_latest_processed_block_number',
+            'Latest processed block number',
+            self.sink.get_last_flushed_block()
+        )
+        yield GaugeMetricFamily(
+            'sqd_latest_processed_block_timestamp',
+            'Timestamp of the latest processed block',
+            self.sink.get_last_block_timestamp()
+        )   

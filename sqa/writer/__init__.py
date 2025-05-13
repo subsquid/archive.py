@@ -37,6 +37,10 @@ class Writer(Protocol):
     def get_block_parent_hash(self, block: Block) -> str:
         pass
 
+    def get_block_timestamp(self, block: Block) -> int:
+        """Optional method to get the block timestamp. Return 0 if not implemented."""
+        return 0
+
     def chunk_check(self, filelist: list[str]) -> bool:
         for f in filelist:
             if f.startswith('blocks.'):
@@ -64,6 +68,7 @@ class Sink:
         self._writing = False
         self._last_seen_block = -1
         self._last_flushed_block = 1
+        self._last_block_timestamp = 0
         self._validate_chain_continuity = validate_chain_continuity
 
     @cached_property
@@ -93,6 +98,9 @@ class Sink:
 
     def get_last_flushed_block(self) -> int:
         return self._last_flushed_block
+
+    def get_last_block_timestamp(self) -> int:
+        return self._last_block_timestamp
 
     def _report(self) -> None:
         LOG.info(
@@ -139,6 +147,9 @@ class Sink:
             LOG.debug('got stride', extra={'first_block': first_block, 'last_block': last_block})
 
             assert write_range[0] <= first_block <= last_block <= write_range[1]
+            
+            if hasattr(self._writer, 'get_block_timestamp'):
+                self._last_block_timestamp = self._writer.get_block_timestamp(stride[-1])
 
             for block in stride:
                 if self._validate_chain_continuity:
