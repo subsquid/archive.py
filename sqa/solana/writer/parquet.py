@@ -318,6 +318,9 @@ class ParquetWriter(BaseParquetWriter):
     def get_block_parent_hash(self, block: Block) -> str:
         return block['header']['parentHash']
 
+    def get_block_timestamp(self, block: Block) -> int:
+        return block['header']['timestamp']
+
 
 def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     kwargs = {
