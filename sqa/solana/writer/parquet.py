@@ -120,7 +120,6 @@ class InstructionTable(TableBuilder):
     def __init__(self):
         self.block_number = Column(pyarrow.int32())
         self.transaction_index = Column(pyarrow.int32())
-        self.instruction_index = Column(pyarrow.int32())
         self.instruction_address = Column(address())
         self.program_id = Column(base58_bytes())
         self.a0 = Column(base58_bytes())
