@@ -159,7 +159,6 @@ class InstructionTable(TableBuilder):
     def append(self, block_number: int, i: Instruction) -> None:
         self.block_number.append(block_number)
         self.transaction_index.append(i['transactionIndex'])
-        self.instruction_index.append(i['instructionIndex'])
         self.instruction_address.append(i['instructionAddress'])
         self.program_id.append(i['programId'])
         self._set_accounts(i['accounts'])
