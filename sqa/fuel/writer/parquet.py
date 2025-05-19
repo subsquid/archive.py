@@ -465,6 +465,13 @@ class ParquetWriter(BaseParquetWriter):
     def get_block_hash(self, block: Block) -> str:
         return block['header']['hash']
 
+    def get_block_timestamp(self, block: Block) -> int:
+        # Fuel blocks use TAI64 format which needs to be converted to Unix timestamp
+        TAI64_UNIX_OFFSET = 4611686018427387914
+        tai_timestamp = int(block['header']['time'])
+        unix_timestamp = tai_timestamp - TAI64_UNIX_OFFSET
+        return unix_timestamp
+
 
 def write_parquet(fs: Fs, tables: dict[str, pyarrow.Table]) -> None:
     kwargs = {

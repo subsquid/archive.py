@@ -1,4 +1,5 @@
 from typing import Iterable
+import time
 
 from prometheus_client import start_wsgi_server
 from prometheus_client.metrics_core import Metric, GaugeMetricFamily, CounterMetricFamily
@@ -12,10 +13,15 @@ from sqa.eth.ingest.writer import ChunkWriter
 class Metrics:
     def __init__(self):
         self._metrics = set()
-
+        self._latest_received_block_number = 0
+        self._latest_received_block_timestamp = 0
+        self._latest_processed_block_timestamp = 0
+        self._blocks_processing_time = 0
+        self._blocks_delivery_delay = 0
+        
     def add_progress(self, progress: Progress, writer: ChunkWriter):
         self._add('progress')
-        collector = _ProgressCollector(progress, writer)
+        collector = _ProgressCollector(progress, writer, self)
         REGISTRY.register(collector)
 
     def add_rpc_metrics(self, client: RpcClient):
@@ -31,12 +37,38 @@ class Metrics:
             raise Exception(f'{metric} metric was already registered')
         else:
             self._metrics.add(metric)
+            
+    def set_latest_block_metrics(self, block_number: int, block_timestamp: int):
+        self._latest_received_block_number = block_number
+        self._latest_received_block_timestamp = block_timestamp
+        current_time = int(time.time())
+        self._blocks_delivery_delay = current_time - block_timestamp
+        
+    def set_processing_metrics(self, block_timestamp: int, processing_time: int):
+        self._latest_processed_block_timestamp = block_timestamp
+        self._blocks_processing_time = processing_time
+        
+    def get_latest_received_block_number(self):
+        return self._latest_received_block_number
+        
+    def get_latest_received_block_timestamp(self):
+        return self._latest_received_block_timestamp
+        
+    def get_latest_processed_block_timestamp(self):
+        return self._latest_processed_block_timestamp
+        
+    def get_blocks_processing_time(self):
+        return self._blocks_processing_time
+
+    def get_blocks_delivery_delay(self):
+        return self._blocks_delivery_delay
 
 
 class _ProgressCollector(Collector):
-    def __init__(self, progress: Progress, writer: ChunkWriter):
+    def __init__(self, progress: Progress, writer: ChunkWriter, metrics: Metrics):
         self._progress = progress
         self._writer = writer
+        self._metrics = metrics
 
     def collect(self) -> Iterable[Metric]:
         progress = GaugeMetricFamily(
@@ -44,17 +76,67 @@ class _ProgressCollector(Collector):
             'Overall block processing speed',
             self._progress.speed()
         )
+        
         last_block = CounterMetricFamily(
             'sqd_last_block',
             'Last ingested block',
             self._progress.get_current_value()
         )
+        
         last_saved_block = CounterMetricFamily(
             'sqd_last_saved_block',
             'Last saved block',
-            self._writer.next_block - 1,
+            self._writer.next_block - 1
         )
-        return [progress, last_block, last_saved_block]
+
+        blocks_delivery_delay = GaugeMetricFamily(
+            'sqd_blocks_delivery_delay',
+            'Delay in seconds between block minted and received',
+            self._metrics.get_blocks_delivery_delay()
+        )
+        
+        latest_received_block = GaugeMetricFamily(
+            'sqd_latest_received_block_number',
+            'Latest block number received',
+            self._metrics.get_latest_received_block_number()
+        )
+        
+        latest_received_timestamp = GaugeMetricFamily(
+            'sqd_latest_received_block_timestamp',
+            'Timestamp of latest received block',
+            self._metrics.get_latest_received_block_timestamp()
+        )
+
+        # Duplicate metric of sqd_last_saved_block for compatibility with squid-sdk dumper
+        latest_processed_block = GaugeMetricFamily(
+            'sqd_latest_processed_block_number',
+            'Last processed block number',
+            self._writer.next_block - 1
+        )
+        
+        latest_processed_timestamp = GaugeMetricFamily(
+            'sqd_latest_processed_block_timestamp',
+            'Timestamp of the latest processed block',
+            self._metrics.get_latest_processed_block_timestamp()
+        )
+        
+        blocks_processing_time = GaugeMetricFamily(
+            'sqd_blocks_processing_time',
+            'Time taken to process blocks (in seconds)',
+            self._metrics.get_blocks_processing_time()
+        )
+        
+        return [
+            progress, 
+            last_block, 
+            last_saved_block, 
+            latest_received_block,
+            latest_received_timestamp,
+            latest_processed_block,
+            latest_processed_timestamp,
+            blocks_processing_time,
+            blocks_delivery_delay
+        ]
 
 
 class _RpcCollector(Collector):
