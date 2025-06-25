@@ -335,7 +335,7 @@ def _serialize_transaction(tx: Transaction):
             decode_hex(tx['input']),
         ]
 
-        chain_id = qty2int(tx['chainId']) if 'chainId' in tx else None
+        chain_id = qty2int(tx['chainId']) if tx.get('chainId') else None
         if chain_id:
             fields.extend([chain_id, 0, 0])
 
@@ -418,7 +418,7 @@ def _serialize_transaction(tx: Transaction):
 def _create_signature(tx: Transaction):
     v = qty2int(tx['v'])
     if v not in (0, 1):
-        if 'chainId' in tx:
+        if tx.get('chainId'):
             chain_id = qty2int(tx['chainId'])
         else:
             chain_id = math.floor((v - 35) / 2)
