@@ -447,6 +447,8 @@ class Ingest:
             transactions = [tx for tx in transactions if not is_moonbase_traceless(tx, block)]
         if self._is_moonbeam and len(traces) > len(transactions):
             _delete_extra_traces(transactions, traces)
+        if (self._is_hemi_mainnet or self._is_hemi_testnet) and len(traces) > len(transactions):
+            _delete_extra_traces(transactions, traces)
 
         assert len(transactions) == len(traces)
         for tx, trace in zip(transactions, traces):
