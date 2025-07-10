@@ -97,6 +97,8 @@ class Ingest:
         self._is_astar = chain_id == '0x250'
         self._is_skale_nebula = chain_id == '0x585eb4b1'
         self._is_bitfinity_mainnet = chain_id == '0x56b26'
+        self._is_hemi_mainnet = chain_id == '0xa867'
+        self._is_hemi_testnet = chain_id == '0xb56c7'
 
     def _schedule_strides(self):
         while len(self._strides) < max(1, min(10, self._rpc.get_total_capacity())) \
@@ -225,6 +227,9 @@ class Ingest:
                             tx['type'] = '0x2'
                         else:
                             tx['type'] = '0x0'
+        if self._is_hemi_mainnet or self._is_hemi_testnet:
+            for block in blocks:
+                block['transactions'] = [tx for tx in block['transactions'] if tx.get('type') != '0x7d']
 
         if self._validate_block_hash:
             for block in blocks:
