@@ -308,7 +308,13 @@ class _BlockItem(Item):
     def project(self, fields: FieldSelection) -> str:
         def rewrite_timestamp(f: str):
             if f == 'timestamp':
-                return 'timestamp', f'epoch(timestamp)'
+                # in new version timestamp is int64
+                # in old version timestamp is datetime64[ms]
+                # and i don't know how to achieve the same type in the new version
+                # and unsure if we even need it
+                return 'timestamp', f"epoch(CASE WHEN typeof(timestamp) == 'BIGINT' " \
+                                    f"THEN make_timestamp(multiply(timestamp::BIGINT, 1000000)) " \
+                                    f"ELSE timestamp END)"
             else:
                 return f
 
