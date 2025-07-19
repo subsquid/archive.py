@@ -168,7 +168,7 @@ def _get_weight_exp(item: Item, params: Params, fields: FieldSelection) -> str:
     for c in selected_columns:
         w = column_weights.get(c, 32)
         if isinstance(w, str):
-            weight_components.append(w)
+            weight_components.append(w + '::int8')
         else:
             weight_sum += w
 
