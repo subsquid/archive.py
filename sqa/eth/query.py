@@ -313,8 +313,8 @@ class _BlockItem(Item):
                 # and i don't know how to achieve the same type in the new version
                 # and unsure if we even need it
                 return 'timestamp', f"CASE WHEN typeof(timestamp) == 'BIGINT' " \
-                                    f"THEN timestamp " \
-                                    f"ELSE epoch(timestamp::TIMESTAMP) END"
+                                    f"THEN CAST(timestamp AS BIGINT) " \
+                                    f"ELSE CAST(epoch(timestamp::TIMESTAMP) AS BIGINT) END"
             else:
                 return f
 
