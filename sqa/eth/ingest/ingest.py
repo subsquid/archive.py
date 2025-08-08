@@ -99,6 +99,7 @@ class Ingest:
         self._is_bitfinity_mainnet = chain_id == '0x56b26'
         self._is_hemi_mainnet = chain_id == '0xa867'
         self._is_hemi_testnet = chain_id == '0xb56c7'
+        self._is_hedera = chain_id == '0x127'
 
     def _schedule_strides(self):
         while len(self._strides) < max(1, min(10, self._rpc.get_total_capacity())) \
@@ -305,6 +306,7 @@ class Ingest:
             ],
             priority=priority
         )
+        receipts = [receipt for receipt in receipts if receipt is not None]
 
         tx_by_index: dict[str, dict[str, Transaction]] = {}
         for block in blocks:
@@ -334,8 +336,8 @@ class Ingest:
             try:
                 tx = tx_by_index[r['blockHash']][r['transactionIndex']]
             except KeyError as e:
-                if self._is_optimism:
-                    # optimism doesn't provide receipts for duplicated transactions
+                if self._is_optimism or self._is_hedera:
+                    # duplicated transactions do not have receipts
                     # so we just skip such transactions
                     continue
                 if self._is_moonbase and 2529736 <= qty2int(r['blockNumber']) <= 3069634:
@@ -386,6 +388,8 @@ class Ingest:
                 if self._is_moonbase and 2529736 <= qty2int(block['number']) <= 3069634 and receipts_map[tx['hash']]['blockHash'] != block['hash']:
                     continue
                 if self._is_optimism and receipts_map[tx['hash']]['blockHash'] != block['hash']:
+                    continue
+                if self._is_hedera and receipts_map.get(tx['hash']) is None:
                     continue
                 tx['receipt_'] = receipts_map[tx['hash']]
 

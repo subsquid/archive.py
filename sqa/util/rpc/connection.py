@@ -210,8 +210,8 @@ class RpcConnection:
         assert request['id'] == result['id']
         if 'error' in result:
             raise RpcError(result['error'], request, self.endpoint.url)
-        elif result['result'] is None:
-            raise RpcResultIsNull(request, self.endpoint.url)
+        # elif result['result'] is None:
+        #     raise RpcResultIsNull(request, self.endpoint.url)
         elif not validate_result(result['result']):
             raise RpcResultIsInvalid(request, self.endpoint.url)
         else:
