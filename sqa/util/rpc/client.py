@@ -24,6 +24,7 @@ class _ReqItem:
     request: Union[RpcRequest, list[RpcRequest]]
     validate_result: Callable[[Any], bool]
     future: asyncio.Future
+    prev_code: Optional[int] = None
 
     @cached_property
     def methods(self) -> Set[str]:
@@ -199,17 +200,31 @@ class RpcClient:
 
         while connections and (item := self._pop()):
             connections.sort(key=lambda c: (c.in_queue, c.avg_response_time()))
+            retry_connections = [c for c in connections if c.endpoint.rps_limit == 1]
             con_idx = None
             rpc_limit_hit = False
-            for i, c in enumerate(connections):
-                if not self._can_handle(c, item):
-                    continue
-                rps_cap = c.get_rps_capacity(current_time)
-                if rps_cap < item.size():
-                    rpc_limit_hit = True
-                    continue
-                con_idx = i
-                break
+
+            if item.prev_code == -32008:
+                for i, c in enumerate(connections):
+                    # prefer endpoints with rps_limit=1 to retry too big responses
+                    if c.endpoint.rps_limit == 1:
+                        LOG.warning('retrying on endpoint with rps_limit=1')
+                        con_idx = i
+                        break
+
+            if con_idx is None:
+                for i, c in enumerate(connections):
+                    if not self._can_handle(c, item):
+                        continue
+                    rps_cap = c.get_rps_capacity(current_time)
+                    if rps_cap < item.size():
+                        rpc_limit_hit = True
+                        continue
+                    if len(self._connections) != len(retry_connections) and c.endpoint.rps_limit == 1:
+                        # don't choose endpoints with rps_limit=1 if there are other options
+                        continue
+                    con_idx = i
+                    break
 
             if con_idx is None:
                 schedule_later = schedule_later or rpc_limit_hit
@@ -271,6 +286,7 @@ class RpcClient:
                         result = fut.result()
                         item.future.set_result(result)
                     elif isinstance(ex, RpcRetryException):
+                        item.prev_code = getattr(ex, 'code', None)
                         self._push(item)
                     else:
                         item.future.set_exception(ex)

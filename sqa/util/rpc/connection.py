@@ -153,7 +153,10 @@ class RpcConnection:
             if self._is_retryable_error(e):
                 LOG.warning('rpc connection error', exc_info=e, extra={**self._extra, 'rpc_req': req_id})
                 self._backoff()
-                raise RpcRetryException
+                exc = RpcRetryException()
+                if isinstance(e, RpcError) and isinstance(e.info, dict):
+                    exc.code = e.info.get('code')
+                raise exc
             if isinstance(e, RpcError):
                 self._count_request(timer)
             raise e
@@ -256,7 +259,7 @@ class RpcConnection:
             return True
         elif isinstance(e, RpcError) and isinstance(e.info, dict):
             code = e.info.get('code')
-            return code in (63, 429, -32000, -32002, -32007, -32017, -32602, -32603)
+            return code in (63, 429, -32000, -32002, -32007, -32008, -32017, -32602, -32603)
         else:
             return False
 
