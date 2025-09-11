@@ -424,15 +424,14 @@ class Ingest:
         if block_number == 0:
             return
 
-        traces: list[DebugFrameResult | DebugFrame] = await self._rpc.call('debug_traceBlockByHash', [
-            block['hash'],
+        traces: list[DebugFrameResult | DebugFrame] = await self._rpc.call('debug_traceBlockByNumber', [
+            block['number'],
             {
                 'tracer': 'callTracer',
                 'tracerConfig': {
                     'onlyTopCall': False,
                     'withLog': True
-                },
-                'timeout': self._debug_api_trace_config_timeout,
+                }
             },
         ], priority=block_number, validate_result=_validate_debug_trace)
 
@@ -465,15 +464,14 @@ class Ingest:
         if block_number == 0:
             return
 
-        diffs: list[DebugStateDiffResult] = await self._rpc.call('debug_traceBlockByHash', [
-            block['hash'],
+        diffs: list[DebugStateDiffResult] = await self._rpc.call('debug_traceBlockByNumber', [
+            block['number'],
             {
                 'tracer': 'prestateTracer',
                 'tracerConfig': {
                     'onlyTopCall': False,  # Incorrect, but required by Alchemy endpoints
                     'diffMode': True
-                },
-                'timeout': self._debug_api_trace_config_timeout,
+                }
             }
         ], priority=block_number, validate_result=_validate_debug_statediffs)
 
