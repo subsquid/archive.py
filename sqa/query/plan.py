@@ -316,7 +316,7 @@ class QueryPlan:
                  model: Model,
                  filelist: list[str],
                  q: ArchiveQuery,
-                 size_limit: int = 20_000_000,
+                 size_limit: int = 40_000_000,
                  block_number_type=pyarrow.int32()
                  ):
         builder = _Builder(
