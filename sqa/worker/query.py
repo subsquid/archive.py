@@ -70,11 +70,6 @@ def _get_query_size(query: ArchiveQuery) -> int:
     size = 0
     for item in query.values():
         if isinstance(item, list):
-            for request in item:
-                if isinstance(request, dict):
-                    for predicate in request.values():
-                        if isinstance(predicate, list) and len(predicate) > 50:
-                            raise InvalidQuery('item request is too big')
             size += len(item)
     return size
 
