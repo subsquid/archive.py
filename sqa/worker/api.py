@@ -122,6 +122,7 @@ class QueryResource:
             res.data = query_result.compressed_data
             res.content_type = 'application/json'
             res.set_header('content-encoding', 'gzip')
+            res.set_header('x-num-read-chunks', str(query_result.num_read_chunks))
         except InvalidQuery as e:
             LOG.warning(f'invalid query: {e}', extra=log_extra)
             raise falcon.HTTPBadRequest(description=str(e))
