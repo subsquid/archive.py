@@ -161,7 +161,7 @@ class EventTable(TableBuilder):
         self._contract_address.append(event.get('_contractAddress'))
         self._gear_program_id.append(event.get('_gearProgramId'))
 
-        revive_topics = iter(event.get('_reviveTopics'))
+        revive_topics = iter(event.get('_reviveTopics'), ())
         self._revive_contract.append(event.get('_reviveContract'))
         self._revive_topic0.append(next(revive_topics, None))
         self._revive_topic1.append(next(revive_topics, None))
