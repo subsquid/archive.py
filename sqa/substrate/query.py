@@ -150,6 +150,22 @@ class _EthereumTransactRequestSchema(_CallRelationsSchema):
     sighash = mm.fields.List(mm.fields.Str())
 
 
+class ReviveContractEmittedRequest(_EventRelations):
+    contract: list[str]
+    topic0: list[str]
+    topic1: list[str]
+    topic2: list[str]
+    topic3: list[str]
+
+
+class _ReviveContractEmittedRequestSchema(_EventRelationsSchema):
+    contract = mm.fields.List(mm.fields.Str())
+    topic0 = mm.fields.List(mm.fields.Str())
+    topic1 = mm.fields.List(mm.fields.Str())
+    topic2 = mm.fields.List(mm.fields.Str())
+    topic3 = mm.fields.List(mm.fields.Str())
+
+
 class _QuerySchema(BaseQuerySchema):
     fields = mm.fields.Nested(_FieldSelectionSchema())
     events = mm.fields.List(mm.fields.Nested(_EventRequestSchema()))
@@ -159,6 +175,7 @@ class _QuerySchema(BaseQuerySchema):
     contractsEvents = mm.fields.List(mm.fields.Nested(_ContractsContractEmittedRequestSchema()))
     gearMessagesEnqueued = mm.fields.List(mm.fields.Nested(_GearMessageEnqueuedRequestSchema()))
     gearUserMessagesSent = mm.fields.List(mm.fields.Nested(_GearUserMessageSentRequestSchema()))
+    reviveContractEmitted = mm.fields.List(mm.fields.Nested(_ReviveContractEmittedRequestSchema()))
 
 
 QUERY_SCHEMA = _QuerySchema()
@@ -285,6 +302,22 @@ class _GearUserMessageSentScan(Scan):
         yield field_in('_gear_program_id', req.get('programId'))
 
 
+class _ReviveContractEmittedScan(Scan):
+    def table(self) -> Table:
+        return _events_table
+
+    def request_name(self) -> str:
+        return 'reviveContractEmitted'
+
+    def where(self, req: ReviveContractEmittedRequest) -> Iterable[pyarrow.dataset.Expression | None]:
+        yield field_in('name', ['Revive.ContractEmitted'])
+        yield field_in('_revive_contract', req.get('contract'))
+        yield field_in('_revive_topic0', req.get('topic0'))
+        yield field_in('_revive_topic1', req.get('topic1'))
+        yield field_in('_revive_topic2', req.get('topic2'))
+        yield field_in('_revive_topic3', req.get('topic3'))
+
+
 class _EventItem(Item):
     def table(self) -> Table:
         return _events_table
@@ -383,6 +416,7 @@ def _build_model() -> Model:
     gear_message_enqueued_scan = _GearUserMessageEnqueuedScan()
     gear_message_sent_scan = _GearUserMessageSentScan()
     contract_event_scan = _ContractEventScan()
+    revive_contract_emitted_scan = _ReviveContractEmittedScan()
 
     call_scan = _CallScan()
     ethereum_transact_scan = _EthereumTransactCallScan()
@@ -397,7 +431,8 @@ def _build_model() -> Model:
         evm_log_scan,
         contract_event_scan,
         gear_message_enqueued_scan,
-        gear_message_sent_scan
+        gear_message_sent_scan,
+        revive_contract_emitted_scan
     ])
 
     for s in (call_scan, ethereum_transact_scan):
@@ -452,7 +487,8 @@ def _build_model() -> Model:
               evm_log_scan,
               contract_event_scan,
               gear_message_enqueued_scan,
-              gear_message_sent_scan
+              gear_message_sent_scan,
+              revive_contract_emitted_scan
               ):
         call_item.sources.extend([
             RefRel(
@@ -495,6 +531,7 @@ def _build_model() -> Model:
         gear_message_sent_scan,
         gear_message_enqueued_scan,
         contract_event_scan,
+        revive_contract_emitted_scan,
         call_scan,
         ethereum_transact_scan,
         block_item,

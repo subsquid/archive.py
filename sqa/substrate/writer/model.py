@@ -56,6 +56,8 @@ class Event(TypedDict):
     _evmLogTopics: NotRequired[list[Bytes]]
     _contractAddress: NotRequired[Bytes]
     _gearProgramId: NotRequired[Bytes]
+    _reviveContract: NotRequired[Bytes]
+    _reviveTopics: NotRequired[list[Bytes]]
 
 
 class Block(TypedDict):

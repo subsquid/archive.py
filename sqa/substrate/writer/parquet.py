@@ -135,6 +135,11 @@ class EventTable(TableBuilder):
         self._evm_log_topic3 = Column(binary())
         self._contract_address = Column(binary())
         self._gear_program_id = Column(binary())
+        self._revive_contract = Column(binary())
+        self._revive_topic0 = Column(binary())
+        self._revive_topic1 = Column(binary())
+        self._revive_topic2 = Column(binary())
+        self._revive_topic3 = Column(binary())
 
     def append(self, block_number: int, event: Event) -> None:
         self.block_number.append(block_number)
@@ -147,14 +152,21 @@ class EventTable(TableBuilder):
         self.topics.append(event['topics'])
         self._evm_log_address.append(event.get('_evmLogAddress'))
 
-        topics = iter(event.get('_evmLogTopics', ()))
-        self._evm_log_topic0.append(next(topics, None))
-        self._evm_log_topic1.append(next(topics, None))
-        self._evm_log_topic2.append(next(topics, None))
-        self._evm_log_topic3.append(next(topics, None))
+        evm_topics = iter(event.get('_evmLogTopics', ()))
+        self._evm_log_topic0.append(next(evm_topics, None))
+        self._evm_log_topic1.append(next(evm_topics, None))
+        self._evm_log_topic2.append(next(evm_topics, None))
+        self._evm_log_topic3.append(next(evm_topics, None))
 
         self._contract_address.append(event.get('_contractAddress'))
         self._gear_program_id.append(event.get('_gearProgramId'))
+
+        revive_topics = iter(event.get('_reviveTopics'))
+        self._revive_contract.append(event.get('_reviveContract'))
+        self._revive_topic0.append(next(revive_topics, None))
+        self._revive_topic1.append(next(revive_topics, None))
+        self._revive_topic2.append(next(revive_topics, None))
+        self._revive_topic3.append(next(revive_topics, None))
 
 
 class ParquetWriter(BaseParquetWriter):
