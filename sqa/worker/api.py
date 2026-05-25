@@ -8,6 +8,12 @@ import falcon
 import falcon.asgi as fa
 
 from sqa.query import MissingData
+from sqa.worker.auth import (
+    API_KEY_ID_HEADER,
+    USER_ID_HEADER,
+    WorkerAuthError,
+    WorkerAuthenticator,
+)
 from sqa.worker.query import InvalidQuery
 from sqa.worker.state.dataset import dataset_decode
 from sqa.worker.state.manager import StateManager
@@ -86,12 +92,20 @@ class StatusResource:
 
 
 class QueryResource:
-    def __init__(self, worker: Worker, limit: Limit):
+    def __init__(self, worker: Worker, limit: Limit, authenticator: WorkerAuthenticator):
         self._worker = worker
         self._limit = limit
+        self._authenticator = authenticator
 
     @falcon.before(max_body(4 * 1024 * 1024))
     async def on_post(self, req: fa.Request, res: fa.Response, dataset: str):
+        try:
+            identity = await self._authenticator.verify_request(req)
+        except WorkerAuthError as e:
+            raise falcon.HTTPUnauthorized(description=str(e))
+
+        req.context.identity = identity
+
         self._limit.assert_not_busy()
 
         try:
@@ -123,6 +137,8 @@ class QueryResource:
             res.content_type = 'application/json'
             res.set_header('content-encoding', 'gzip')
             res.set_header('x-num-read-chunks', str(query_result.num_read_chunks))
+            res.set_header(USER_ID_HEADER, identity.user_id)
+            res.set_header(API_KEY_ID_HEADER, identity.api_key_id)
         except InvalidQuery as e:
             LOG.warning(f'invalid query: {e}', extra=log_extra)
             raise falcon.HTTPBadRequest(description=str(e))
