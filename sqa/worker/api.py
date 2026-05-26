@@ -98,11 +98,9 @@ class QueryResource:
     @falcon.before(max_body(4 * 1024 * 1024))
     async def on_post(self, req: fa.Request, res: fa.Response, dataset: str):
         try:
-            identity = await self._authenticator.verify_request(req)
+            await self._authenticator.verify_request(req)
         except WorkerAuthError as e:
             raise falcon.HTTPUnauthorized(description=str(e))
-
-        req.context.identity = identity
 
         self._limit.assert_not_busy()
 
