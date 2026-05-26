@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import jwt
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from sqa.worker.auth import (
     DISABLED_IDENTITY_VALUE,
@@ -27,7 +27,7 @@ class FakeRequest:
 
 class WorkerAuthTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        key = ed25519.Ed25519PrivateKey.generate()
         self.private_key = key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.PKCS8,
@@ -45,7 +45,7 @@ class WorkerAuthTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(identity, VerifiedIdentity('user-1', 'key-1'))
 
     async def test_request_header_identity_is_decoded(self):
-        token = self._token({'user_id': 'user-2', 'api_key_id': 'key-2'})
+        token = self._token({'u': 'user-2', 'k': 'key-2'})
         auth = self._authenticator()
 
         identity = await auth.verify_request(FakeRequest({AUTH_HEADER: token}))
@@ -90,7 +90,7 @@ class WorkerAuthTest(unittest.IsolatedAsyncioTestCase):
             await self._verify(token)
 
     async def test_invalid_signature_is_rejected(self):
-        other = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        other = ed25519.Ed25519PrivateKey.generate()
         other_private_key = other.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.PKCS8,
@@ -106,31 +106,31 @@ class WorkerAuthTest(unittest.IsolatedAsyncioTestCase):
             self._claims(),
             key='secret',
             algorithm='HS256',
-            headers={'kid': 'kid-1'}
+            headers={'typ': None}
         )
 
         with self.assertRaisesRegex(WorkerAuthError, 'algorithm'):
             await self._verify(token)
 
-    async def test_token_kid_is_ignored(self):
-        identity = await self._verify(self._token(headers={'kid': 'other'}))
+    async def test_minimal_header_is_accepted(self):
+        token = self._token(headers={'typ': None})
+        header = jwt.get_unverified_header(token)
 
-        self.assertEqual(identity.user_id, 'user-1')
+        self.assertEqual(header, {'alg': 'EdDSA'})
 
-    async def test_missing_kid_is_accepted(self):
-        identity = await self._verify(self._token(headers={}))
+        identity = await self._verify(token)
 
         self.assertEqual(identity.user_id, 'user-1')
 
     async def test_required_claims_are_enforced(self):
-        for claim in ['user_id', 'api_key_id', 'iat', 'exp']:
+        for claim in ['u', 'k', 'iat', 'exp']:
             claims = self._claims()
             del claims[claim]
             token = jwt.encode(
                 claims,
                 key=self.private_key,
-                algorithm='RS256',
-                headers={'kid': 'kid-1'}
+                algorithm='EdDSA',
+                headers={'typ': None}
             )
 
             with self.subTest(claim=claim):
@@ -163,23 +163,23 @@ class WorkerAuthTest(unittest.IsolatedAsyncioTestCase):
     ) -> str:
         if claims is None:
             claims = self._claims()
-        elif set(claims).issubset({'user_id', 'api_key_id', 'iat', 'exp', 'nbf'}):
+        elif set(claims).issubset({'u', 'k', 'iat', 'exp', 'nbf'}):
             claims = {**self._claims(), **claims}
 
         if headers is None:
-            headers = {'kid': 'kid-1'}
+            headers = {'typ': None}
 
         return jwt.encode(
             claims,
             key=private_key or self.private_key,
-            algorithm='RS256',
+            algorithm='EdDSA',
             headers=headers
         )
 
     def _claims(self) -> dict:
         return {
-            'user_id': 'user-1',
-            'api_key_id': 'key-1',
+            'u': 'user-1',
+            'k': 'key-1',
             'iat': self.now,
             'exp': self.now + 60,
         }

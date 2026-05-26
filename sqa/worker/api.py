@@ -9,8 +9,6 @@ import falcon.asgi as fa
 
 from sqa.query import MissingData
 from sqa.worker.auth import (
-    API_KEY_ID_HEADER,
-    USER_ID_HEADER,
     WorkerAuthError,
     WorkerAuthenticator,
 )
@@ -137,8 +135,6 @@ class QueryResource:
             res.content_type = 'application/json'
             res.set_header('content-encoding', 'gzip')
             res.set_header('x-num-read-chunks', str(query_result.num_read_chunks))
-            res.set_header(USER_ID_HEADER, identity.user_id)
-            res.set_header(API_KEY_ID_HEADER, identity.api_key_id)
         except InvalidQuery as e:
             LOG.warning(f'invalid query: {e}', extra=log_extra)
             raise falcon.HTTPBadRequest(description=str(e))

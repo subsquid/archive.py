@@ -8,8 +8,6 @@ from cryptography.hazmat.primitives import serialization
 
 
 AUTH_HEADER = 'x-sqd-auth'
-USER_ID_HEADER = 'x-sqd-user-id'
-API_KEY_ID_HEADER = 'x-sqd-api-key-id'
 DISABLED_IDENTITY_VALUE = 'disabled'
 
 
@@ -63,28 +61,36 @@ class WorkerAuthenticator:
 
     async def verify_token(self, token: str) -> VerifiedIdentity:
         try:
+            header = jwt.get_unverified_header(token)
+        except jwt.PyJWTError as e:
+            raise WorkerAuthError('malformed worker auth token') from e
+
+        if header.get('alg') != 'EdDSA':
+            raise WorkerAuthError('invalid worker auth token algorithm')
+
+        try:
             claims = jwt.decode(
                 token,
                 key=self._load_public_key(),
-                algorithms=['RS256'],
+                algorithms=['EdDSA'],
                 options={
-                    'require': ['user_id', 'api_key_id', 'iat', 'exp'],
+                    'require': ['u', 'k', 'iat', 'exp'],
                     'verify_iat': False,
                 }
             )
         except jwt.PyJWTError as e:
             raise WorkerAuthError('invalid worker auth token') from e
 
-        user_id = claims.get('user_id')
-        api_key_id = claims.get('api_key_id')
+        user_id = claims.get('u')
+        api_key_id = claims.get('k')
         iat = claims.get('iat')
         exp = claims.get('exp')
 
         if not isinstance(user_id, str) or not user_id:
-            raise WorkerAuthError('worker auth token is missing user_id')
+            raise WorkerAuthError('worker auth token is missing u')
 
         if not isinstance(api_key_id, str) or not api_key_id:
-            raise WorkerAuthError('worker auth token is missing api_key_id')
+            raise WorkerAuthError('worker auth token is missing k')
 
         now = time.time()
         if not _is_number(exp) or exp <= now:
