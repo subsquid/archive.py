@@ -8,7 +8,6 @@ from cryptography.hazmat.primitives import serialization
 
 
 AUTH_HEADER = 'x-sqd-auth'
-DISABLED_IDENTITY_VALUE = 'disabled'
 
 
 @dataclass(frozen=True)
@@ -46,12 +45,9 @@ class WorkerAuthenticator:
         if self._config.enabled:
             self._load_public_key()
 
-    async def verify_request(self, req: Any) -> VerifiedIdentity:
+    async def verify_request(self, req: Any) -> VerifiedIdentity | None:
         if not self._config.enabled:
-            return VerifiedIdentity(
-                user_id=DISABLED_IDENTITY_VALUE,
-                api_key_id=DISABLED_IDENTITY_VALUE
-            )
+            return None
 
         token = req.get_header(AUTH_HEADER)
         if not token:
@@ -116,10 +112,6 @@ class WorkerAuthenticator:
 
 
 def _read_public_key(value: str) -> str:
-    if value.startswith('file:'):
-        with open(value[5:]) as f:
-            return f.read()
-
     if os.path.exists(value):
         with open(value) as f:
             return f.read()

@@ -1,13 +1,13 @@
 import time
 import unittest
 from dataclasses import dataclass
+from tempfile import NamedTemporaryFile
 
 import jwt
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 from sqa.worker.auth import (
-    DISABLED_IDENTITY_VALUE,
     AUTH_HEADER,
     MissingWorkerAuthToken,
     VerifiedIdentity,
@@ -20,8 +20,14 @@ from sqa.worker.auth import (
 @dataclass
 class FakeRequest:
     headers: dict[str, str]
+    requested_headers: list[str]
+
+    def __init__(self, headers: dict[str, str]):
+        self.headers = headers
+        self.requested_headers = []
 
     def get_header(self, name: str) -> str | None:
+        self.requested_headers.append(name)
         return self.headers.get(name)
 
 
@@ -58,13 +64,14 @@ class WorkerAuthTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(MissingWorkerAuthToken):
             await auth.verify_request(FakeRequest({}))
 
-    async def test_auth_disabled_uses_placeholder_identity(self):
+    async def test_auth_disabled_skips_worker_auth_header(self):
         auth = WorkerAuthenticator(WorkerAuthConfig(enabled=False))
+        req = FakeRequest({})
 
-        identity = await auth.verify_request(FakeRequest({}))
+        identity = await auth.verify_request(req)
 
-        self.assertEqual(identity.user_id, DISABLED_IDENTITY_VALUE)
-        self.assertEqual(identity.api_key_id, DISABLED_IDENTITY_VALUE)
+        self.assertIsNone(identity)
+        self.assertEqual(req.requested_headers, [])
 
     async def test_auth_enabled_requires_public_key(self):
         with self.assertRaisesRegex(ValueError, 'public key'):
@@ -76,6 +83,29 @@ class WorkerAuthTest(unittest.IsolatedAsyncioTestCase):
                 enabled=True,
                 public_key='not a public key'
             ))
+
+    async def test_public_key_can_be_passed_as_pem(self):
+        auth = WorkerAuthenticator(WorkerAuthConfig(
+            enabled=True,
+            public_key=self.public_key
+        ))
+
+        identity = await auth.verify_token(self._token())
+
+        self.assertEqual(identity, VerifiedIdentity('user-1', 'key-1'))
+
+    async def test_public_key_can_be_passed_as_path(self):
+        with NamedTemporaryFile(mode='w') as f:
+            f.write(self.public_key)
+            f.flush()
+            auth = WorkerAuthenticator(WorkerAuthConfig(
+                enabled=True,
+                public_key=f.name
+            ))
+
+        identity = await auth.verify_token(self._token())
+
+        self.assertEqual(identity, VerifiedIdentity('user-1', 'key-1'))
 
     async def test_expired_token_is_rejected(self):
         token = self._token({'exp': self.now - 1})

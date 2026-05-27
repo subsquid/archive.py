@@ -122,7 +122,7 @@ def parse_cli_args():
     program.add_argument(
         '--auth-public-key',
         metavar='KEY',
-        help='worker JWT verification public key PEM, file:path, or filesystem path'
+        help='worker JWT verification public key PEM or filesystem path'
     )
 
     return program.parse_args()
