@@ -9,6 +9,7 @@ import uvicorn
 
 from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
 from sqa.worker.api import StatusResource, QueryResource, Limit
+from sqa.worker.auth import WorkerAuthConfig, WorkerAuthenticator
 from sqa.worker.state.controller import State
 from sqa.worker.state.intervals import to_range_set
 from sqa.worker.state.manager import StateManager
@@ -111,6 +112,19 @@ def parse_cli_args():
         help='number of processes to use to execute data queries'
     )
 
+    program.add_argument(
+        '--auth-enabled',
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help='require router-issued JWTs on worker query requests'
+    )
+
+    program.add_argument(
+        '--auth-public-key',
+        metavar='KEY',
+        help='worker JWT verification public key PEM or filesystem path'
+    )
+
     return program.parse_args()
 
 
@@ -126,6 +140,10 @@ async def serve(args):
 
     worker = Worker(sm, transport, args.procs)
     limit = Limit(worker.get_processes_count() * 3)
+    authenticator = WorkerAuthenticator(WorkerAuthConfig(
+        enabled=args.auth_enabled,
+        public_key=args.auth_public_key
+    ))
 
     app = fa.App()
 
@@ -137,7 +155,7 @@ async def serve(args):
         limit=limit
     ))
 
-    app.add_route('/query/{dataset}', QueryResource(worker, limit))
+    app.add_route('/query/{dataset}', QueryResource(worker, limit, authenticator))
 
     server_conf = uvicorn.Config(
         app,
