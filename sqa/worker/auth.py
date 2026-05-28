@@ -1,6 +1,7 @@
 import os
 import time
 from dataclasses import dataclass
+from ipaddress import IPv4Network, IPv6Network, ip_address
 from typing import Any
 
 import jwt
@@ -8,6 +9,10 @@ from cryptography.hazmat.primitives import serialization
 
 
 AUTH_HEADER = 'x-sqd-auth'
+USER_ID_HEADER = 'x-sqd-user-id'
+API_KEY_ID_HEADER = 'x-sqd-api-key-id'
+ORIGINAL_FORWARDED_FOR_HEADER = 'x-original-forwarded-for'
+IpNetwork = IPv4Network | IPv6Network
 
 
 @dataclass(frozen=True)
@@ -20,6 +25,8 @@ class VerifiedIdentity:
 class WorkerAuthConfig:
     enabled: bool = False
     public_key: str | None = None
+    enforce_for_ips: tuple[IpNetwork, ...] = ()
+    trusted_ips: tuple[IpNetwork, ...] = ()
 
     def validate(self) -> None:
         if not self.enabled:
@@ -49,11 +56,19 @@ class WorkerAuthenticator:
         if not self._config.enabled:
             return None
 
+        enforce = self._should_enforce(req)
         token = req.get_header(AUTH_HEADER)
         if not token:
-            raise MissingWorkerAuthToken('obtain worker auth token from router')
+            if enforce:
+                raise MissingWorkerAuthToken('obtain worker auth token from router')
+            return None
 
-        return await self.verify_token(token)
+        try:
+            return await self.verify_token(token)
+        except WorkerAuthError:
+            if enforce:
+                raise
+            return None
 
     async def verify_token(self, token: str) -> VerifiedIdentity:
         try:
@@ -100,6 +115,16 @@ class WorkerAuthenticator:
 
         return VerifiedIdentity(user_id=user_id, api_key_id=api_key_id)
 
+    def _should_enforce(self, req: Any) -> bool:
+        if not self._config.enforce_for_ips:
+            return False
+
+        client_ip = _get_client_ip(req, self._config.trusted_ips)
+        if client_ip is None:
+            return _has_catch_all(self._config.enforce_for_ips)
+
+        return _contains_ip(self._config.enforce_for_ips, client_ip)
+
     def _load_public_key(self) -> str:
         if self._public_key is None:
             assert self._config.public_key is not None
@@ -109,6 +134,42 @@ class WorkerAuthenticator:
             except (OSError, ValueError) as e:
                 raise ValueError('invalid worker auth public key') from e
         return self._public_key
+
+
+def _get_client_ip(req: Any, trusted_ips: tuple[IpNetwork, ...]):
+    chain = req.get_header(ORIGINAL_FORWARDED_FOR_HEADER)
+    if chain:
+        for segment in reversed(chain.split(',')):
+            try:
+                ip = ip_address(segment.strip())
+            except ValueError:
+                continue
+            if not _contains_ip(trusted_ips, ip):
+                return ip
+
+    value = _get_peer_ip(req)
+    if value:
+        try:
+            return ip_address(value)
+        except ValueError:
+            pass
+
+    return None
+
+
+def _contains_ip(networks: tuple[IpNetwork, ...], ip) -> bool:
+    return any(net.version == ip.version and ip in net for net in networks)
+
+
+def _get_peer_ip(req: Any) -> str | None:
+    client = getattr(req, 'scope', {}).get('client')
+    if client:
+        return client[0]
+    return None
+
+
+def _has_catch_all(networks: tuple[IpNetwork, ...]) -> bool:
+    return any(net.prefixlen == 0 for net in networks)
 
 
 def _read_public_key(value: str) -> str:

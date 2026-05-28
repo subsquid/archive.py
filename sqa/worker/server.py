@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import os
+from ipaddress import ip_network
 
 import falcon.asgi as fa
 import httpx
@@ -9,7 +10,7 @@ import uvicorn
 
 from sqa.util.asyncio import create_child_task, monitor_service_tasks, run_async_program
 from sqa.worker.api import StatusResource, QueryResource, Limit
-from sqa.worker.auth import WorkerAuthConfig, WorkerAuthenticator
+from sqa.worker.auth import IpNetwork, WorkerAuthConfig, WorkerAuthenticator
 from sqa.worker.state.controller import State
 from sqa.worker.state.intervals import to_range_set
 from sqa.worker.state.manager import StateManager
@@ -17,6 +18,23 @@ from sqa.worker.worker import Worker
 
 
 LOG = logging.getLogger(__name__)
+
+
+def parse_ip_networks(value: str | None) -> tuple[IpNetwork, ...]:
+    if not value:
+        return ()
+
+    networks = []
+    for item in value.split(','):
+        item = item.strip()
+        if not item:
+            continue
+        if item == '*':
+            networks.append(ip_network('0.0.0.0/0'))
+            networks.append(ip_network('::/0'))
+            continue
+        networks.append(ip_network(item, strict=False))
+    return tuple(networks)
 
 
 class HttpTransport:
@@ -115,8 +133,15 @@ def parse_cli_args():
     program.add_argument(
         '--auth-enabled',
         action=argparse.BooleanOptionalAction,
+        default=None,
+        help=argparse.SUPPRESS
+    )
+
+    program.add_argument(
+        '--disable-v2-auth',
+        action=argparse.BooleanOptionalAction,
         default=False,
-        help='require router-issued JWTs on worker query requests'
+        help='skip worker auth validation entirely'
     )
 
     program.add_argument(
@@ -125,7 +150,59 @@ def parse_cli_args():
         help='worker JWT verification public key PEM or filesystem path'
     )
 
+    program.add_argument(
+        '--enforce-v2-auth-for-ips',
+        dest='enforce_v2_auth_for_ips',
+        type=parse_ip_networks,
+        default=(),
+        metavar='CIDR,CIDR,...',
+        help='client IP CIDRs where worker auth failures reject requests; use * for all'
+    )
+
+    program.add_argument(
+        '--auth-enforce-for-ips',
+        dest='enforce_v2_auth_for_ips',
+        type=parse_ip_networks,
+        help=argparse.SUPPRESS
+    )
+
+    program.add_argument(
+        '--trusted-ips',
+        dest='trusted_ips',
+        type=parse_ip_networks,
+        default=(),
+        metavar='CIDR,CIDR,...',
+        help='trusted proxy CIDRs stripped from the right side of X-Original-Forwarded-For'
+    )
+
+    program.add_argument(
+        '--auth-trusted-ips',
+        dest='trusted_ips',
+        type=parse_ip_networks,
+        help=argparse.SUPPRESS
+    )
+
     return program.parse_args()
+
+
+def get_worker_auth_config(args) -> WorkerAuthConfig:
+    auth_enabled = args.auth_enabled
+    if auth_enabled is None:
+        auth_enabled = args.auth_public_key is not None
+
+    if (
+        args.enforce_v2_auth_for_ips
+        and not args.disable_v2_auth
+        and args.auth_public_key is None
+    ):
+        raise ValueError('worker auth public key is required when enforcing v2 auth')
+
+    return WorkerAuthConfig(
+        enabled=auth_enabled and not args.disable_v2_auth,
+        public_key=args.auth_public_key,
+        enforce_for_ips=args.enforce_v2_auth_for_ips,
+        trusted_ips=args.trusted_ips
+    )
 
 
 async def serve(args):
@@ -140,10 +217,7 @@ async def serve(args):
 
     worker = Worker(sm, transport, args.procs)
     limit = Limit(worker.get_processes_count() * 3)
-    authenticator = WorkerAuthenticator(WorkerAuthConfig(
-        enabled=args.auth_enabled,
-        public_key=args.auth_public_key
-    ))
+    authenticator = WorkerAuthenticator(get_worker_auth_config(args))
 
     app = fa.App()
 
@@ -161,6 +235,7 @@ async def serve(args):
         app,
         port=args.port,
         host='0.0.0.0',
+        proxy_headers=False,
         access_log=False,
         log_config=None
     )

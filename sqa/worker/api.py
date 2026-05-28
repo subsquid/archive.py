@@ -9,6 +9,8 @@ import falcon.asgi as fa
 
 from sqa.query import MissingData
 from sqa.worker.auth import (
+    API_KEY_ID_HEADER,
+    USER_ID_HEADER,
     WorkerAuthError,
     WorkerAuthenticator,
 )
@@ -98,9 +100,13 @@ class QueryResource:
     @falcon.before(max_body(4 * 1024 * 1024))
     async def on_post(self, req: fa.Request, res: fa.Response, dataset: str):
         try:
-            await self._authenticator.verify_request(req)
+            identity = await self._authenticator.verify_request(req)
         except WorkerAuthError as e:
             raise falcon.HTTPUnauthorized(description=str(e))
+
+        if identity is not None:
+            set_header_if_safe(res, USER_ID_HEADER, identity.user_id)
+            set_header_if_safe(res, API_KEY_ID_HEADER, identity.api_key_id)
 
         self._limit.assert_not_busy()
 
@@ -162,3 +168,15 @@ class QueryResource:
 
     def _is_sampling(self) -> bool:
         return os.environ.get('SQA_SAMPLE_ALL_QUERIES') == 'true'
+
+
+def set_header_if_safe(res: fa.Response, name: str, value: str) -> None:
+    try:
+        value.encode('latin-1')
+    except UnicodeEncodeError:
+        return
+
+    if any(ord(c) < 32 or ord(c) == 127 for c in value):
+        return
+
+    res.set_header(name, value)
