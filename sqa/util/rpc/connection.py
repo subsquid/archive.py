@@ -97,6 +97,16 @@ class RpcConnection:
         self._pending_requests = 0
         self._extra = {'rpc_url': endpoint.url}
         self.in_queue = 0
+        # methods this endpoint was found to not support at runtime (e.g. -32601)
+        self.unsupported_methods: Set[str] = set()
+
+    def mark_methods_unsupported(self, methods: Set[str]) -> None:
+        new = methods - self.unsupported_methods
+        if new:
+            self.unsupported_methods |= new
+            LOG.warning('endpoint does not support methods, routing them elsewhere', extra={
+                **self._extra, 'rpc_methods': sorted(self.unsupported_methods)
+            })
 
     def avg_response_time(self) -> float:
         return self._speed.time() or 0.01
