@@ -315,7 +315,11 @@ class TraceTableBuilder(TableBuilder):
         tix = qty2int(transaction_index)
         for addr, subtraces, frame in _traverse_frame(top, []):
             trace_type: Literal['create', 'call', 'suicide']
-            frame_type = frame['type']
+            # some nodes return a typeless error object (e.g. {'error': ...} or {}) for an
+            # untraceable tx; there is nothing to record, so skip it instead of crashing
+            frame_type = frame.get('type')
+            if frame_type is None:
+                return
             if frame_type in (
                 'CALL', 'CALLCODE', 'STATICCALL',
                 'DELEGATECALL', 'delegateCall',
