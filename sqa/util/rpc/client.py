@@ -7,7 +7,14 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import Any, Optional, Union, Set, TypeVar, Iterable, Callable
 
-from sqa.util.rpc.connection import RpcConnection, RpcEndpoint, RpcEndpointMetrics, RpcRequest, RpcRetryException
+from sqa.util.rpc.connection import RpcConnection, RpcEndpoint, RpcEndpointMetrics, RpcError, RpcRequest, RpcRetryException
+
+
+METHOD_NOT_FOUND = -32601
+
+
+def _is_method_not_found(ex: BaseException) -> bool:
+    return isinstance(ex, RpcError) and isinstance(ex.info, dict) and ex.info.get('code') == METHOD_NOT_FOUND
 
 
 LOG = logging.getLogger(__name__)
@@ -253,10 +260,13 @@ class RpcClient:
         return item
 
     def _can_handle(self, c: RpcConnection, item: _ReqItem) -> bool:
-        if c.endpoint.missing_methods:
-            return all(m not in item.methods for m in c.endpoint.missing_methods)
-        else:
-            return True
+        for m in item.methods:
+            if m in c.endpoint.missing_methods or m in c.unsupported_methods:
+                return False
+        return True
+
+    def _has_other_handler(self, con: RpcConnection, item: _ReqItem) -> bool:
+        return any(c is not con and self._can_handle(c, item) for c in self._connections)
 
     def _send(self, con: RpcConnection, item: _ReqItem, current_time: float):
         def callback(fut):
@@ -271,6 +281,10 @@ class RpcClient:
                         result = fut.result()
                         item.future.set_result(result)
                     elif isinstance(ex, RpcRetryException):
+                        self._push(item)
+                    elif _is_method_not_found(ex) and self._has_other_handler(con, item):
+                        # this endpoint lacks the method; retry it on a capable one instead of crashing
+                        con.mark_methods_unsupported(item.methods)
                         self._push(item)
                     else:
                         item.future.set_exception(ex)
