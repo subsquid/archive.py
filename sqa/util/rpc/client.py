@@ -258,6 +258,10 @@ class RpcClient:
         else:
             return True
 
+    def _has_healthy_handler(self, con: RpcConnection, item: _ReqItem) -> bool:
+        return any(c is not con and c.is_healthy() and self._can_handle(c, item)
+                   for c in self._connections)
+
     def _send(self, con: RpcConnection, item: _ReqItem, current_time: float):
         def callback(fut):
             try:
@@ -271,6 +275,11 @@ class RpcClient:
                         result = fut.result()
                         item.future.set_result(result)
                     elif isinstance(ex, RpcRetryException):
+                        self._push(item)
+                    elif self._has_healthy_handler(con, item):
+                        # this endpoint failed persistently (e.g. a dead key); take it out of
+                        # rotation and retry on a healthy endpoint instead of crashing the process
+                        con.pause()
                         self._push(item)
                     else:
                         item.future.set_exception(ex)
