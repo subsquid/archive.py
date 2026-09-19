@@ -13,6 +13,10 @@ from sqa.util.counters import Speed, Rate
 LOG = logging.getLogger(__name__)
 
 
+# consecutive errors after which an endpoint is considered persistently unhealthy
+MAX_ERRORS_IN_ROW = 20
+
+
 class RpcRequest(TypedDict):
     id: int
     jsonrpc: Literal['2.0']
@@ -111,6 +115,14 @@ class RpcConnection:
 
     def is_online(self) -> bool:
         return self._online
+
+    def is_healthy(self) -> bool:
+        # False once the endpoint has failed persistently (e.g. a dead/forbidden key)
+        return self._errors_in_row <= MAX_ERRORS_IN_ROW
+
+    def pause(self) -> None:
+        # take the endpoint out of rotation with the standard back-off
+        self._backoff()
 
     def get_capacity(self) -> int:
         return max(0, self.endpoint.capacity - self._pending_requests)
@@ -241,7 +253,7 @@ class RpcConnection:
             if e.response.status_code in (402, 429, 502, 503, 504, 524, 530):
                 return True
             else:
-                return self._errors_in_row <= 20
+                return self._errors_in_row <= MAX_ERRORS_IN_ROW
         elif isinstance(e, (httpx.ConnectError, httpx.TimeoutException, httpx.ReadError)):
             return True
         elif isinstance(e, httpx.RemoteProtocolError) and 'without sending' in str(e):
